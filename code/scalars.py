@@ -1,7 +1,9 @@
+import numpy as np
+
 
 ### Functions for geometric features
 
-def window(n_arr, rs, r_edges):
+def window(n_arr, rs, r_edges, n_rbins):
     inds = np.digitize(rs, r_edges)
     Ws = np.zeros((n_rbins, len(rs)))
     for k, n in enumerate(n_arr):
@@ -9,7 +11,7 @@ def window(n_arr, rs, r_edges):
         Ws[k,idxs_r_n] = 1
     return Ws 
 
-def x_outer_product(l, delta_x_arr, x_outers_prev):
+def x_outer_product(l, delta_x_arr, x_outers_prev, n_dim=3):
     # can't figure out how to vectorize better
     if l==0:
         return np.ones(len(delta_x_arr))
@@ -23,7 +25,8 @@ def x_outer_product(l, delta_x_arr, x_outers_prev):
 
 ### 
 
-def get_geometric_features(delta_x_data_halo):
+def get_geometric_features(delta_x_data_halo, r_edges, l_arr, n_arr, m_dm, n_dim=3):
+    n_rbins = len(r_edges) - 1
     N, n_dim_from_data = delta_x_data_halo.shape
     m_total = N*m_dm
     assert n_dim_from_data == n_dim, f"Number of dimensions in data {n_dim_from_data} does not equal global n_dim, {n_dim}!"
@@ -33,7 +36,7 @@ def get_geometric_features(delta_x_data_halo):
     # vectorized for all particles N
     rs = np.linalg.norm(delta_x_data_halo, axis=1)
     assert len(rs) == N, "rs should have length N!"
-    window_vals = W_vec(n_arr, rs)
+    window_vals = window(n_arr, rs, r_edges, n_rbins)
 
     x_outers_prev = None
     for j, l in enumerate(l_arr):
@@ -41,7 +44,7 @@ def get_geometric_features(delta_x_data_halo):
         g_normed_arr = np.empty([len(n_arr)] + [n_dim]*l)
 
         #x_outers = x_outer_vec(l, delta_x_data_halo)
-        x_outers = x_outer_vec(l, delta_x_data_halo, x_outers_prev)
+        x_outers = x_outer_product(l, delta_x_data_halo, x_outers_prev, n_dim=n_dim)
 
         for k, n in enumerate(n_arr):
             g_ln = np.sum( window_vals[k,:] * x_outers.T, axis=-1)
@@ -59,7 +62,7 @@ def get_geometric_features(delta_x_data_halo):
     return g_arrs, g_normed_arrs  
 
 
-def featurize_scalars(g_arr):
+def featurize_scalars(g_arr, n_arr):
     g_0, g_1, g_2 = g_arr[:3] #only need up to l=2 for now
 
     scalar_features = []
@@ -80,7 +83,7 @@ def featurize_scalars(g_arr):
     return scalar_features
 
 
-def featurize_vectors(g_arr):#, tensor_normed_arr):
+def featurize_vectors(g_arr, n_arr, n_dim=3):#, tensor_normed_arr):
     g_0, g_1, g_2, g_3 = g_arr[:4] #only need up to l=3 for now
     #g_normed_0, g_normed_1, g_normed_2, g_normed_3 = tensor_normed_arr[:4]
 
