@@ -63,15 +63,19 @@ def get_geometric_features(delta_x_data_halo, r_edges, l_arr, n_arr, m_dm, n_dim
     return g_arrs, g_normed_arrs  
 
 
-def featurize_scalars(g_arr, l_arr, n_arr):
+def featurize_scalars(g_arr, n_arr):
+
+    assert len(g_arr) >= 2, "Need up to at least l=2 to compute all scalars here!"
+
     scalar_features = defaultdict(dict)
-    scalar_features['s0'] = {'value': 1, 
-                             'ns': [], 'ls': [], 'm_order': 0, 'x_order': 0 )
+    # (-1) n tuple for consistency with others
+    scalar_features['s0'][(-1)] = {'value': 1, 
+                             'ns': [], 'ls': [], 'm_order': 0, 'x_order': 0}
     for n0 in n_arr:
-        scalar_features['s1'][n0] = {'value': g_arr[0][n0], 
-                                    'ns': [n0], 'ls': [0], 'm_order': 1, 'x_order': 0 )
-        scalar_features['s4'][n0] = {'value': np.einsum('jj', g_arr[2][n0]), 
-                                    'ns': [n0], 'ls': [2], 'm_order': 1, 'x_order': 2 )
+        scalar_features['s1'][(n0)] = {'value': g_arr[0][n0], 
+                                    'ns': [n0], 'ls': [0], 'm_order': 1, 'x_order': 0}
+        scalar_features['s4'][(n0)] = {'value': np.einsum('jj', g_arr[2][n0]), 
+                                    'ns': [n0], 'ls': [2], 'm_order': 1, 'x_order': 2}
         for n1 in n_arr:
             scalar_features['s2'][(n0,n1)] = {'value':  g_arr[0][n0] *  g_arr[0][n1], 
                                  'ns': [n0,n1], 'ls': [0], 'm_order': 2, 'x_order': 0}
