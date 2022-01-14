@@ -86,7 +86,7 @@ def featurize_scalars(g_arr, n_arr):
             for n2 in n_arr:
                 scalar_features['s3'][(n0,n1,n2)] = {'value':  g_arr[0][n0] * g_arr[0][n1] * g_arr[0][n2],
                                  'ns': [n0,n1,n2], 'ls': [0], 'm_order': 3, 'x_order': 0}
-                scalar_features['s7'][(n0,n1,n2)] = {'value':  
+                scalar_features['s7'][(n0,n1,n2)] = {'value':
                                  g_arr[0][n0] * np.einsum('j,j', g_arr[1][n1], g_arr[1][n2]),
                                  'ns': [n0,n1,n2], 'ls': [0,1], 'm_order': 3, 'x_order': 2}
                 scalar_features['s8'][(n0,n1,n2)] = {'value':  
