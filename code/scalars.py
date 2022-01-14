@@ -63,40 +63,47 @@ def get_geometric_features(delta_x_data_halo, r_edges, l_arr, n_arr, m_dm, n_dim
     return g_arrs, g_normed_arrs  
 
 
-def featurize_scalars(g_arr, n_arr):
-
-    assert len(g_arr) >= 2, "Need up to at least l=2 to compute all scalars here!"
+def featurize_scalars(g_arr, l_arr, n_arr):
 
     scalar_features = defaultdict(dict)
     # (-1) n tuple for consistency with others
     scalar_features['s0'][(-1)] = {'value': 1, 
                              'ns': [], 'ls': [], 'm_order': 0, 'x_order': 0}
     for n0 in n_arr:
-        scalar_features['s1'][(n0)] = {'value': g_arr[0][n0], 
-                                    'ns': [n0], 'ls': [0], 'm_order': 1, 'x_order': 0}
-        scalar_features['s4'][(n0)] = {'value': np.einsum('jj', g_arr[2][n0]), 
-                                    'ns': [n0], 'ls': [2], 'm_order': 1, 'x_order': 2}
+        if 0 in l_arr:
+            scalar_features['s1'][(n0)] = {'value': g_arr[0][n0], 
+                                        'ns': [n0], 'ls': [0], 'm_order': 1, 'x_order': 0}
+        if 2 in l_arr:
+            scalar_features['s4'][(n0)] = {'value': np.einsum('jj', g_arr[2][n0]), 
+                                        'ns': [n0], 'ls': [2], 'm_order': 1, 'x_order': 2}
         for n1 in n_arr:
-            scalar_features['s2'][(n0,n1)] = {'value':  g_arr[0][n0] *  g_arr[0][n1], 
-                                 'ns': [n0,n1], 'ls': [0], 'm_order': 2, 'x_order': 0}
-            scalar_features['s5'][(n0,n1)] = {'value':  np.einsum('j,j', g_arr[1][n0], g_arr[1][n1]), 
-                                 'ns': [n0,n1], 'ls': [1], 'm_order': 2, 'x_order': 2}
-            scalar_features['s6'][(n0,n1)] = {'value':  g_arr[0][n0] * np.einsum('jj', g_arr[2][n1]),
-                                 'ns': [n0,n1], 'ls': [0,2], 'm_order': 2, 'x_order': 2}
+            if 0 in l_arr:
+                scalar_features['s2'][(n0,n1)] = {'value':  g_arr[0][n0] *  g_arr[0][n1], 
+                                    'ns': [n0,n1], 'ls': [0], 'm_order': 2, 'x_order': 0}
+            if 1 in l_arr:
+                scalar_features['s5'][(n0,n1)] = {'value':  np.einsum('j,j', g_arr[1][n0], g_arr[1][n1]), 
+                                    'ns': [n0,n1], 'ls': [1], 'm_order': 2, 'x_order': 2}
+            if 0 in l_arr and 2 in l_arr:
+                scalar_features['s6'][(n0,n1)] = {'value':  g_arr[0][n0] * np.einsum('jj', g_arr[2][n1]),
+                                    'ns': [n0,n1], 'ls': [0,2], 'm_order': 2, 'x_order': 2}
             for n2 in n_arr:
-                scalar_features['s3'][(n0,n1,n2)] = {'value':  g_arr[0][n0] * g_arr[0][n1] * g_arr[0][n2],
-                                 'ns': [n0,n1,n2], 'ls': [0], 'm_order': 3, 'x_order': 0}
-                scalar_features['s7'][(n0,n1,n2)] = {'value':
-                                 g_arr[0][n0] * np.einsum('j,j', g_arr[1][n1], g_arr[1][n2]),
-                                 'ns': [n0,n1,n2], 'ls': [0,1], 'm_order': 3, 'x_order': 2}
-                scalar_features['s8'][(n0,n1,n2)] = {'value':  
-                                 g_arr[0][n0] * g_arr[0][n1] * np.einsum('jj', g_arr[2][n2]),
-                                 'ns': [n0,n1,n2], 'ls': [0,2], 'm_order': 3, 'x_order': 2}
+                if 0 in l_arr:
+                    scalar_features['s3'][(n0,n1,n2)] = {'value':  g_arr[0][n0] * g_arr[0][n1] * g_arr[0][n2],
+                                    'ns': [n0,n1,n2], 'ls': [0], 'm_order': 3, 'x_order': 0}
+                if 0 in l_arr and 1 in l_arr:
+                    scalar_features['s7'][(n0,n1,n2)] = {'value':
+                                    g_arr[0][n0] * np.einsum('j,j', g_arr[1][n1], g_arr[1][n2]),
+                                    'ns': [n0,n1,n2], 'ls': [0,1], 'm_order': 3, 'x_order': 2}
+                if 0 in l_arr and 2 in l_arr:                 
+                    scalar_features['s8'][(n0,n1,n2)] = {'value':  
+                                    g_arr[0][n0] * g_arr[0][n1] * np.einsum('jj', g_arr[2][n2]),
+                                    'ns': [n0,n1,n2], 'ls': [0,2], 'm_order': 3, 'x_order': 2}
 
     return scalar_features
 
+
 # TODO: write as dictionary, as in scalar function above
-def featurize_vectors(g_arr, n_arr, n_dim=3):#, tensor_normed_arr):
+def featurize_vectors(g_arr, l_arr, n_arr, n_dim=3):#, tensor_normed_arr):
     g_0, g_1, g_2, g_3 = g_arr[:4] #only need up to l=3 for now
     #g_normed_0, g_normed_1, g_normed_2, g_normed_3 = tensor_normed_arr[:4]
 
