@@ -241,10 +241,15 @@ class Fitter:
             print('WARNING!!! Number of parameters ({self.n_parameters}) is close to the number of training samples ({self.n_train})')
 
     
-    def scale_and_fit(self):
+    def scale_and_fit(self, logy=True):
+        
+        self.logy = logy
+        if self.logy:
+            y_vals = np.log10(self.y_scalar_train)
+
         self.x_scales = np.sqrt(np.mean(self.x_scalar_train**2, axis=0))
 
-        res_scalar = np.linalg.lstsq(self.x_scalar_train/self.x_scales, self.y_scalar_train, rcond=None)
+        res_scalar = np.linalg.lstsq(self.x_scalar_train/self.x_scales, y_vals, rcond=None)
         self.theta_scalar = res_scalar[0]/self.x_scales
 
         rank = res_scalar[2] 
@@ -255,6 +260,8 @@ class Fitter:
     
     def predict(self):
         self.y_scalar_pred = self.x_scalar_test @ self.theta_scalar
+        if self.logy:
+            self.y_scalar_pred = 10**self.y_scalar_pred
 
             
 if __name__=='__main__':
