@@ -30,7 +30,7 @@ def run():
     featurizer.add_info_to_halo_dicts()
     featurizer.compute_geometric_features()
     featurizer.compute_scalar_features(x_order_max=x_order_max, m_order_max=m_order_max)
-    featurizer.set_y_features()
+    featurizer.set_y_labels()
 
     fitter = Fitter(featurizer.x_scalar_features, featurizer.y_scalar, 
                     featurizer.x_scalar_dicts)
@@ -161,7 +161,7 @@ class Featurizer:
             halo_dict['mass_hydro_subhalo_star'] = self.subhalos_hydro['SubhaloMassType'][:,self.ipart_star][idx_subhalo_hydro]
             
     
-    def set_y_features(self, y_scalar_feature_name='mass_hydro_halo_star'):
+    def set_y_labels(self, y_scalar_feature_name='mass_hydro_halo_star'):
         self.y_scalar = np.empty(self.N_halos) # 1 mass dimension
         for i_hd, halo_dict in enumerate(self.halo_dicts):
             self.y_scalar[i_hd] = halo_dict[y_scalar_feature_name]
@@ -201,7 +201,7 @@ class Featurizer:
             self.x_scalar_dicts[i_hd] = scalar_dict_i
             self.x_scalar_features.append(scalars_i)
         self.x_scalar_features = np.array(self.x_scalar_features)
-        print(self.x_scalar_features.shape)
+        self.n_features = self.x_scalar_features.shape[1]
 
 
 
