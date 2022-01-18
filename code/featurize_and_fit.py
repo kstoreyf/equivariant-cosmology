@@ -42,11 +42,16 @@ def run():
 # set up paths
 class Featurizer:
         
-    def __init__(self, r_edges, l_arr):
-        self.r_edges = r_edges
-        self.l_arr = l_arr 
+    def __init__(self, r_edges, m_order_max, x_order_max, r_units=None, l_arr=None):
+        self.r_edges = np.array(r_edges).astype(float)
+        self.m_order_max = m_order_max
+        self.x_order_max = x_order_max
+        if l_arr is None:
+            l_arr = scalars.get_needed_ls_scalars(m_order_max, x_order_max) 
+        self.l_arr = np.array(l_arr)
         n_rbins = len(r_edges) - 1
         self.n_arr = np.arange(n_rbins)
+        self.r_units = r_units
 
         self.tng_path_hydro = '/scratch/ksf293/gnn-cosmology/data/TNG50-4'
         self.tng_path_dark = '/scratch/ksf293/gnn-cosmology/data/TNG50-4-Dark'
@@ -151,6 +156,7 @@ class Featurizer:
             
             idx_halo_dark = halo_dict['idx_halo_dark']
             halo_dict['r_crit200_dark_halo'] = self.halos_dark['Group_R_Crit200'][idx_halo_dark]
+            halo_dict['r_mean200_dark_halo'] = self.halos_dark['Group_R_Mean200'][idx_halo_dark]
             halo_dict['mass_dark_halo_dm'] = self.halos_dark['GroupMassType'][:,self.ipart_dm][idx_halo_dark]
 
             idx_halo_hydro = halo_dict['idx_halo_hydro']
@@ -180,22 +186,27 @@ class Featurizer:
             # Subtract off center of mass for each halo
             x_data_halo = x_halo_dark_dm - x_halo_dark_dm_com
             #print(min(x_data_halo[:,0]), max(x_data_halo[:,0]))
-            g_arrs, g_normed_arrs = scalars.get_geometric_features(x_data_halo, self.r_edges, self.l_arr, self.n_arr, self.m_dmpart)
+
+            if self.r_units=='r200':
+                r_edges = self.r_edges * halo_dict['r_mean200_dark_halo']
+            else:
+                r_edges = self.r_edges
+
+            g_arrs, g_normed_arrs = scalars.get_geometric_features(x_data_halo, r_edges, self.l_arr, self.n_arr, self.m_dmpart)
             self.g_arrs_halos.append(g_arrs)
             self.g_normed_arrs_halos.append(g_normed_arrs)
 
 
-    def compute_scalar_features(self, x_order_max=0, m_order_max=1, 
-                                feature_names_to_include_also=[]):
+    def compute_scalar_features(self, feature_names_to_include_also=[]):
         
         self.x_scalar_dicts = np.empty(self.N_halos, dtype=object)
         self.x_scalar_features = []
         for i_hd in range(self.N_halos):
-            scalar_dict_i = scalars.featurize_scalars(self.g_arrs_halos[i_hd], self.l_arr, self.n_arr)
+            scalar_dict_i = scalars.featurize_scalars(self.g_arrs_halos[i_hd], self.n_arr, self.x_order_max, self.m_order_max, l_arr=self.l_arr)
             scalars_i = []
             for key_name, scalar_ns in scalar_dict_i.items():
                 for key_ns, scalar in scalar_ns.items():
-                    if ((scalar['x_order'] <= x_order_max and scalar['m_order'] <= m_order_max) 
+                    if ((scalar['x_order'] <= self.x_order_max and scalar['m_order'] <= self.m_order_max) 
                             or key_name in feature_names_to_include_also):
                         scalars_i.append(scalar['value'])
             self.x_scalar_dicts[i_hd] = scalar_dict_i
