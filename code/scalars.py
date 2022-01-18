@@ -63,7 +63,32 @@ def get_geometric_features(delta_x_data_halo, r_edges, l_arr, n_arr, m_dm, n_dim
     return g_arrs, g_normed_arrs  
 
 
-def featurize_scalars(g_arr, l_arr, n_arr):
+def get_needed_ls_scalars(m_order_max, x_order_max):
+    if x_order_max==1:
+        x_order_max = 0 #because no x_order=1 for scalars
+    if x_order_max==3:
+        x_order_max = 2 #because no x_order=3 for scalars
+    if x_order_max>3:
+        raise ValueError(f'ERROR: x_order_max must be <=3, \
+              higher order scalars not yet computed (input was {x_order_max})')
+    needed_l_dict = {(0, 0): [0],
+                     (1, 0): [0],
+                     (2, 0): [0],
+                     (3, 0): [0],
+                     (0, 2): [0],
+                     (1, 2): [0,2],
+                     (2, 2): [0,1,2],
+                     (3, 2): [0,1,2]}
+    return needed_l_dict[(m_order_max, x_order_max)]
+
+
+def featurize_scalars(g_arr, n_arr, m_order_max, x_order_max, l_arr=None):
+
+    ls_needed = get_needed_ls_scalars(m_order_max, x_order_max)
+    if l_arr is None:
+        l_arr = ls_needed
+    else:
+        assert np.all(np.isin(ls_needed, l_arr)), f"Need other l values than given! Gave l_arr={l_arr}, but need {ls_needed}"
 
     scalar_features = defaultdict(dict)
     # (-1) n tuple for consistency with others
