@@ -207,14 +207,16 @@ class Featurizer:
 
 class Fitter:
 
-    def __init__(self, x_scalar_features, y_scalar, x_scalar_dicts):
+    def __init__(self, x_scalar_features, y_scalar, x_scalar_dicts, uncertainties=None):
         assert x_scalar_features.shape[0]==y_scalar.shape[0], "Must have same number of x features and y labels!"
         assert x_scalar_features.shape[0]==len(x_scalar_dicts), "Must have same number of x features and feature dicts!"
         self.x_scalar_features = x_scalar_features
         self.y_scalar = y_scalar
         self.x_scalar_dicts = x_scalar_dicts
         self.N_halos = x_scalar_features.shape[0]
-
+        if uncertainties is None:
+            uncertainties = np.ones(self.N_halos)
+        self.uncertainties = uncertainties
 
     def split_train_test(self, frac_test=0.2, seed=42):
         # split indices and then obtain training and test x and y, so can go back and get the full info later
@@ -230,6 +232,8 @@ class Fitter:
 
         self.x_scalar_dicts_train = self.x_scalar_dicts[idx_train]
         self.x_scalar_dicts_test = self.x_scalar_dicts[idx_test]
+        self.uncertainties_train = self.uncertainties[idx_train]
+        self.uncertainties_test = self.uncertainties[idx_test]
 
         self.n_train = len(self.x_scalar_train)
         self.n_test = len(self.x_scalar_test)
@@ -244,12 +248,27 @@ class Fitter:
     def scale_and_fit(self, logy=True):
         
         self.logy = logy
+        y_vals = self.y_scalar_train
         if self.logy:
-            y_vals = np.log10(self.y_scalar_train)
+            y_vals = np.log10(y_vals)
 
         self.x_scales = np.sqrt(np.mean(self.x_scalar_train**2, axis=0))
 
-        res_scalar = np.linalg.lstsq(self.x_scalar_train/self.x_scales, y_vals, rcond=None)
+        # goal: do leastsquares with a diagonal covariance matrix without instantiating it
+        # start with equation to solve:
+        # Y = A X
+        # weight by uncertainties:
+        # C^-1 Y = C^-1 A X
+        # then to solve for x, left mult by A^T:
+        # A^T C^-1 Y = A^T C^-1 A X
+        # X = (A^T C^-1 A)^-1 (A^T C^-1 Y)
+        # this is the standard equation for least squares. so we can multiply both of our inputs
+        # to leastsq, A and Y, by C^-1 in order to incorporate the uncertainties
+        x_vals = self.x_scalar_train/self.x_scales
+        inverse_variances = 1/self.uncertainties_train**2
+        x_vals = (x_vals.T * inverse_variances.T).T # there must be a better way to do this?
+        y_vals *= inverse_variances
+        res_scalar = np.linalg.lstsq(x_vals, y_vals, rcond=None)
         self.theta_scalar = res_scalar[0]/self.x_scales
 
         rank = res_scalar[2] 
