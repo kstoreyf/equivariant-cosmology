@@ -17,19 +17,18 @@ def run():
     #r_edges = np.logspace(np.log10(1), np.log10(1000), 4) 
     r_edges = np.array([0, 100])
     print(r_edges)
-    #l_arr = np.array([0, 1, 2, 3])
-    l_arr = np.array([0])
 
-    x_order_max = 0
     m_order_max = 1
+    x_order_max = 0
+    l_arr = scalars.get_needed_ls_scalars(m_order_max, x_order_max)
 
-    featurizer = Featurizer(r_edges, l_arr)
+    featurizer = Featurizer(r_edges)
     featurizer.read_simulations()
     featurizer.match_twins()
     featurizer.select_halos()
     featurizer.add_info_to_halo_dicts()
-    featurizer.compute_geometric_features()
-    featurizer.compute_scalar_features(x_order_max=x_order_max, m_order_max=m_order_max)
+    featurizer.compute_geometric_features(l_arr)
+    featurizer.compute_scalar_features(m_order_max=m_order_max, x_order_max=x_order_max)
     featurizer.set_y_labels()
 
     fitter = Fitter(featurizer.x_scalar_features, featurizer.y_scalar, 
@@ -42,13 +41,9 @@ def run():
 # set up paths
 class Featurizer:
         
-    def __init__(self, r_edges, m_order_max, x_order_max, r_units=None, l_arr=None):
+    def __init__(self, r_edges, r_units=None):
         self.r_edges = np.array(r_edges).astype(float)
-        self.m_order_max = m_order_max
-        self.x_order_max = x_order_max
-        if l_arr is None:
-            l_arr = scalars.get_needed_ls_scalars(m_order_max, x_order_max) 
-        self.l_arr = np.array(l_arr)
+
         n_rbins = len(r_edges) - 1
         self.n_arr = np.arange(n_rbins)
         self.r_units = r_units
@@ -59,6 +54,7 @@ class Featurizer:
         self.base_path_dark = '/scratch/ksf293/gnn-cosmology/data/TNG50-4-Dark/output'
         self.snap_num_str = '099'
         self.snap_num = int(self.snap_num_str)
+
 
     def read_simulations(self):
         
@@ -173,7 +169,10 @@ class Featurizer:
             self.y_scalar[i_hd] = halo_dict[y_scalar_feature_name]
 
     
-    def compute_geometric_features(self):
+    def compute_geometric_features(self, l_arr):
+
+        self.l_arr = np.array(l_arr)
+
         self.g_arrs_halos = []
         self.g_normed_arrs_halos = []
 
@@ -197,16 +196,16 @@ class Featurizer:
             self.g_normed_arrs_halos.append(g_normed_arrs)
 
 
-    def compute_scalar_features(self, feature_names_to_include_also=[]):
+    def compute_scalar_features(self, m_order_max, x_order_max, feature_names_to_include_also=[]):
         
         self.x_scalar_dicts = np.empty(self.N_halos, dtype=object)
         self.x_scalar_features = []
         for i_hd in range(self.N_halos):
-            scalar_dict_i = scalars.featurize_scalars(self.g_arrs_halos[i_hd], self.n_arr, self.x_order_max, self.m_order_max, l_arr=self.l_arr)
+            scalar_dict_i = scalars.featurize_scalars(self.g_arrs_halos[i_hd], self.n_arr, m_order_max, x_order_max, l_arr=self.l_arr)
             scalars_i = []
             for key_name, scalar_ns in scalar_dict_i.items():
                 for key_ns, scalar in scalar_ns.items():
-                    if ((scalar['x_order'] <= self.x_order_max and scalar['m_order'] <= self.m_order_max) 
+                    if ((scalar['x_order'] <= x_order_max and scalar['m_order'] <= m_order_max) 
                             or key_name in feature_names_to_include_also):
                         scalars_i.append(scalar['value'])
             self.x_scalar_dicts[i_hd] = scalar_dict_i
@@ -248,12 +247,12 @@ class Fitter:
 
         self.n_train = len(self.x_scalar_train)
         self.n_test = len(self.x_scalar_test)
-        self.n_parameters = self.x_scalar_features.shape[1]
+        self.n_features = self.x_scalar_features.shape[1]
 
-        print(f'n_train: {self.n_train}, n_test: {self.n_test}')
-        print(f'n_parameters: {self.n_parameters}')
-        if self.n_parameters > self.n_train/2:
-            print('WARNING!!! Number of parameters ({self.n_parameters}) is close to the number of training samples ({self.n_train})')
+        #print(f'n_train: {self.n_train}, n_test: {self.n_test}')
+        #print(f'n_features: {self.n_features}')
+        if self.n_features > self.n_train/2:
+            print('WARNING!!! Number of features ({self.n_features}) is close to the number of training samples ({self.n_train})')
 
     
     def scale_and_fit(self, logy=True):
@@ -286,13 +285,13 @@ class Fitter:
         # A^T C-1 A, A^T C-1 Y (could do, but not right thing - but best)
         # see that code doesnt have access A^T
         #res_scalar = np.linalg.lstsq(x_vals, y_vals, rcond=None)
-        res_scalar = np.linalg.lstsq(ATA, ATY, rcond=None)
-        print(ATA.shape, ATY.shape)
-        print(res_scalar[0].shape, self.x_scales.shape)
-        self.theta_scalar = res_scalar[0]/self.x_scales
-        rank = res_scalar[2] 
-        print("rank:", rank)
-        print("n_feat:", self.x_scalar_features.shape[1])
+        self.res_scalar = np.linalg.lstsq(ATA, ATY, rcond=None)
+        self.theta_scalar = self.res_scalar[0]/self.x_scales
+        rank = self.res_scalar[2] 
+        # Sums of squared residuals: Squared Euclidean 2-norm for each column in b - a @ x
+        self.chi2 = np.sqrt(np.sum((ATY - ATA @ self.res_scalar[0])**2))
+        #print("rank:", rank)
+        #print("n_feat:", self.x_scalar_features.shape[1])
         assert self.theta_scalar.shape[0] == self.x_scalar_features.shape[1], 'Number of coefficients from theta vector should equal number of features!'
 
     
