@@ -31,13 +31,16 @@ def get_geometric_features(delta_x_data_halo, r_edges, l_arr, n_arr, m_dm, n_dim
     N, n_dim_from_data = delta_x_data_halo.shape
     m_total = N*m_dm
     assert n_dim_from_data == n_dim, f"Number of dimensions in data {n_dim_from_data} does not equal global n_dim, {n_dim}!"
-    g_arrs = []
-    g_normed_arrs = []
+    g_arrs = {}
+    g_normed_arrs = {}
 
     # vectorized for all particles N
+    print(delta_x_data_halo)
     rs = np.linalg.norm(delta_x_data_halo, axis=1)
     assert len(rs) == N, "rs should have length N!"
     window_vals = window(n_arr, rs, r_edges, n_rbins)
+    print(n_arr, rs, r_edges, n_rbins)
+    print('window', window_vals)
 
     x_outers_prev = None
     for j, l in enumerate(l_arr):
@@ -46,17 +49,21 @@ def get_geometric_features(delta_x_data_halo, r_edges, l_arr, n_arr, m_dm, n_dim
 
         #x_outers = x_outer_vec(l, delta_x_data_halo)
         x_outers = x_outer_product(l, delta_x_data_halo, x_outers_prev, n_dim=n_dim)
+        #print(l, x_outers)
 
         for k, n in enumerate(n_arr):
+            #print('window', window_vals[k,:])
             g_ln = np.sum( window_vals[k,:] * x_outers.T, axis=-1)
+            #print(g_ln)
             g_normalization_ln = np.sum(window_vals[k,:])
 
             g_arr[k,...] = g_ln * m_dm # can pull the mass multiplier out here bc equal mass particles 
+            #print(n, g_ln * m_dm)
             #g_normed_arr[k,...] = g_ln / g_normalization_ln if g_normalization_ln != 0 else 0
             g_normed_arr[k,...] = g_ln * m_dm / m_total
 
-        g_arrs.append(g_arr)
-        g_normed_arrs.append(g_normed_arr)
+        g_arrs[l] = g_arr
+        g_normed_arrs[l] = g_normed_arr
 
         x_outers_prev = x_outers
 
@@ -82,7 +89,7 @@ def get_needed_ls_scalars(m_order_max, x_order_max):
     return needed_l_dict[(m_order_max, x_order_max)]
 
 
-def featurize_scalars(g_arr, n_arr, m_order_max, x_order_max, l_arr=None):
+def featurize_scalars(g_arrs, n_arr, m_order_max, x_order_max, l_arr=None):
 
     ls_needed = get_needed_ls_scalars(m_order_max, x_order_max)
     if l_arr is None:
@@ -96,32 +103,32 @@ def featurize_scalars(g_arr, n_arr, m_order_max, x_order_max, l_arr=None):
                              'ns': [], 'ls': [], 'm_order': 0, 'x_order': 0}
     for n0 in n_arr:
         if 0 in l_arr:
-            scalar_features['s1'][(n0)] = {'value': g_arr[0][n0], 
+            scalar_features['s1'][(n0)] = {'value': g_arrs[0][n0], 
                                         'ns': [n0], 'ls': [0], 'm_order': 1, 'x_order': 0}
         if 2 in l_arr:
-            scalar_features['s4'][(n0)] = {'value': np.einsum('jj', g_arr[2][n0]), 
+            scalar_features['s4'][(n0)] = {'value': np.einsum('jj', g_arrs[2][n0]), 
                                         'ns': [n0], 'ls': [2], 'm_order': 1, 'x_order': 2}
         for n1 in n_arr:
             if 0 in l_arr:
-                scalar_features['s2'][(n0,n1)] = {'value':  g_arr[0][n0] *  g_arr[0][n1], 
+                scalar_features['s2'][(n0,n1)] = {'value':  g_arrs[0][n0] *  g_arrs[0][n1], 
                                     'ns': [n0,n1], 'ls': [0], 'm_order': 2, 'x_order': 0}
             if 1 in l_arr:
-                scalar_features['s5'][(n0,n1)] = {'value':  np.einsum('j,j', g_arr[1][n0], g_arr[1][n1]), 
+                scalar_features['s5'][(n0,n1)] = {'value':  np.einsum('j,j', g_arrs[1][n0], g_arrs[1][n1]), 
                                     'ns': [n0,n1], 'ls': [1], 'm_order': 2, 'x_order': 2}
             if 0 in l_arr and 2 in l_arr:
-                scalar_features['s6'][(n0,n1)] = {'value':  g_arr[0][n0] * np.einsum('jj', g_arr[2][n1]),
+                scalar_features['s6'][(n0,n1)] = {'value':  g_arrs[0][n0] * np.einsum('jj', g_arrs[2][n1]),
                                     'ns': [n0,n1], 'ls': [0,2], 'm_order': 2, 'x_order': 2}
             for n2 in n_arr:
                 if 0 in l_arr:
-                    scalar_features['s3'][(n0,n1,n2)] = {'value':  g_arr[0][n0] * g_arr[0][n1] * g_arr[0][n2],
+                    scalar_features['s3'][(n0,n1,n2)] = {'value':  g_arrs[0][n0] * g_arrs[0][n1] * g_arrs[0][n2],
                                     'ns': [n0,n1,n2], 'ls': [0], 'm_order': 3, 'x_order': 0}
                 if 0 in l_arr and 1 in l_arr:
                     scalar_features['s7'][(n0,n1,n2)] = {'value':
-                                    g_arr[0][n0] * np.einsum('j,j', g_arr[1][n1], g_arr[1][n2]),
+                                    g_arr[0][n0] * np.einsum('j,j', g_arrs[1][n1], g_arrs[1][n2]),
                                     'ns': [n0,n1,n2], 'ls': [0,1], 'm_order': 3, 'x_order': 2}
                 if 0 in l_arr and 2 in l_arr:                 
                     scalar_features['s8'][(n0,n1,n2)] = {'value':  
-                                    g_arr[0][n0] * g_arr[0][n1] * np.einsum('jj', g_arr[2][n2]),
+                                    g_arrs[0][n0] * g_arrs[0][n1] * np.einsum('jj', g_arrs[2][n2]),
                                     'ns': [n0,n1,n2], 'ls': [0,2], 'm_order': 3, 'x_order': 2}
 
     return scalar_features
