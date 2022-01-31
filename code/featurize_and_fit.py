@@ -275,13 +275,21 @@ class Fitter:
         # X = (A^T C^-1 A)^-1 (A^T C^-1 Y)
         # this is the standard equation for least squares. so we can multiply both of our inputs
         # to leastsq, A and Y, by C^-1 in order to incorporate the uncertainties
+        # TODO: consistent naming
         x_vals = self.x_scalar_train/self.x_scales
         inverse_variances = 1/self.uncertainties_train**2
-        x_vals = (x_vals.T * inverse_variances.T).T # there must be a better way to do this?
-        y_vals *= inverse_variances
-        res_scalar = np.linalg.lstsq(x_vals, y_vals, rcond=None)
+        #x_vals = (x_vals.T * inverse_variances.T).T # there must be a better way to do this?
+        #x_vals = x_vals * inverse_variances[:,None] #UNDERSTAND BROADCASTING (or None, : - try
+        ATA = x_vals.T @ (inverse_variances[:,None] * x_vals)
+        #y_vals *= inverse_variances
+        ATY = x_vals.T @ (inverse_variances * y_vals)
+        # A^T C-1 A, A^T C-1 Y (could do, but not right thing - but best)
+        # see that code doesnt have access A^T
+        #res_scalar = np.linalg.lstsq(x_vals, y_vals, rcond=None)
+        res_scalar = np.linalg.lstsq(ATA, ATY, rcond=None)
+        print(ATA.shape, ATY.shape)
+        print(res_scalar[0].shape, self.x_scales.shape)
         self.theta_scalar = res_scalar[0]/self.x_scales
-
         rank = res_scalar[2] 
         print("rank:", rank)
         print("n_feat:", self.x_scalar_features.shape[1])
