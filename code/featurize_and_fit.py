@@ -267,11 +267,17 @@ class Fitter:
         self.idx_test = np.random.choice(idx_traintest, size=int(frac_test*self.N_halos), replace=False)
         self.idx_train = np.setdiff1d(idx_traintest, self.idx_test, assume_unique=True)
 
-        # Note: train and test arrays are scaled!
-        self.x_scalar_train = self.x_scalar_features_scaled[self.idx_train]
-        self.x_scalar_test = self.x_scalar_features_scaled[self.idx_test]
-        self.y_scalar_train = self.y_scalar_scaled[self.idx_train]
-        self.y_scalar_test = self.y_scalar_scaled[self.idx_test]
+        # Scaled train and test arrays
+        self.x_scalar_train_scaled = self.x_scalar_features_scaled[self.idx_train]
+        self.x_scalar_test_scaled = self.x_scalar_features_scaled[self.idx_test]
+        self.y_scalar_train_scaled = self.y_scalar_scaled[self.idx_train]
+        self.y_scalar_test_scaled = self.y_scalar_scaled[self.idx_test]
+
+        # Raw train and test arrays
+        self.x_scalar_train = self.x_scalar_features[self.idx_train]
+        self.x_scalar_test = self.x_scalar_features[self.idx_test]
+        self.y_scalar_train = self.y_scalar[self.idx_train]
+        self.y_scalar_test = self.y_scalar[self.idx_test]
 
         # Train and test dicts are not scaled!
         self.x_scalar_dicts_train = self.x_scalar_dicts[self.idx_train]
@@ -279,9 +285,9 @@ class Fitter:
         self.uncertainties_train = self.uncertainties[self.idx_train]
         self.uncertainties_test = self.uncertainties[self.idx_test]
 
-        self.n_train = len(self.x_scalar_train)
-        self.n_test = len(self.x_scalar_test)
-        self.n_features = self.x_scalar_features.shape[1]
+        self.n_train = len(self.x_scalar_train_scaled)
+        self.n_test = len(self.x_scalar_test_scaled)
+        self.n_features = self.x_scalar_features_scaled.shape[1]
 
         #print(f'n_train: {self.n_train}, n_test: {self.n_test}')
         #print(f'n_features: {self.n_features}')
@@ -301,7 +307,7 @@ class Fitter:
 
     def fit(self, check_cond=False):
         
-        A = self.construct_feature_matrix(self.x_scalar_train)
+        A = self.construct_feature_matrix(self.x_scalar_train_scaled)
 
         # in this code, A=x_vals, diag(C_inv)=inverse_variances, Y=y_vals
         if check_cond:
@@ -309,20 +315,20 @@ class Fitter:
             print('x_vals condition number:',  np.max(s)/np.min(s))
         inverse_variances = 1/self.uncertainties_train**2
         AtCinvA = A.T @ (inverse_variances[:,None] * A)
-        AtCinvY = A.T @ (inverse_variances * self.y_scalar_train)
+        AtCinvY = A.T @ (inverse_variances * self.y_scalar_train_scaled)
         self.res_scalar = np.linalg.lstsq(AtCinvA, AtCinvY, rcond=None)
 
         self.theta_scalar = self.res_scalar[0]
         #self.theta_scalar = self.res_scalar[0]/self.x_scales # what to do about this?
         # This is in units of the data as given, so does not include the mass_multiplier
-        self.chi2 = np.sum((self.y_scalar_train - A @ self.theta_scalar)**2 * inverse_variances)
+        self.chi2 = np.sum((self.y_scalar_train_scaled - A @ self.theta_scalar)**2 * inverse_variances)
 
         assert self.res_scalar[0].shape[0] == A.shape[1], 'Number of coefficients from theta vector should equal number of features!'
 
     
     def predict(self):
-        #self.y_scalar_pred = self.x_scalar_test @ self.theta_scalar
-        A_test = self.construct_feature_matrix(self.x_scalar_test)
+        #self.y_scalar_pred = self.x_scalar_test_scaled @ self.theta_scalar
+        A_test = self.construct_feature_matrix(self.x_scalar_test_scaled)
         self.y_scalar_pred_scaled = A_test @ self.theta_scalar
         self.y_scalar_pred = self.unscale_y_labels(self.y_scalar_pred_scaled)
 
