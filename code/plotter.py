@@ -67,7 +67,6 @@ def plot_halos_dark_and_hydro(halo_dicts, nrows_outer, ncols_outer, titles):
 
         idx_subhalo_hydro = halo_dict['idx_subhalo_hydro']
         subhalo_hydro_stars = il.snapshot.loadSubhalo(base_path_hydro,snap_num,idx_subhalo_hydro,'stars')
-        print(subhalo_hydro_stars['count'])
         if subhalo_hydro_stars['count'] > 0:
             x_subhalo_hydro_stars = subhalo_hydro_stars['Coordinates']
             ax1.scatter(x_subhalo_hydro_stars[:,0], x_subhalo_hydro_stars[:,1],

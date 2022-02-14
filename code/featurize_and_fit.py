@@ -41,12 +41,7 @@ def run():
 # set up paths
 class Featurizer:
         
-    def __init__(self, r_edges, r_units=None):
-        self.r_edges = np.array(r_edges).astype(float)
-
-        n_rbins = len(r_edges) - 1
-        self.n_arr = np.arange(n_rbins)
-        self.r_units = r_units
+    def __init__(self):
 
         self.tng_path_hydro = '/scratch/ksf293/gnn-cosmology/data/TNG50-4'
         self.tng_path_dark = '/scratch/ksf293/gnn-cosmology/data/TNG50-4-Dark'
@@ -61,7 +56,9 @@ class Featurizer:
         with h5py.File(f'{self.base_path_hydro}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5','r') as f:
             header = dict( f['Header'].attrs.items() )
             self.m_dmpart = header['MassTable'][1] # this times 10^10 msun/h
-        
+            self.box_size = header['BoxSize'] # c kpc/h
+
+
         fields = ['SubhaloMass','SubhaloPos','SubhaloMassType', 'SubhaloLenType', 'SubhaloHalfmassRad', 'SubhaloGrNr']
 
         self.subhalos_hydro = il.groupcat.loadSubhalos(self.base_path_hydro,self.snap_num,fields=fields)
@@ -153,6 +150,8 @@ class Featurizer:
             idx_halo_dark = halo_dict['idx_halo_dark']
             halo_dict['r_crit200_dark_halo'] = self.halos_dark['Group_R_Crit200'][idx_halo_dark]
             halo_dict['r_mean200_dark_halo'] = self.halos_dark['Group_R_Mean200'][idx_halo_dark]
+            halo_dict['mass_crit200_dark_halo_dm'] = self.halos_dark['Group_M_Crit200'][idx_halo_dark]
+            halo_dict['mass_mean200_dark_halo_dm'] = self.halos_dark['Group_M_Mean200'][idx_halo_dark]
             halo_dict['mass_dark_halo_dm'] = self.halos_dark['GroupMassType'][:,self.ipart_dm][idx_halo_dark]
 
             idx_halo_hydro = halo_dict['idx_halo_hydro']
@@ -169,8 +168,16 @@ class Featurizer:
             self.y_scalar[i_hd] = halo_dict[y_scalar_feature_name]
 
     
-    def compute_geometric_features(self, l_arr):
+    def shift_points_torus(self, points, shift):
+        return (points - shift + 0.5*self.box_size) % self.box_size - 0.5*self.box_size
 
+
+    def compute_geometric_features(self, r_edges, l_arr, r_units='r200'):
+
+        self.r_edges = np.array(r_edges).astype(float)
+        n_rbins = len(r_edges) - 1
+        self.n_arr = np.arange(n_rbins)
+        self.r_units = r_units
         self.l_arr = np.array(l_arr)
 
         self.g_arrs_halos = []
@@ -180,17 +187,20 @@ class Featurizer:
             idx_halo_dark = halo_dict['idx_halo_dark']
             halo_dark_dm = il.snapshot.loadHalo(self.base_path_dark,self.snap_num,idx_halo_dark,'dm')
             x_halo_dark_dm = halo_dark_dm['Coordinates']
-            x_halo_dark_dm_com = np.mean(x_halo_dark_dm, axis=0)
-            
+            # particle0_pos is the first particle, choosing random one as proxy for pos of halo
+            particle0_pos = x_halo_dark_dm[0]
+            x_data_halo_shifted = self.shift_points_torus(x_halo_dark_dm, particle0_pos)
+
+            x_halo_dark_dm_com = np.mean(x_data_halo_shifted, axis=0) + particle0_pos
+            #print("com", x_halo_dark_dm_com)
             # Subtract off center of mass for each halo
-            x_data_halo = x_halo_dark_dm - x_halo_dark_dm_com
-            #print(min(x_data_halo[:,0]), max(x_data_halo[:,0]))
+            x_data_halo = self.shift_points_torus(x_halo_dark_dm, x_halo_dark_dm_com)
 
             if self.r_units=='r200':
                 r_edges = self.r_edges * halo_dict['r_mean200_dark_halo']
             else:
                 r_edges = self.r_edges
-
+    
             g_arrs, g_normed_arrs = scalars.get_geometric_features(x_data_halo, r_edges, self.l_arr, self.n_arr, self.m_dmpart)
             self.g_arrs_halos.append(g_arrs)
             self.g_normed_arrs_halos.append(g_normed_arrs)
@@ -228,22 +238,46 @@ class Fitter:
             uncertainties = np.ones(self.N_halos)
         self.uncertainties = uncertainties
 
+
+    def scale_x_features(self, x, rms_x, log_x):
+        if log_x:
+           x = np.log10(x)
+        if rms_x:
+            x /= np.sqrt(np.mean(x**2, axis=0))
+        return x
+
+
+    def scale_y_labels(self, y, log_y):
+        self.log_y = log_y
+        if self.log_y:
+            y = np.log10(y)
+        return y
+
+    def unscale_y_labels(self, y):
+        if self.log_y:
+            y = 10**y
+        return y
+
+
+
     def split_train_test(self, frac_test=0.2, seed=42):
         # split indices and then obtain training and test x and y, so can go back and get the full info later
         np.random.seed(seed)
         idx_traintest = np.arange(self.N_halos)
-        idx_test = np.random.choice(idx_traintest, size=int(frac_test*self.N_halos), replace=False)
-        idx_train = np.setdiff1d(idx_traintest, idx_test, assume_unique=True)
+        self.idx_test = np.random.choice(idx_traintest, size=int(frac_test*self.N_halos), replace=False)
+        self.idx_train = np.setdiff1d(idx_traintest, self.idx_test, assume_unique=True)
 
-        self.x_scalar_train = self.x_scalar_features[idx_train]
-        self.x_scalar_test = self.x_scalar_features[idx_test]
-        self.y_scalar_train = self.y_scalar[idx_train]
-        self.y_scalar_test = self.y_scalar[idx_test]
+        # Note: train and test arrays are scaled!
+        self.x_scalar_train = self.x_scalar_features_scaled[self.idx_train]
+        self.x_scalar_test = self.x_scalar_features_scaled[self.idx_test]
+        self.y_scalar_train = self.y_scalar_scaled[self.idx_train]
+        self.y_scalar_test = self.y_scalar_scaled[self.idx_test]
 
-        self.x_scalar_dicts_train = self.x_scalar_dicts[idx_train]
-        self.x_scalar_dicts_test = self.x_scalar_dicts[idx_test]
-        self.uncertainties_train = self.uncertainties[idx_train]
-        self.uncertainties_test = self.uncertainties[idx_test]
+        # Train and test dicts are not scaled!
+        self.x_scalar_dicts_train = self.x_scalar_dicts[self.idx_train]
+        self.x_scalar_dicts_test = self.x_scalar_dicts[self.idx_test]
+        self.uncertainties_train = self.uncertainties[self.idx_train]
+        self.uncertainties_test = self.uncertainties[self.idx_test]
 
         self.n_train = len(self.x_scalar_train)
         self.n_test = len(self.x_scalar_test)
@@ -254,51 +288,43 @@ class Fitter:
         if self.n_features > self.n_train/2:
             print('WARNING!!! Number of features ({self.n_features}) is close to the number of training samples ({self.n_train})')
 
-    
-    def scale_and_fit(self, logy=True):
+
+    def scale(self, log_x=False, rms_x=False, log_y=False):
+        self.x_scalar_features_scaled = self.scale_x_features(self.x_scalar_features, rms_x, log_x)
+        self.y_scalar_scaled = self.scale_y_labels(self.y_scalar, log_y=log_y)
+
+    def construct_feature_matrix(self, x_features):
+        ones_feature = np.ones((x_features.shape[0], 1))
+        x_feature_matrix = np.hstack((ones_feature, x_features))
+        self.n_features += 1
+        return x_feature_matrix
+
+    def fit(self, check_cond=False):
         
-        self.logy = logy
-        y_vals = self.y_scalar_train
-        if self.logy:
-            y_vals = np.log10(y_vals)
+        A = self.construct_feature_matrix(self.x_scalar_train)
 
-        self.x_scales = np.sqrt(np.mean(self.x_scalar_train**2, axis=0))
-
-        # goal: do leastsquares with a diagonal covariance matrix without instantiating it
-        # start with equation to solve:
-        # Y = A X
-        # weight by uncertainties:
-        # C^-1 Y = C^-1 A X
-        # then to solve for x, left mult by A^T:
-        # A^T C^-1 Y = A^T C^-1 A X
-        # X = (A^T C^-1 A)^-1 (A^T C^-1 Y)
-        # this is the standard equation for least squares. so we can multiply both of our inputs
-        # to leastsq, A and Y, by C^-1 in order to incorporate the uncertainties
-        # TODO: consistent naming
-        x_vals = self.x_scalar_train/self.x_scales
+        # in this code, A=x_vals, diag(C_inv)=inverse_variances, Y=y_vals
+        if check_cond:
+            u, s, v = np.linalg.svd(A, full_matrices=False)
+            print('x_vals condition number:',  np.max(s)/np.min(s))
         inverse_variances = 1/self.uncertainties_train**2
-        #x_vals = (x_vals.T * inverse_variances.T).T # there must be a better way to do this?
-        #x_vals = x_vals * inverse_variances[:,None] #UNDERSTAND BROADCASTING (or None, : - try
-        ATA = x_vals.T @ (inverse_variances[:,None] * x_vals)
-        #y_vals *= inverse_variances
-        ATY = x_vals.T @ (inverse_variances * y_vals)
-        # A^T C-1 A, A^T C-1 Y (could do, but not right thing - but best)
-        # see that code doesnt have access A^T
-        #res_scalar = np.linalg.lstsq(x_vals, y_vals, rcond=None)
-        self.res_scalar = np.linalg.lstsq(ATA, ATY, rcond=None)
-        self.theta_scalar = self.res_scalar[0]/self.x_scales
-        rank = self.res_scalar[2] 
-        # Sums of squared residuals: Squared Euclidean 2-norm for each column in b - a @ x
-        self.chi2 = np.sqrt(np.sum((ATY - ATA @ self.res_scalar[0])**2))
-        #print("rank:", rank)
-        #print("n_feat:", self.x_scalar_features.shape[1])
-        assert self.theta_scalar.shape[0] == self.x_scalar_features.shape[1], 'Number of coefficients from theta vector should equal number of features!'
+        AtCinvA = A.T @ (inverse_variances[:,None] * A)
+        AtCinvY = A.T @ (inverse_variances * self.y_scalar_train)
+        self.res_scalar = np.linalg.lstsq(AtCinvA, AtCinvY, rcond=None)
+
+        self.theta_scalar = self.res_scalar[0]
+        #self.theta_scalar = self.res_scalar[0]/self.x_scales # what to do about this?
+        # This is in units of the data as given, so does not include the mass_multiplier
+        self.chi2 = np.sum((self.y_scalar_train - A @ self.theta_scalar)**2 * inverse_variances)
+
+        assert self.res_scalar[0].shape[0] == A.shape[1], 'Number of coefficients from theta vector should equal number of features!'
 
     
     def predict(self):
-        self.y_scalar_pred = self.x_scalar_test @ self.theta_scalar
-        if self.logy:
-            self.y_scalar_pred = 10**self.y_scalar_pred
+        #self.y_scalar_pred = self.x_scalar_test @ self.theta_scalar
+        A_test = self.construct_feature_matrix(self.x_scalar_test)
+        self.y_scalar_pred_scaled = A_test @ self.theta_scalar
+        self.y_scalar_pred = self.unscale_y_labels(self.y_scalar_pred_scaled)
 
             
 if __name__=='__main__':
