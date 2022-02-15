@@ -227,19 +227,23 @@ class Featurizer:
 
 class Fitter:
 
-    def __init__(self, x_scalar_features, y_scalar, x_scalar_dicts, uncertainties=None):
+    def __init__(self, x_scalar_features, y_scalar, x_scalar_dicts, 
+                 y_val_current, uncertainties=None):
         assert x_scalar_features.shape[0]==y_scalar.shape[0], "Must have same number of x features and y labels!"
         assert x_scalar_features.shape[0]==len(x_scalar_dicts), "Must have same number of x features and feature dicts!"
         self.x_scalar_features = x_scalar_features
         self.y_scalar = y_scalar
         self.x_scalar_dicts = x_scalar_dicts
         self.N_halos = x_scalar_features.shape[0]
+        #TODO: document
+        self.y_val_current = y_val_current
         if uncertainties is None:
             uncertainties = np.ones(self.N_halos)
         self.uncertainties = uncertainties
 
 
-    def scale_x_features(self, x, rms_x, log_x):
+    def scale_x_features(self, x_input, rms_x, log_x):
+        x = np.copy(x_input)
         if log_x:
            x = np.log10(x)
         if rms_x:
@@ -285,6 +289,9 @@ class Fitter:
         self.uncertainties_train = self.uncertainties[self.idx_train]
         self.uncertainties_test = self.uncertainties[self.idx_test]
 
+        self.y_val_current_train = self.y_val_current[self.idx_train]
+        self.y_val_current_test = self.y_val_current[self.idx_test]
+
         self.n_train = len(self.x_scalar_train_scaled)
         self.n_test = len(self.x_scalar_test_scaled)
         self.n_features = self.x_scalar_features_scaled.shape[1]
@@ -299,37 +306,40 @@ class Fitter:
         self.x_scalar_features_scaled = self.scale_x_features(self.x_scalar_features, rms_x, log_x)
         self.y_scalar_scaled = self.scale_y_labels(self.y_scalar, log_y=log_y)
 
-    def construct_feature_matrix(self, x_features):
+
+    def construct_feature_matrix(self, x_features, y_val_current):
         ones_feature = np.ones((x_features.shape[0], 1))
-        x_feature_matrix = np.hstack((ones_feature, x_features))
-        self.n_features += 1
+        # TODO: switch to concatenate
+        x_feature_matrix = np.hstack((ones_feature, y_val_current.reshape((x_features.shape[0], 1)), x_features))
         return x_feature_matrix
 
     def fit(self, check_cond=False):
         
-        A = self.construct_feature_matrix(self.x_scalar_train_scaled)
+        # TODO: should also scale y_val_current like labels
+        self.A = self.construct_feature_matrix(self.x_scalar_train_scaled, self.y_val_current_train)
+        # TODO: scale uncertainties! !! consistent w y
 
         # in this code, A=x_vals, diag(C_inv)=inverse_variances, Y=y_vals
         if check_cond:
-            u, s, v = np.linalg.svd(A, full_matrices=False)
+            u, s, v = np.linalg.svd(self.A, full_matrices=False)
             print('x_vals condition number:',  np.max(s)/np.min(s))
         inverse_variances = 1/self.uncertainties_train**2
-        AtCinvA = A.T @ (inverse_variances[:,None] * A)
-        AtCinvY = A.T @ (inverse_variances * self.y_scalar_train_scaled)
+        AtCinvA = self.A.T @ (inverse_variances[:,None] * self.A)
+        AtCinvY = self.A.T @ (inverse_variances * self.y_scalar_train_scaled)
         self.res_scalar = np.linalg.lstsq(AtCinvA, AtCinvY, rcond=None)
 
         self.theta_scalar = self.res_scalar[0]
         #self.theta_scalar = self.res_scalar[0]/self.x_scales # what to do about this?
         # This is in units of the data as given, so does not include the mass_multiplier
-        self.chi2 = np.sum((self.y_scalar_train_scaled - A @ self.theta_scalar)**2 * inverse_variances)
+        self.chi2 = np.sum((self.y_scalar_train_scaled - self.A @ self.theta_scalar)**2 * inverse_variances)
 
-        assert self.res_scalar[0].shape[0] == A.shape[1], 'Number of coefficients from theta vector should equal number of features!'
+        assert self.res_scalar[0].shape[0] == self.A.shape[1], 'Number of coefficients from theta vector should equal number of features!'
 
     
     def predict(self):
         #self.y_scalar_pred = self.x_scalar_test_scaled @ self.theta_scalar
-        A_test = self.construct_feature_matrix(self.x_scalar_test_scaled)
-        self.y_scalar_pred_scaled = A_test @ self.theta_scalar
+        self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, self.y_val_current_test)
+        self.y_scalar_pred_scaled = self.A_test @ self.theta_scalar
         self.y_scalar_pred = self.unscale_y_labels(self.y_scalar_pred_scaled)
 
             
