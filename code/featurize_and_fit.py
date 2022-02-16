@@ -308,8 +308,9 @@ class Fitter:
         y_current = np.atleast_2d(y_current).T
         A = np.concatenate((ones_feature, y_current, x_features), axis=1)
         if training_mode:
-            self.x_scales = np.concatenate(([1.0, 1.0], self.x_scales))
-            self.n_A_features = self.n_x_features + 2
+            #self.x_scales = np.concatenate(([1.0, 1.0], self.x_scales))
+            self.n_extra_features = 2
+            self.n_A_features = self.n_x_features + self.n_extra_features
         return A
 
     def scale_and_fit(self, rms_x=False, log_x=False, log_y=False, check_cond=False):
@@ -319,7 +320,8 @@ class Fitter:
         if rms_x:
             self.x_scales = np.sqrt(np.mean(self.x_scalar_train_scaled**2, axis=0))
         else:
-            self.x_scales = np.ones(x.shape[0])
+            self.x_scales = np.ones(self.x_scalar_train_scaled.shape[1])
+        self.x_scalar_train_scaled /= self.x_scales
 
         self.A_train = self.construct_feature_matrix(self.x_scalar_train_scaled, self.y_val_current_train_scaled,
                                                      training_mode=True)
@@ -333,20 +335,32 @@ class Fitter:
         AtCinvY = self.A_train.T @ (inverse_variances * self.y_scalar_train_scaled)
         self.res_scalar = np.linalg.lstsq(AtCinvA, AtCinvY, rcond=None)
 
-        self.theta_scalar = self.res_scalar[0]/self.x_scales
-        # This is in units of the data as given, so does not include the mass_multiplier
-        self.chi2 = np.sum((self.y_scalar_train_scaled - self.A_train*self.x_scales @ self.theta_scalar)**2 * inverse_variances)
+        # only modified the scaled features by x_scales
+        self.theta_scalar = self.res_scalar[0]
+        self.theta_scalar[self.n_extra_features:] /= self.x_scales
+        # This chi^2 is in units of the data as given, so does not include the mass_multiplier
+        # use original res_scalar in chi^2 to match space of A_train, which *is* scaled by x_scales
+        self.chi2 = np.sum((self.y_scalar_train_scaled - self.A_train @ self.res_scalar[0])**2 * inverse_variances)
 
         assert self.res_scalar[0].shape[0] == self.A_train.shape[1], 'Number of coefficients from theta vector should equal number of features!'
 
     
-    def predict(self):
-        #self.y_scalar_pred = self.x_scalar_test_scaled @ self.theta_scalar
+    def predict_test(self):
         self.x_scalar_test_scaled = self.scale_x_features(self.x_scalar_test)
+        # note that x_scalar_test_scaled has NOT been scaled by x_scales, 
         self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, self.y_val_current_test_scaled)
-        # x_scales is already in theta_scalar, so we also need to multiply by x_scales here
-        self.y_scalar_pred_scaled = self.A_test*self.x_scales @ self.theta_scalar
+        self.y_scalar_pred_scaled = self.A_test @ self.theta_scalar
         self.y_scalar_pred = self.unscale_y(self.y_scalar_pred_scaled)
+
+
+    def predict(self, x, y_current):
+        x_scaled = self.scale_x_features(x)
+        y_current_scaled = self.scale_y(y_current)
+        # note that x_scaled has NOT been scaled by x_scales
+        A = self.construct_feature_matrix(x_scaled, y_current_scaled)
+        y_pred_scaled = A @ self.theta_scalar
+        y_pred = self.unscale_y(y_pred_scaled)
+        return y_pred
 
             
 if __name__=='__main__':
