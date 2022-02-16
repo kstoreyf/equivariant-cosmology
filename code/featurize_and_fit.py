@@ -242,22 +242,21 @@ class Fitter:
         self.uncertainties = uncertainties
 
 
-    def scale_x_features(self, x_input, rms_x, log_x):
+    def scale_x_features(self, x_input):
         x = np.copy(x_input)
-        if log_x:
+        if self.log_x:
            x = np.log10(x)
-        if rms_x:
-            x /= np.sqrt(np.mean(x**2, axis=0))
         return x
 
 
-    def scale_y_labels(self, y, log_y):
-        self.log_y = log_y
+    def scale_y(self, y_input):
+        y = np.copy(y_input)
         if self.log_y:
             y = np.log10(y)
         return y
 
-    def unscale_y_labels(self, y):
+    def unscale_y(self, y_input):
+        y = np.copy(y_input)
         if self.log_y:
             y = 10**y
         return y
@@ -271,19 +270,13 @@ class Fitter:
         self.idx_test = np.random.choice(idx_traintest, size=int(frac_test*self.N_halos), replace=False)
         self.idx_train = np.setdiff1d(idx_traintest, self.idx_test, assume_unique=True)
 
-        # Scaled train and test arrays
-        self.x_scalar_train_scaled = self.x_scalar_features_scaled[self.idx_train]
-        self.x_scalar_test_scaled = self.x_scalar_features_scaled[self.idx_test]
-        self.y_scalar_train_scaled = self.y_scalar_scaled[self.idx_train]
-        self.y_scalar_test_scaled = self.y_scalar_scaled[self.idx_test]
-
-        # Raw train and test arrays
+        # Split train and test arrays
         self.x_scalar_train = self.x_scalar_features[self.idx_train]
         self.x_scalar_test = self.x_scalar_features[self.idx_test]
         self.y_scalar_train = self.y_scalar[self.idx_train]
         self.y_scalar_test = self.y_scalar[self.idx_test]
 
-        # Train and test dicts are not scaled!
+        # Split lists of feature dicts
         self.x_scalar_dicts_train = self.x_scalar_dicts[self.idx_train]
         self.x_scalar_dicts_test = self.x_scalar_dicts[self.idx_test]
         self.uncertainties_train = self.uncertainties[self.idx_train]
@@ -292,55 +285,68 @@ class Fitter:
         self.y_val_current_train = self.y_val_current[self.idx_train]
         self.y_val_current_test = self.y_val_current[self.idx_test]
 
-        self.n_train = len(self.x_scalar_train_scaled)
-        self.n_test = len(self.x_scalar_test_scaled)
-        self.n_features = self.x_scalar_features_scaled.shape[1]
+        self.n_train = len(self.x_scalar_train)
+        self.n_test = len(self.x_scalar_test)
+        self.n_x_features = self.x_scalar_features.shape[1]
 
         #print(f'n_train: {self.n_train}, n_test: {self.n_test}')
         #print(f'n_features: {self.n_features}')
-        if self.n_features > self.n_train/2:
+        if self.n_x_features > self.n_train/2:
             print('WARNING!!! Number of features ({self.n_features}) is close to the number of training samples ({self.n_train})')
 
 
-    def scale(self, log_x=False, rms_x=False, log_y=False):
-        self.x_scalar_features_scaled = self.scale_x_features(self.x_scalar_features, rms_x, log_x)
-        self.y_scalar_scaled = self.scale_y_labels(self.y_scalar, log_y=log_y)
+    def scale_y_values(self):
+        self.y_scalar_train_scaled = self.scale_y(self.y_scalar_train)
+        self.y_scalar_test_scaled = self.scale_y(self.y_scalar_test)
+        self.uncertainties_train_scaled = self.scale_y(self.uncertainties_train)
+        self.y_val_current_train_scaled = self.scale_y(self.y_val_current_train)
+        self.y_val_current_test_scaled = self.scale_y(self.y_val_current_test)
 
 
-    def construct_feature_matrix(self, x_features, y_val_current):
+    def construct_feature_matrix(self, x_features, y_current, training_mode=False):
         ones_feature = np.ones((x_features.shape[0], 1))
-        # TODO: switch to concatenate
-        x_feature_matrix = np.hstack((ones_feature, y_val_current.reshape((x_features.shape[0], 1)), x_features))
-        return x_feature_matrix
+        y_current = np.atleast_2d(y_current).T
+        A = np.concatenate((ones_feature, y_current, x_features), axis=1)
+        if training_mode:
+            self.x_scales = np.concatenate(([1.0, 1.0], self.x_scales))
+            self.n_A_features = self.n_x_features + 2
+        return A
 
-    def fit(self, check_cond=False):
-        
-        # TODO: should also scale y_val_current like labels
-        self.A = self.construct_feature_matrix(self.x_scalar_train_scaled, self.y_val_current_train)
-        # TODO: scale uncertainties! !! consistent w y
+    def scale_and_fit(self, rms_x=False, log_x=False, log_y=False, check_cond=False):
+        self.log_x, self.log_y = log_x, log_y
+        self.scale_y_values()
+        self.x_scalar_train_scaled = self.scale_x_features(self.x_scalar_train)
+        if rms_x:
+            self.x_scales = np.sqrt(np.mean(self.x_scalar_train_scaled**2, axis=0))
+        else:
+            self.x_scales = np.ones(x.shape[0])
+
+        self.A_train = self.construct_feature_matrix(self.x_scalar_train_scaled, self.y_val_current_train_scaled,
+                                                     training_mode=True)
 
         # in this code, A=x_vals, diag(C_inv)=inverse_variances, Y=y_vals
         if check_cond:
             u, s, v = np.linalg.svd(self.A, full_matrices=False)
             print('x_vals condition number:',  np.max(s)/np.min(s))
-        inverse_variances = 1/self.uncertainties_train**2
-        AtCinvA = self.A.T @ (inverse_variances[:,None] * self.A)
-        AtCinvY = self.A.T @ (inverse_variances * self.y_scalar_train_scaled)
+        inverse_variances = 1/self.uncertainties_train_scaled**2
+        AtCinvA = self.A_train.T @ (inverse_variances[:,None] * self.A_train)
+        AtCinvY = self.A_train.T @ (inverse_variances * self.y_scalar_train_scaled)
         self.res_scalar = np.linalg.lstsq(AtCinvA, AtCinvY, rcond=None)
 
-        self.theta_scalar = self.res_scalar[0]
-        #self.theta_scalar = self.res_scalar[0]/self.x_scales # what to do about this?
+        self.theta_scalar = self.res_scalar[0]/self.x_scales
         # This is in units of the data as given, so does not include the mass_multiplier
-        self.chi2 = np.sum((self.y_scalar_train_scaled - self.A @ self.theta_scalar)**2 * inverse_variances)
+        self.chi2 = np.sum((self.y_scalar_train_scaled - self.A_train*self.x_scales @ self.theta_scalar)**2 * inverse_variances)
 
-        assert self.res_scalar[0].shape[0] == self.A.shape[1], 'Number of coefficients from theta vector should equal number of features!'
+        assert self.res_scalar[0].shape[0] == self.A_train.shape[1], 'Number of coefficients from theta vector should equal number of features!'
 
     
     def predict(self):
         #self.y_scalar_pred = self.x_scalar_test_scaled @ self.theta_scalar
-        self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, self.y_val_current_test)
-        self.y_scalar_pred_scaled = self.A_test @ self.theta_scalar
-        self.y_scalar_pred = self.unscale_y_labels(self.y_scalar_pred_scaled)
+        self.x_scalar_test_scaled = self.scale_x_features(self.x_scalar_test)
+        self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, self.y_val_current_test_scaled)
+        # x_scales is already in theta_scalar, so we also need to multiply by x_scales here
+        self.y_scalar_pred_scaled = self.A_test*self.x_scales @ self.theta_scalar
+        self.y_scalar_pred = self.unscale_y(self.y_scalar_pred_scaled)
 
             
 if __name__=='__main__':
