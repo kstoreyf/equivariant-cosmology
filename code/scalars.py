@@ -25,79 +25,7 @@ def x_outer_product(l, delta_x_arr, x_outers_prev, n_dim=3):
         x_outers[i,:] = np.multiply.outer(x_outers_prev[i], delta_x)
     return x_outers
 
-### 
-
-def get_geometric_features_objects(delta_x_data_halo, r_edges, l_arr, n_arr, m_dm, n_dim=3):
-    n_rbins = len(r_edges) - 1
-    N, n_dim_from_data = delta_x_data_halo.shape
-    m_total = N*m_dm
-    assert n_dim_from_data == n_dim, f"Number of dimensions in data {n_dim_from_data} does not equal global n_dim, {n_dim}!"
-    g_features = []
-    g_normed_features = []
-
-    # vectorized for all particles N
-    rs = np.linalg.norm(delta_x_data_halo, axis=1)
-    assert len(rs) == N, "rs should have length N!"
-    window_vals = window(n_arr, rs, r_edges, n_rbins)
-
-    x_outers_prev = None
-    for j, l in enumerate(l_arr):
-        g_arr = np.empty([len(n_arr)] + [n_dim]*l)
-        g_normed_arr = np.empty([len(n_arr)] + [n_dim]*l)
-
-        #x_outers = x_outer_vec(l, delta_x_data_halo)
-        x_outers = x_outer_product(l, delta_x_data_halo, x_outers_prev, n_dim=n_dim)
-
-        for k, n in enumerate(n_arr):
-            g_ln = np.sum( window_vals[k,:] * x_outers.T, axis=-1) * m_dm
-            geo = GeometricFeature(g_ln, m_order=1, x_order=l, l=l, n=n)
-            g_features.append(geo)  
-
-            g_normalization_ln = np.sum(window_vals[k,:])
-            geo_norm = GeometricFeature(g_normalization_ln, m_order=1, x_order=l, l=l) / m_total
-            g_normed_features.append(geo_norm)  
-
-        x_outers_prev = x_outers
-
-    return g_features, g_normed_features
-
-
-def get_geometric_features(delta_x_data_halo, r_edges, l_arr, n_arr, m_dm, n_dim=3):
-    n_rbins = len(r_edges) - 1
-    N, n_dim_from_data = delta_x_data_halo.shape
-    m_total = N*m_dm
-    assert n_dim_from_data == n_dim, f"Number of dimensions in data {n_dim_from_data} does not equal global n_dim, {n_dim}!"
-    g_arrs = {}
-    g_normed_arrs = {}
-
-    # vectorized for all particles N
-    rs = np.linalg.norm(delta_x_data_halo, axis=1)
-    assert len(rs) == N, "rs should have length N!"
-    window_vals = window(n_arr, rs, r_edges, n_rbins)
-
-    x_outers_prev = None
-    for j, l in enumerate(l_arr):
-        g_arr = np.empty([len(n_arr)] + [n_dim]*l)
-        g_normed_arr = np.empty([len(n_arr)] + [n_dim]*l)
-
-        #x_outers = x_outer_vec(l, delta_x_data_halo)
-        x_outers = x_outer_product(l, delta_x_data_halo, x_outers_prev, n_dim=n_dim)
-
-        for k, n in enumerate(n_arr):
-            g_ln = np.sum( window_vals[k,:] * x_outers.T, axis=-1)
-            g_normalization_ln = np.sum(window_vals[k,:])
-
-            g_arr[k,...] = g_ln * m_dm # can pull the mass multiplier out here bc equal mass particles 
-            #g_normed_arr[k,...] = g_ln / g_normalization_ln if g_normalization_ln != 0 else 0
-            g_normed_arr[k,...] = g_ln * m_dm / m_total
-
-        g_arrs[l] = g_arr
-        g_normed_arrs[l] = g_normed_arr
-
-        x_outers_prev = x_outers
-
-    return g_arrs, g_normed_arrs  
-
+###
 
 def get_needed_ls_scalars(m_order_max, x_order_max):
     if x_order_max==1:
@@ -118,97 +46,94 @@ def get_needed_ls_scalars(m_order_max, x_order_max):
     return needed_l_dict[(m_order_max, x_order_max)]
 
 
-
-def featurize_scalars(g_arrs, n_arr, m_order_max, x_order_max, l_arr=None):
-
-    ls_needed = get_needed_ls_scalars(m_order_max, x_order_max)
-    if l_arr is None:
-        l_arr = ls_needed
-    else:
-        assert np.all(np.isin(ls_needed, l_arr)), f"Need other l values than given! Gave l_arr={l_arr}, but need {ls_needed}"
-
-    scalar_features = defaultdict(dict)
-    # (-1) n tuple for consistency with others
-    #scalar_features['s0'][(-1)] = {'value': 1, 
-    #                         'ns': [], 'ls': [], 'm_order': 0, 'x_order': 0}
-    for n0 in n_arr:
-        if 0 in l_arr:
-            scalar_features['s1'][(n0)] = {'value': g_arrs[0][n0], 
-                                        'ns': [n0], 'ls': [0], 'm_order': 1, 'x_order': 0}
-        if 2 in l_arr:
-            scalar_features['s4'][(n0)] = {'value': np.einsum('jj', g_arrs[2][n0]), 
-                                        'ns': [n0], 'ls': [2], 'm_order': 1, 'x_order': 2}
-        for n1 in n_arr:
-            if 0 in l_arr:
-                scalar_features['s2'][(n0,n1)] = {'value':  g_arrs[0][n0] *  g_arrs[0][n1], 
-                                    'ns': [n0,n1], 'ls': [0], 'm_order': 2, 'x_order': 0}
-            if 1 in l_arr:
-                scalar_features['s5'][(n0,n1)] = {'value':  np.einsum('j,j', g_arrs[1][n0], g_arrs[1][n1]), 
-                                    'ns': [n0,n1], 'ls': [1], 'm_order': 2, 'x_order': 2}
-            if 0 in l_arr and 2 in l_arr:
-                scalar_features['s6'][(n0,n1)] = {'value':  g_arrs[0][n0] * np.einsum('jj', g_arrs[2][n1]),
-                                    'ns': [n0,n1], 'ls': [0,2], 'm_order': 2, 'x_order': 2}
-            for n2 in n_arr:
-                if 0 in l_arr:
-                    scalar_features['s3'][(n0,n1,n2)] = {'value':  g_arrs[0][n0] * g_arrs[0][n1] * g_arrs[0][n2],
-                                    'ns': [n0,n1,n2], 'ls': [0], 'm_order': 3, 'x_order': 0}
-                if 0 in l_arr and 1 in l_arr:
-                    scalar_features['s7'][(n0,n1,n2)] = {'value':
-                                    g_arrs[0][n0] * np.einsum('j,j', g_arrs[1][n1], g_arrs[1][n2]),
-                                    'ns': [n0,n1,n2], 'ls': [0,1], 'm_order': 3, 'x_order': 2}
-                if 0 in l_arr and 2 in l_arr:                 
-                    scalar_features['s8'][(n0,n1,n2)] = {'value':  
-                                    g_arrs[0][n0] * g_arrs[0][n1] * np.einsum('jj', g_arrs[2][n2]),
-                                    'ns': [n0,n1,n2], 'ls': [0,2], 'm_order': 3, 'x_order': 2}
-
-    return scalar_features
-
-
 class GeometricFeature:
 
-    def __init__(self, value, m_order, x_order, l):
+    def __init__(self, value, m_order, x_order, n):
         self.value = value
         self.m_order = m_order
         self.x_order = x_order
-        self.l = l
         self.n = n
 
 
 class ScalarFeature:
 
     def __init__(self, value, geo_terms):
-        self.geo_terms = []
+        self.value = value
+        self.geo_terms = geo_terms
         self.m_order = np.sum([g.m_order for g in self.geo_terms])
         self.x_order = np.sum([g.x_order for g in self.geo_terms])
-        self.l = l
 
 
 def make_scalar_feature(geo_terms, x_order_max):
-    x_order = np.sum([g.x_order for g in self.geo_terms])
+    x_order = np.sum([g.x_order for g in geo_terms])
+
     if x_order > x_order_max or x_order % 2 != 0:
         return -1
     geo_vals_contracted = []
-    geo_vals_x1 = [g.value for g in self.geo_terms if g.x_order==1]
-    assert geo_terms_x1 <= 2, "not going above 3 terms so shouldnt have more than 2 x=1 terms for scalars!"
+    geo_vals_x1 = [g.value for g in geo_terms if g.x_order==1]
+    geo_terms_x1 = [g for g in geo_terms if g.x_order==1]
+   
+    assert len(geo_terms_x1) <= 2, "not going above 3 terms so shouldnt have more than 2 x=1 terms for scalars!"
     if len(geo_terms_x1)>0:
         geo_vals_contracted.append(np.einsum('j,j', *geo_vals_x1))
     for g in geo_terms:
-        if g.x_order==2:
-            geo_vals_contracted.append(np.einsum('jj', g.value))
         if g.x_order==0:
             geo_vals_contracted.append(g.value)
-    ScalarFeature(np.product(geo_vals_contracted), geo_terms)
+        elif g.x_order==2:
+            geo_vals_contracted.append(np.einsum('jj', g.value))
+    return ScalarFeature(np.product(geo_vals_contracted), geo_terms)
     
 
-def featurize_scalars_object(g_features, m_order_max, x_order_max):
+def featurize_scalars(g_features, m_order_max, x_order_max):
     scalar_features = []
     num_terms = np.arange(1, m_order_max+1)
     for nt in num_terms:
-        geo_terms = itertools.combination(g_features, nt)
-        s = make_scalar_feature(geo_terms, x_order_max)
-        if s != -1:
-            scalar_features.append(s)
+        geo_term_combos = list(itertools.combinations(g_features, nt))
+        for geo_terms in geo_term_combos:
+            s = make_scalar_feature(geo_terms, x_order_max)
+            if s != -1:
+                scalar_features.append(s)
+    return scalar_features
+
     
+def get_geometric_features(delta_x_data_halo, r_edges, l_arr, n_arr, m_dm, n_dim=3,
+                           velocities=None):
+    n_rbins = len(r_edges) - 1
+    N, n_dim_from_data = delta_x_data_halo.shape
+    m_total = N*m_dm
+    assert n_dim_from_data == n_dim, f"Number of dimensions in data {n_dim_from_data} does not equal global n_dim, {n_dim}!"
+    g_features = []
+    g_normed_features = []
+
+    if velocities is None:
+        vector_data = delta_x_data_halo
+    else:
+        vector_data = velocities
+
+    # vectorized for all particles N
+    rs = np.linalg.norm(delta_x_data_halo, axis=1)
+    assert len(rs) == N, "rs should have length N!"
+    window_vals = window(n_arr, rs, r_edges, n_rbins)
+
+    x_outers_prev = None
+    for j, l in enumerate(l_arr):
+        g_arr = np.empty([len(n_arr)] + [n_dim]*l)
+        g_normed_arr = np.empty([len(n_arr)] + [n_dim]*l)
+
+        #x_outers = x_outer_vec(l, delta_x_data_halo)
+        x_outers = x_outer_product(l, vector_data, x_outers_prev, n_dim=n_dim)
+
+        for k, n in enumerate(n_arr):
+            g_ln = np.sum( window_vals[k,:] * x_outers.T, axis=-1) * m_dm
+            geo = GeometricFeature(g_ln, m_order=1, x_order=l, n=n)
+            g_features.append(geo)  
+
+            geo_norm = GeometricFeature(g_ln / m_total, m_order=1, x_order=l, n=n) 
+            g_normed_features.append(geo_norm)  
+
+        x_outers_prev = x_outers
+
+    return g_features, g_normed_features
 
 
 # TODO: write as dictionary, as in scalar function above

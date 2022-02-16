@@ -32,7 +32,7 @@ def run():
     featurizer.set_y_labels()
 
     fitter = Fitter(featurizer.x_scalar_features, featurizer.y_scalar, 
-                    featurizer.x_scalar_dicts)
+                    featurizer.x_scalar_arrs)
     fitter.split_train_test()
     fitter.scale_and_fit()
     fitter.predict()
@@ -172,7 +172,8 @@ class Featurizer:
         return (points - shift + 0.5*self.box_size) % self.box_size - 0.5*self.box_size
 
 
-    def compute_geometric_features(self, r_edges, l_arr, r_units='r200'):
+    def compute_geometric_features(self, r_edges, l_arr, r_units='r200', 
+                                   dm_property_for_features='Coordinates'):
 
         self.r_edges = np.array(r_edges).astype(float)
         n_rbins = len(r_edges) - 1
@@ -183,10 +184,13 @@ class Featurizer:
         self.g_arrs_halos = []
         self.g_normed_arrs_halos = []
 
+        v_halo_dark_dm = None
         for i_hd, halo_dict in enumerate(self.halo_dicts):
             idx_halo_dark = halo_dict['idx_halo_dark']
             halo_dark_dm = il.snapshot.loadHalo(self.base_path_dark,self.snap_num,idx_halo_dark,'dm')
             x_halo_dark_dm = halo_dark_dm['Coordinates']
+            if dm_property_for_features:
+                v_halo_dark_dm = halo_dark_dm['Velocities']
             # particle0_pos is the first particle, choosing random one as proxy for pos of halo
             particle0_pos = x_halo_dark_dm[0]
             x_data_halo_shifted = self.shift_points_torus(x_halo_dark_dm, particle0_pos)
@@ -201,25 +205,22 @@ class Featurizer:
             else:
                 r_edges = self.r_edges
     
-            g_arrs, g_normed_arrs = scalars.get_geometric_features(x_data_halo, r_edges, self.l_arr, self.n_arr, self.m_dmpart)
+            g_arrs, g_normed_arrs = scalars.get_geometric_features(x_data_halo, r_edges, self.l_arr, self.n_arr, 
+                                                                   self.m_dmpart, velocities=v_halo_dark_dm)
             self.g_arrs_halos.append(g_arrs)
             self.g_normed_arrs_halos.append(g_normed_arrs)
 
 
-    def compute_scalar_features(self, m_order_max, x_order_max, feature_names_to_include_also=[]):
-        
-        self.x_scalar_dicts = np.empty(self.N_halos, dtype=object)
+    def compute_scalar_features(self, m_order_max, x_order_max):
+        self.x_scalar_arrs = np.empty(self.N_halos, dtype=object)
         self.x_scalar_features = []
         for i_hd in range(self.N_halos):
-            scalar_dict_i = scalars.featurize_scalars(self.g_arrs_halos[i_hd], self.n_arr, m_order_max, x_order_max, l_arr=self.l_arr)
-            scalars_i = []
-            for key_name, scalar_ns in scalar_dict_i.items():
-                for key_ns, scalar in scalar_ns.items():
-                    if ((scalar['x_order'] <= x_order_max and scalar['m_order'] <= m_order_max) 
-                            or key_name in feature_names_to_include_also):
-                        scalars_i.append(scalar['value'])
-            self.x_scalar_dicts[i_hd] = scalar_dict_i
-            self.x_scalar_features.append(scalars_i)
+            scalar_arr_i = scalars.featurize_scalars(self.g_arrs_halos[i_hd], m_order_max, x_order_max)
+
+            scalar_vals = [s.value for s in scalar_arr_i]
+            self.x_scalar_features.append(scalar_vals)
+            self.x_scalar_arrs[i_hd] = scalar_arr_i
+
         self.x_scalar_features = np.array(self.x_scalar_features)
         self.n_features = self.x_scalar_features.shape[1]
 
@@ -227,13 +228,13 @@ class Featurizer:
 
 class Fitter:
 
-    def __init__(self, x_scalar_features, y_scalar, x_scalar_dicts, 
+    def __init__(self, x_scalar_features, y_scalar, x_scalar_arrs, 
                  y_val_current, uncertainties=None):
         assert x_scalar_features.shape[0]==y_scalar.shape[0], "Must have same number of x features and y labels!"
-        assert x_scalar_features.shape[0]==len(x_scalar_dicts), "Must have same number of x features and feature dicts!"
+        assert x_scalar_features.shape[0]==len(x_scalar_arrs), "Must have same number of x features and feature arrays!"
         self.x_scalar_features = x_scalar_features
         self.y_scalar = y_scalar
-        self.x_scalar_dicts = x_scalar_dicts
+        self.x_scalar_arrs = x_scalar_arrs
         self.N_halos = x_scalar_features.shape[0]
         #TODO: document
         self.y_val_current = y_val_current
@@ -277,8 +278,8 @@ class Fitter:
         self.y_scalar_test = self.y_scalar[self.idx_test]
 
         # Split lists of feature dicts
-        self.x_scalar_dicts_train = self.x_scalar_dicts[self.idx_train]
-        self.x_scalar_dicts_test = self.x_scalar_dicts[self.idx_test]
+        self.x_scalar_arrs_train = self.x_scalar_arrs[self.idx_train]
+        self.x_scalar_arrs_test = self.x_scalar_arrs[self.idx_test]
         self.uncertainties_train = self.uncertainties[self.idx_train]
         self.uncertainties_test = self.uncertainties[self.idx_test]
 
