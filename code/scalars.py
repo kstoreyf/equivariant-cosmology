@@ -88,7 +88,7 @@ def featurize_scalars(g_features, m_order_max, x_order_max):
     scalar_features = []
     num_terms = np.arange(1, m_order_max+1)
     for nt in num_terms:
-        geo_term_combos = list(itertools.combinations(g_features, nt))
+        geo_term_combos = list(itertools.combinations_with_replacement(g_features, nt))
         for geo_terms in geo_term_combos:
             s = make_scalar_feature(geo_terms, x_order_max)
             if s != -1:
