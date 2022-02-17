@@ -13,28 +13,28 @@ def window(n_arr, rs, r_edges, n_rbins):
         Ws[k,idxs_r_n] = 1
     return Ws 
 
-def x_outer_product(l, delta_x_arr, x_outers_prev, n_dim=3):
+def vector_outer_product(l, vec_arr, vec_outers_prev, n_dim=3):
     # can't figure out how to vectorize better - TODO: profile 
     if l==0:
-        return np.ones(len(delta_x_arr))
+        return np.ones(len(vec_arr))
     if l==1:
-        return delta_x_arr
+        return vec_arr
     else:
-        x_outers = np.empty([len(delta_x_arr)] + [n_dim]*l)
-    for i, delta_x in enumerate(delta_x_arr):
-        x_outers[i,:] = np.multiply.outer(x_outers_prev[i], delta_x)
-    return x_outers
+        vec_outers = np.empty([len(vec_arr)] + [n_dim]*l)
+    for i, vec in enumerate(vec_arr):
+        vec_outers[i,:] = np.multiply.outer(vec_outers_prev[i], vec)
+    return vec_outers
 
 ###
 
-def get_needed_ls_scalars(m_order_max, x_order_max):
-    if x_order_max==1:
-        x_order_max = 0 #because no x_order=1 for scalars
-    if x_order_max==3:
-        x_order_max = 2 #because no x_order=3 for scalars
-    if x_order_max>3:
-        raise ValueError(f'ERROR: x_order_max must be <=3, \
-              higher order scalars not yet computed (input was {x_order_max})')
+def get_needed_vec_orders_scalars(m_order_max, vec_order_max):
+    if vec_order_max==1:
+        vec_order_max = 0 #because no x_order=1 for scalars
+    if vec_order_max==3:
+        vec_order_max = 2 #because no x_order=3 for scalars
+    if vec_order_max>3:
+        raise ValueError(f'ERROR: vec_order_max must be <=3, \
+              higher order scalars not yet computed (input was {vec_order_max})')
     needed_l_dict = {(0, 0): [0],
                      (1, 0): [0],
                      (2, 0): [0],
@@ -43,7 +43,7 @@ def get_needed_ls_scalars(m_order_max, x_order_max):
                      (1, 2): [0,2],
                      (2, 2): [0,1,2],
                      (3, 2): [0,1,2]}
-    return needed_l_dict[(m_order_max, x_order_max)]
+    return needed_l_dict[(m_order_max, vec_order_max)]
 
 
 class GeometricFeature:
@@ -64,9 +64,11 @@ class ScalarFeature:
         self.x_order = np.sum([g.x_order for g in self.geo_terms])
 
 
-def make_scalar_feature(geo_terms, x_order_max):
+def make_scalar_feature(geo_terms, x_order_max, v_order_max):
     x_order = np.sum([g.x_order for g in geo_terms])
-
+    # TODO: just for now! for testing
+    if v_order_max > 0:
+        return -1
     if x_order > x_order_max or x_order % 2 != 0:
         return -1
     geo_vals_contracted = []
@@ -84,47 +86,44 @@ def make_scalar_feature(geo_terms, x_order_max):
     return ScalarFeature(np.product(geo_vals_contracted), geo_terms)
     
 
-def featurize_scalars(g_features, m_order_max, x_order_max):
+def featurize_scalars(g_features, m_order_max, x_order_max, v_order_max):
     scalar_features = []
     num_terms = np.arange(1, m_order_max+1)
     for nt in num_terms:
         geo_term_combos = list(itertools.combinations_with_replacement(g_features, nt))
         for geo_terms in geo_term_combos:
-            s = make_scalar_feature(geo_terms, x_order_max)
+            s = make_scalar_feature(geo_terms, x_order_max, v_order_max)
             if s != -1:
                 scalar_features.append(s)
     return scalar_features
 
     
-def get_geometric_features(delta_x_data_halo, r_edges, l_arr, n_arr, m_dm, n_dim=3,
-                           velocities=None):
+def get_geometric_features(delta_x_data_halo, v_data_halo, r_edges, l_arr, p_arr, n_arr, m_dm, n_dim=3):
     n_rbins = len(r_edges) - 1
     N, n_dim_from_data = delta_x_data_halo.shape
-    m_total = N*m_dm
     assert n_dim_from_data == n_dim, f"Number of dimensions in data {n_dim_from_data} does not equal global n_dim, {n_dim}!"
+    assert delta_x_data_halo.shape==v_data_halo.shape, "Position and velocity arrays should have same shape!"
+    m_total = N*m_dm
     g_features = []
     g_normed_features = []
-
-    if velocities is None:
-        vector_data = delta_x_data_halo
-    else:
-        vector_data = velocities
 
     # vectorized for all particles N
     rs = np.linalg.norm(delta_x_data_halo, axis=1)
     assert len(rs) == N, "rs should have length N!"
     window_vals = window(n_arr, rs, r_edges, n_rbins)
 
-    x_outers_prev = None
+    x_outers_prev, v_outers_prev = None, None
     for j, l in enumerate(l_arr):
         g_arr = np.empty([len(n_arr)] + [n_dim]*l)
         g_normed_arr = np.empty([len(n_arr)] + [n_dim]*l)
 
-        #x_outers = x_outer_vec(l, delta_x_data_halo)
-        x_outers = x_outer_product(l, vector_data, x_outers_prev, n_dim=n_dim)
+        x_outers = vector_outer_product(l, delta_x_data_halo, x_outers_prev, n_dim=n_dim)
+        v_outers = vector_outer_product(l, v_data_halo, v_outers_prev, n_dim=n_dim)
 
         for k, n in enumerate(n_arr):
-            g_ln = np.sum( window_vals[k,:] * x_outers.T, axis=-1) * m_dm
+            # TODO: figure out how to robustly outer multiply x and v outers (i think)
+            g_ln = np.sum( window_vals[k,:] * x_outers.T @ v_outers, axis=-1) * m_dm
+
             geo = GeometricFeature(g_ln, m_order=1, x_order=l, n=n)
             g_features.append(geo)  
 
@@ -132,6 +131,7 @@ def get_geometric_features(delta_x_data_halo, r_edges, l_arr, n_arr, m_dm, n_dim
             g_normed_features.append(geo_norm)  
 
         x_outers_prev = x_outers
+        v_outers_prev = v_outers
 
     return g_features, g_normed_features
 

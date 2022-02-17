@@ -172,14 +172,14 @@ class Featurizer:
         return (points - shift + 0.5*self.box_size) % self.box_size - 0.5*self.box_size
 
 
-    def compute_geometric_features(self, r_edges, l_arr, r_units='r200', 
-                                   dm_property_for_features='Coordinates'):
+    def compute_geometric_features(self, r_edges, l_arr, p_arr, r_units='r200'):
 
         self.r_edges = np.array(r_edges).astype(float)
         n_rbins = len(r_edges) - 1
         self.n_arr = np.arange(n_rbins)
         self.r_units = r_units
         self.l_arr = np.array(l_arr)
+        self.p_arr = np.array(p_arr)
 
         self.g_arrs_halos = []
         self.g_normed_arrs_halos = []
@@ -189,8 +189,7 @@ class Featurizer:
             idx_halo_dark = halo_dict['idx_halo_dark']
             halo_dark_dm = il.snapshot.loadHalo(self.base_path_dark,self.snap_num,idx_halo_dark,'dm')
             x_halo_dark_dm = halo_dark_dm['Coordinates']
-            if dm_property_for_features:
-                v_halo_dark_dm = halo_dark_dm['Velocities']
+            v_data_halo = halo_dark_dm['Velocities']
             # particle0_pos is the first particle, choosing random one as proxy for pos of halo
             particle0_pos = x_halo_dark_dm[0]
             x_data_halo_shifted = self.shift_points_torus(x_halo_dark_dm, particle0_pos)
@@ -205,17 +204,17 @@ class Featurizer:
             else:
                 r_edges = self.r_edges
     
-            g_arrs, g_normed_arrs = scalars.get_geometric_features(x_data_halo, r_edges, self.l_arr, self.n_arr, 
-                                                                   self.m_dmpart, velocities=v_halo_dark_dm)
+            g_arrs, g_normed_arrs = scalars.get_geometric_features(x_data_halo, v_data_halo, r_edges, self.l_arr, self.p_arr, self.n_arr, 
+                                                                   self.m_dmpart)
             self.g_arrs_halos.append(g_arrs)
             self.g_normed_arrs_halos.append(g_normed_arrs)
 
 
-    def compute_scalar_features(self, m_order_max, x_order_max):
+    def compute_scalar_features(self, m_order_max, x_order_max, v_order_max):
         self.x_scalar_arrs = np.empty(self.N_halos, dtype=object)
         self.x_scalar_features = []
         for i_hd in range(self.N_halos):
-            scalar_arr_i = scalars.featurize_scalars(self.g_arrs_halos[i_hd], m_order_max, x_order_max)
+            scalar_arr_i = scalars.featurize_scalars(self.g_arrs_halos[i_hd], m_order_max, x_order_max, v_order_max)
 
             scalar_vals = [s.value for s in scalar_arr_i]
             self.x_scalar_features.append(scalar_vals)
