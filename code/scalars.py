@@ -86,7 +86,8 @@ class ScalarFeature:
         self.v_order = np.sum([g.v_order for g in self.geo_terms])
 
 
-def make_scalar_feature(geo_terms, x_order_max, v_order_max):
+def make_scalar_feature(geo_terms, x_order_max, v_order_max, 
+                        include_eigenvalues=False, include_eigenvectors=False):
     x_order_tot = np.sum([g.x_order for g in geo_terms])
     v_order_tot = np.sum([g.v_order for g in geo_terms])
     xv_order_tot = x_order_tot + v_order_tot
@@ -95,14 +96,8 @@ def make_scalar_feature(geo_terms, x_order_max, v_order_max):
         return -1
 
     geo_vals_contracted = []
+    eigenvector_arr = np.empty((0,0))
 
-    # multi t terms
-    geo_terms_vec = [g for g in geo_terms if g.x_order+g.v_order==1]
-    geo_vals_vec = [g.value for g in geo_terms_vec]
-    xv_order_vec = np.sum([g.x_order + g.v_order for g in geo_terms_vec])
-    if xv_order_vec==2:
-        # t10n t10n', t01n t01n', t10n t01n'
-        geo_vals_contracted.append(np.einsum('j,j', *geo_vals_vec))
     
     # single t terms
     for g in geo_terms:
@@ -113,17 +108,45 @@ def make_scalar_feature(geo_terms, x_order_max, v_order_max):
         elif xv_order==2:
             # t20n, t02n, t11n
             geo_vals_contracted.append(np.einsum('jj', g.value))
+            eigenvalues = None
+            if include_eigenvectors:
+                eigenvalues, eigenvectors = np.linalg.eigh(g.value)
+                geo_vals_contracted.extend(eigenvalues)
+                eigenvector_arr = np.sqrt(eigenvalues) * eigenvectors
+                eigenvector_arr = np.concatenate((eigenvector_arr, -eigenvector_arr))
+            if include_eigenvalues and eigenvalues is None:
+                eigenvalues = np.linalg.eigvalsh(g.value)
+                geo_vals_contracted.extend(eigenvalues)
+
+    # multi t terms
+    geo_terms_vec = [g for g in geo_terms if g.x_order+g.v_order==1]
+    geo_vals_vec = np.array([g.value for g in geo_terms_vec])
+    #xv_order_vec = np.sum([g.x_order + g.v_order for g in geo_terms_vec])
+
+    #eigenvector_arr = np.array(eigenvector_arr)
+    #print(geo_vals_vec.shape, eigenvector_arr.shape)
+    all_vec_vals = list(geo_vals_vec) + list(eigenvector_arr)
+    #all_vec_vals = np.concatenate((geo_vals_vec, eigenvector_arr)) 
+
+    # t10n t10n', t01n t01n', t10n t01n'
+    # all 2-vector combos
+    vec_term_combos = list(itertools.combinations_with_replacement(all_vec_vals, 2))
+    for vec_terms in vec_term_combos:
+        geo_vals_contracted.append(np.einsum('j,j', *vec_terms))
 
     return ScalarFeature(np.product(geo_vals_contracted), geo_terms)
     
 
-def featurize_scalars(g_features, m_order_max, x_order_max, v_order_max):
+def featurize_scalars(g_features, m_order_max, x_order_max, v_order_max,
+                      include_eigenvalues=False, include_eigenvectors=False):
     scalar_features = []
     num_terms = np.arange(1, m_order_max+1)
     for nt in num_terms:
         geo_term_combos = list(itertools.combinations_with_replacement(g_features, nt))
         for geo_terms in geo_term_combos:
-            s = make_scalar_feature(geo_terms, x_order_max, v_order_max)
+            s = make_scalar_feature(geo_terms, x_order_max, v_order_max,
+                                    include_eigenvalues=include_eigenvalues, 
+                                    include_eigenvectors=include_eigenvectors)
             if s != -1:
                 scalar_features.append(s)
     return scalar_features

@@ -210,11 +210,14 @@ class Featurizer:
             self.g_normed_arrs_halos.append(g_normed_arrs)
 
 
-    def compute_scalar_features(self, m_order_max, x_order_max, v_order_max):
+    def compute_scalar_features(self, m_order_max, x_order_max, v_order_max,
+                                include_eigenvalues=False, include_eigenvectors=False):
         self.x_scalar_arrs = np.empty(self.N_halos, dtype=object)
         self.x_scalar_features = []
         for i_hd in range(self.N_halos):
-            scalar_arr_i = scalars.featurize_scalars(self.g_arrs_halos[i_hd], m_order_max, x_order_max, v_order_max)
+            scalar_arr_i = scalars.featurize_scalars(self.g_arrs_halos[i_hd], m_order_max, x_order_max, v_order_max,
+                                                    include_eigenvalues=include_eigenvalues, 
+                                                    include_eigenvectors=include_eigenvectors)
 
             scalar_vals = [s.value for s in scalar_arr_i]
             self.x_scalar_features.append(scalar_vals)
