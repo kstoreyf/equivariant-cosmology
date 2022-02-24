@@ -229,17 +229,22 @@ class Fitter:
 
     def __init__(self, x_scalar_features, y_scalar, x_scalar_arrs, 
                  y_val_current, uncertainties=None):
+        x_scalar_features = np.array(x_scalar_features)
+        y_scalar = np.array(y_scalar)
+        x_scalar_arrs = np.array(x_scalar_arrs)
+        y_val_current = np.array(y_val_current)
+        # TODO: clean up checks here
         assert x_scalar_features.shape[0]==y_scalar.shape[0], "Must have same number of x features and y labels!"
         assert x_scalar_features.shape[0]==len(x_scalar_arrs), "Must have same number of x features and feature arrays!"
         self.x_scalar_features = x_scalar_features
         self.y_scalar = y_scalar
         self.x_scalar_arrs = x_scalar_arrs
         self.N_halos = x_scalar_features.shape[0]
-        #TODO: document
+        #TODO: document what y_val_current means
         self.y_val_current = y_val_current
         if uncertainties is None:
             uncertainties = np.ones(self.N_halos)
-        self.uncertainties = uncertainties
+        self.uncertainties = np.array(uncertainties)
 
 
     def scale_x_features(self, x_input):
