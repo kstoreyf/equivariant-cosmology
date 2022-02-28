@@ -37,6 +37,10 @@ def multiply_xv_terms(x_term, v_term):
 
 # must be a better way to do this...
 def multiply_vector_terms(v1, v2):
+
+    # sum(product, axis=1)
+
+    # hogg says this is good - i can clean up by single return 
     if v1.ndim < v2.ndim:
         v1_exp = v1
         for _ in np.arange(1, v2.ndim):
@@ -52,18 +56,11 @@ def multiply_vector_terms(v1, v2):
 
 ###
 
-def get_needed_vec_orders_scalars(m_order_max, x_order_max, v_order_max):
-    vec_order_max = x_order_max + v_order_max
-    vec_orders_allowed = [0, 2]
-    if vec_order_max not in vec_orders_allowed:
-        raise ValueError('ERROR: x_order_max+v_order_max must be 0 or 2 - '\
-              'even because otherwise we will not obtain scalars, and low because '\
-              'higher order scalars not yet computed (input was ' \
-              f'x_order_max={x_order_max}, v_order_max={v_order_max})')
-    
-    l_arr = np.arange(0, x_order_max+1)
-    p_arr = np.arange(0, v_order_max+1)
-    return l_arr, p_arr
+# TODO: fix! can allow up to 2 for each, but then check in make_scalar_features that each 
+# TERM obeys this order constraint
+def get_needed_vec_orders_scalars(vec_order_max):
+    assert vec_order_max <= 2, "vector (x or v) order must be equal to or less than 2!"
+    return np.arange(0, vec_order_max+1)
 
 
 class GeometricFeature:
@@ -74,6 +71,9 @@ class GeometricFeature:
         self.x_order = x_order
         self.v_order = v_order
         self.n = n
+        
+    def to_string(self):
+        return f"g_{self.x_order}{self.v_order}{self.n}"
 
 
 class ScalarFeature:
@@ -85,19 +85,25 @@ class ScalarFeature:
         self.x_order = np.sum([g.x_order for g in self.geo_terms])
         self.v_order = np.sum([g.v_order for g in self.geo_terms])
 
+    def to_string(self):
+        return ' '.join(np.array([g.to_string() for g in self.geo_terms]))
+            
+
+
 
 def make_scalar_feature(geo_terms, x_order_max, v_order_max, 
                         include_eigenvalues=False, include_eigenvectors=False):
     x_order_tot = np.sum([g.x_order for g in geo_terms])
     v_order_tot = np.sum([g.v_order for g in geo_terms])
     xv_order_tot = x_order_tot + v_order_tot
-    xv_order_max = 2 # because otherwise combinatorics get wild! (should set somewhere else?)
-    if x_order_tot > x_order_max or v_order_tot > v_order_max or xv_order_tot > xv_order_max:
+    xv_orders_allowed = [0, 2] # make sure aligns with get_needed_vec_orders_scalars()
+    # i think if the first case is satisfied the others will be too, but keeping to be safe
+    if xv_order_tot not in xv_orders_allowed or x_order_tot > x_order_max or v_order_tot > v_order_max:
         return -1
 
     geo_vals_contracted = []
-    eigenvector_arr = np.empty((0,0))
-
+    geo_vals_from_tensors = []
+    #eigenvector_arr = np.empty((0,0))
     
     # single t terms
     for g in geo_terms:
@@ -107,34 +113,46 @@ def make_scalar_feature(geo_terms, x_order_max, v_order_max,
             geo_vals_contracted.append(g.value)
         elif xv_order==2:
             # t20n, t02n, t11n
-            geo_vals_contracted.append(np.einsum('jj', g.value))
-            eigenvalues = None
-            if include_eigenvectors:
-                eigenvalues, eigenvectors = np.linalg.eigh(g.value)
-                geo_vals_contracted.extend(eigenvalues)
-                eigenvector_arr = np.sqrt(eigenvalues) * eigenvectors
-                eigenvector_arr = np.concatenate((eigenvector_arr, -eigenvector_arr))
-            if include_eigenvalues and eigenvalues is None:
+            geo_vals_from_tensors.append(np.einsum('jj', g.value))
+            if include_eigenvalues and not include_eigenvectors:
                 eigenvalues = np.linalg.eigvalsh(g.value)
-                geo_vals_contracted.extend(eigenvalues)
+                geo_vals_from_tensors.extend(eigenvalues)
+            if include_eigenvectors:
+                raise ValueError("include_eigenvectors not implemented!")
+                eigenvalues, eigenvectors = np.linalg.eigh(g.value)
+                geo_vals_from_tensors.extend(eigenvalues)
+                # eigenvector_arr = np.array([np.sqrt(eigenvalues[i]) * eigenvectors[i] for i in range(len(eigenvalues))])
+                # eigenvector_arr = np.concatenate((eigenvector_arr, -eigenvector_arr))
+                projections = []
+                for g in geo_vals_vec:
+                    for e in eigenvectors:
+                        projections.append( np.dot(g, e) / np.dot(e, e) )
 
     # multi t terms
-    geo_terms_vec = [g for g in geo_terms if g.x_order+g.v_order==1]
-    geo_vals_vec = np.array([g.value for g in geo_terms_vec])
-    #xv_order_vec = np.sum([g.x_order + g.v_order for g in geo_terms_vec])
+    geo_vals_vec = [g.value for g in geo_terms if g.x_order+g.v_order==1]
 
     #eigenvector_arr = np.array(eigenvector_arr)
     #print(geo_vals_vec.shape, eigenvector_arr.shape)
-    all_vec_vals = list(geo_vals_vec) + list(eigenvector_arr)
+    #all_vec_vals = list(geo_vals_vec) + list(eigenvector_arr)
     #all_vec_vals = np.concatenate((geo_vals_vec, eigenvector_arr)) 
 
     # t10n t10n', t01n t01n', t10n t01n'
-    # all 2-vector combos
-    vec_term_combos = list(itertools.combinations_with_replacement(all_vec_vals, 2))
-    for vec_terms in vec_term_combos:
-        geo_vals_contracted.append(np.einsum('j,j', *vec_terms))
+    assert len(geo_vals_vec) <= 2, "not going above 3 terms so shouldnt have more than 2 vector terms for scalars!"
+    # if 0, continue
+    if len(geo_vals_vec)==2:
+        geo_vals_contracted.append(np.einsum('j,j', *geo_vals_vec))
 
-    return ScalarFeature(np.product(geo_vals_contracted), geo_terms)
+    # if there are any geometric values from a tensor, multiply each of these
+    # separately into the rest of the contracted scalar term, because of eigenvalues
+    s_features = []
+    geo_val_product = np.product(geo_vals_contracted)
+    if geo_vals_from_tensors:
+        for g_tensor in geo_vals_from_tensors:
+            value = g_tensor * geo_val_product
+            s_features.append(ScalarFeature(value, geo_terms))
+    else:
+        s_features.append(ScalarFeature(geo_val_product, geo_terms))
+    return s_features
     
 
 def featurize_scalars(g_features, m_order_max, x_order_max, v_order_max,
@@ -144,11 +162,14 @@ def featurize_scalars(g_features, m_order_max, x_order_max, v_order_max,
     for nt in num_terms:
         geo_term_combos = list(itertools.combinations_with_replacement(g_features, nt))
         for geo_terms in geo_term_combos:
-            s = make_scalar_feature(geo_terms, x_order_max, v_order_max,
+            s_features = make_scalar_feature(geo_terms, x_order_max, v_order_max,
                                     include_eigenvalues=include_eigenvalues, 
                                     include_eigenvectors=include_eigenvectors)
-            if s != -1:
-                scalar_features.append(s)
+            if s_features != -1:
+                scalar_features.extend(s_features)
+    for s in scalar_features:
+        print(s.to_string())
+    print()
     return scalar_features
 
 
