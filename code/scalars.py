@@ -38,21 +38,15 @@ def multiply_xv_terms(x_term, v_term):
 # must be a better way to do this...
 def multiply_vector_terms(v1, v2):
 
-    # sum(product, axis=1)
-
-    # hogg says this is good - i can clean up by single return 
-    if v1.ndim < v2.ndim:
-        v1_exp = v1
-        for _ in np.arange(1, v2.ndim):
-            v1_exp = v1_exp[:,None]
-        return v2 * v1_exp
-    elif v1.ndim > v2.ndim:
-        v2_exp = v2
-        for _ in np.arange(1, v1.ndim):
-            v2_exp = v2_exp[:,None]
-        return v1 * v2_exp 
-    else:
-        return v1 * v2
+    v1_copy = np.copy(v1)
+    v2_copy = np.copy(v2)
+    if v1_copy.ndim < v2_copy.ndim:
+        for _ in np.arange(1, v2_copy.ndim):
+            v1_copy = v1_copy[:,None]
+    elif v1_copy.ndim > v2_copy.ndim:
+        for _ in np.arange(1, v1_copy.ndim):
+            v2_copy = v2_copy[:,None]
+    return v1_copy * v2_copy
 
 ###
 
