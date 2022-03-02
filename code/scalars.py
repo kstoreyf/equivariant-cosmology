@@ -110,7 +110,6 @@ def make_scalar_feature(geo_terms, x_order_max, v_order_max,
     xv_order_tot = x_order_tot + v_order_tot
     xv_orders_allowed = [0, 2] # make sure aligns with get_needed_vec_orders_scalars()
     # i think if the first case is satisfied the others will be too, but keeping to be safe
-    # maybe these others can go up to 3? check
     if xv_order_tot not in xv_orders_allowed or x_order_tot > x_order_max or v_order_tot > v_order_max:
         return -1
   
@@ -134,7 +133,9 @@ def make_scalar_feature(geo_terms, x_order_max, v_order_max,
             geo_vals_contracted.append(g.value)
         elif xv_order==2:
             # t20n, t02n, t11n
-            geo_vals_from_tensors.append(np.einsum('jj', g.value))
+            # include trace only if don't include eigenvalues
+            if not include_eigenvalues:
+                geo_vals_from_tensors.append(np.einsum('jj', g.value))
             # if no vectors, no point in computing eigenvectors to project them onto
             if include_eigenvalues and (not include_eigenvectors or len(geo_vals_vec)==0):
                 eigenvalues = np.linalg.eigvalsh(g.value)
@@ -189,9 +190,6 @@ def featurize_scalars(g_features, m_order_max, x_order_max, v_order_max,
                                     include_eigenvectors=include_eigenvectors)
             if s_features != -1:
                 scalar_features.extend(s_features)
-    for s in scalar_features:
-        print(s.to_string())
-    print()
     return scalar_features
 
 
@@ -227,20 +225,17 @@ def get_geometric_features(delta_x_data_halo, v_data_halo, r_edges, l_arr, p_arr
                 # TODO: figure out how to robustly outer multiply x and v outers (i think) ??
                 #g_ln = np.sum( window_vals[k,:] * x_outers.T, axis=-1) * m_dm
                 xv_terms = multiply_xv_terms(x_outers_arr[i_l], v_outers_arr[i_p])
-                g_ln = np.sum( multiply_vector_terms(window_vals[i_n], xv_terms), axis=0) * m_dm
+                g_lpn = np.sum( multiply_vector_terms(window_vals[i_n], xv_terms), axis=0) * m_dm
                 # print(i_l, i_p, i_n)
                 # print(window_vals[i_n].shape, xv_terms.shape)
                 # print(multiply_vector_terms(window_vals[i_n], xv_terms).shape)
                 # print(g_ln.shape)
 
-                geo = GeometricFeature(g_ln, m_order=1, x_order=l, v_order=p, n=n)
+                geo = GeometricFeature(g_lpn, m_order=1, x_order=l, v_order=p, n=n)
                 g_features.append(geo)  
 
-                geo_norm = GeometricFeature(g_ln / m_total, m_order=1, x_order=l, v_order=p, n=n) 
-                g_normed_features.append(geo_norm)  
-
-        
-        
+                geo_norm = GeometricFeature(g_lpn / m_total, m_order=1, x_order=l, v_order=p, n=n) 
+                g_normed_features.append(geo_norm)
 
     return g_features, g_normed_features
 

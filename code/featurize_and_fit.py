@@ -195,7 +195,6 @@ class Featurizer:
             x_data_halo_shifted = self.shift_points_torus(x_halo_dark_dm, particle0_pos)
 
             x_halo_dark_dm_com = np.mean(x_data_halo_shifted, axis=0) + particle0_pos
-            #print("com", x_halo_dark_dm_com)
             # Subtract off center of mass for each halo
             x_data_halo = self.shift_points_torus(x_halo_dark_dm, x_halo_dark_dm_com)
 
@@ -220,6 +219,10 @@ class Featurizer:
                                                     include_eigenvectors=include_eigenvectors)
 
             scalar_vals = [s.value for s in scalar_arr_i]
+            if i_hd==0:
+                for s in scalar_arr_i:
+                    print(s.to_string())
+                print()
             self.x_scalar_features.append(scalar_vals)
             self.x_scalar_arrs[i_hd] = scalar_arr_i
 
@@ -343,6 +346,8 @@ class Fitter:
         AtCinvY = self.A_train.T @ (inverse_variances * self.y_scalar_train_scaled)
         self.res_scalar = np.linalg.lstsq(AtCinvA, AtCinvY, rcond=None)
 
+        self.AtCinvA = AtCinvA
+
         # only modified the scaled features by x_scales
         self.theta_scalar = self.res_scalar[0]
         self.theta_scalar[self.n_extra_features:] /= self.x_scales
@@ -355,7 +360,8 @@ class Fitter:
     
     def predict_test(self):
         self.x_scalar_test_scaled = self.scale_x_features(self.x_scalar_test)
-        # note that x_scalar_test_scaled has NOT been scaled by x_scales, 
+        # note that x_scalar_test_scaled has NOT been scaled by x_scales, as it shouldn't be
+        # then use self.theta_scalar, which deals with the x_scales
         self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, self.y_val_current_test_scaled)
         self.y_scalar_pred_scaled = self.A_test @ self.theta_scalar
         self.y_scalar_pred = self.unscale_y(self.y_scalar_pred_scaled)
@@ -364,7 +370,6 @@ class Fitter:
     def predict(self, x, y_current):
         x_scaled = self.scale_x_features(x)
         y_current_scaled = self.scale_y(y_current)
-        # note that x_scaled has NOT been scaled by x_scales
         A = self.construct_feature_matrix(x_scaled, y_current_scaled)
         y_pred_scaled = A @ self.theta_scalar
         y_pred = self.unscale_y(y_pred_scaled)
