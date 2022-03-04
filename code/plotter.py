@@ -135,7 +135,8 @@ def plot_halos_dark_and_hydro(halo_dicts, base_path_dark, base_path_hydro, snap_
 
 
 def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred, 
-                      fitter, msfe_test, chi2_train, save_fn=None):
+                      fitter, msfe_test, chi2_train, mass_multiplier,
+                      plot_dir=None, save_tag=None):
     fig = plt.figure(figsize=(6,6))
     ax = plt.gca()
 
@@ -162,7 +163,7 @@ def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred,
     plt.ylim(0.5*m_minmin, 2*m_maxmax)
 
     n_neg = len(np.where(fitter.y_scalar_pred*mass_multiplier < 0)[0])
-    plt.text(0.1, 0.9, fr'$n_\mathrm{{features}}$: {fitter.n_A_features}, rank: {fitter.res_scalar[2]}' '\n'
+    plt.text(0.1, 0.9, fr'$n_\mathrm{{features}}$: {fitter.n_A_features}, rank: {fitter.rank}' '\n'
                        fr'MSFE: {msfe_test:.3e}, $n_\mathrm{{test}}$: {fitter.n_test}' '\n'
                        fr'$\chi^2$: {chi2_train:.3e}, $n_\mathrm{{train}}$: {fitter.n_train}' '\n'
                        fr'# m_pred < 0: {n_neg}', 
@@ -171,12 +172,14 @@ def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred,
     plt.legend(loc='lower right', fontsize=12)
 
     # save
-    if save_fn is not None and save_plots:
-          plt.savefig(f"{plot_dir}/{save_fn}", bbox_inches='tight')
+    if save_tag is not None:
+        save_fn = f'mass_recovery{save_tag}.png'
+        plt.savefig(f"{plot_dir}/{save_fn}", bbox_inches='tight')
 
 
 def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred, 
-                      fitter, msfe_test, chi2_train, save_fn=None):
+                      fitter, msfe_test, chi2_train, mass_multiplier,
+                      plot_dir=None, save_tag=None, overplot_function=None):
     fig = plt.figure(figsize=(8,6))
     ax = plt.gca()
     
@@ -196,9 +199,10 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
                    max(y_train_pred[np.where(y_train_pred > 0)]))
 
     # overplot power law
-    masses = np.logspace(np.log10(mass_minmin), np.log10(mass_maxmax), 100)
-    y_powerlaw = broken_power_law_feature(masses/mass_multiplier)*mass_multiplier
-    plt.plot(masses, y_powerlaw, color='forestgreen', label='input broken power law')
+    if overplot_function is not None:
+        masses = np.logspace(np.log10(mass_minmin), np.log10(mass_maxmax), 100)
+        y_powerlaw = overplot_function(masses/mass_multiplier)*mass_multiplier
+        plt.plot(masses, y_powerlaw, color='forestgreen', label='input broken power law')
     
     # labels & adjustments
     plt.xlabel(r'$M_\mathrm{halo,DM}$')
@@ -209,7 +213,7 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
     plt.ylim(0.5*y_minmin, 2*y_maxmax)
 
     n_neg = len(np.where(fitter.y_scalar_pred*mass_multiplier < 0)[0])
-    plt.text(0.1, 0.9, fr'$n_\mathrm{{features}}$: {fitter.n_A_features}, rank: {fitter.res_scalar[2]}' '\n'
+    plt.text(0.1, 0.9, fr'$n_\mathrm{{features}}$: {fitter.n_A_features}, rank: {fitter.rank}' '\n'
                        fr'MSFE: {msfe_test:.3e}, $n_\mathrm{{test}}$: {fitter.n_test}' '\n'
                        fr'$\chi^2$: {chi2_train:.3e}, $n_\mathrm{{train}}$: {fitter.n_train}' '\n'
                        fr'# m_pred < 0: {n_neg}', 
@@ -219,5 +223,6 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
 
     
     # save
-    if save_fn is not None and save_plots:
-          plt.savefig(f"{plot_dir}/{save_fn}", bbox_inches='tight')
+    if save_tag is not None:
+        save_fn = f'mass_vs_pred{save_tag}.png'
+        plt.savefig(f"{plot_dir}/{save_fn}", bbox_inches='tight')

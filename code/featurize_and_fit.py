@@ -1,6 +1,7 @@
-import numpy as np
-import sys
 import h5py
+import numpy as np
+import os
+import sys
 
 # shouldn't need this if have illustris_python properly in python path! todo: check if fixed upon reload
 sys.path.insert(1, '/home/ksf293/external')
@@ -10,90 +11,95 @@ import utils
 import scalars
 
 
-
-def run():
-    # choose parameters
-    save_tag = ''
-    #r_edges = np.logspace(np.log10(1), np.log10(1000), 4) 
-    r_edges = np.array([0, 100])
-    print(r_edges)
-
-    m_order_max = 1
-    x_order_max = 0
-    l_arr = scalars.get_needed_ls_scalars(m_order_max, x_order_max)
-
-    featurizer = Featurizer(r_edges)
-    featurizer.read_simulations()
-    featurizer.match_twins()
-    featurizer.select_halos()
-    featurizer.add_info_to_halo_dicts()
-    featurizer.compute_geometric_features(l_arr)
-    featurizer.compute_scalar_features(m_order_max=m_order_max, x_order_max=x_order_max)
-    featurizer.set_y_labels()
-
-    fitter = Fitter(featurizer.x_scalar_features, featurizer.y_scalar, 
-                    featurizer.x_scalar_arrs)
-    fitter.split_train_test()
-    fitter.scale_and_fit()
-    fitter.predict()
-
-
 # set up paths
 class Featurizer:
-        
 
-    def read_simulations(self, base_dir, sim_name, snap_num_str):
-
-        self.tng_path_hydro = f'{base_dir}/{sim_name}'
-        self.tng_path_dark = f'{base_dir}/{sim_name}-Dark'
-        self.base_path_hydro = f'{base_dir}/{sim_name}/output'
-        self.base_path_dark = f'{base_dir}/{sim_name}-Dark/output'
+    def __init__(self, base_dir, sim_name, snap_num_str):
+        self.sim_name = sim_name
+        self.tng_path_hydro = f'{base_dir}/{self.sim_name}'
+        self.tng_path_dark = f'{base_dir}/{self.sim_name}-Dark'
+        self.base_path_hydro = f'{base_dir}/{self.sim_name}/output'
+        self.base_path_dark = f'{base_dir}/{self.sim_name}-Dark/output'
         self.snap_num_str = snap_num_str
         self.snap_num = int(self.snap_num_str)
+        self.has_read_simulations = False
 
-        
         with h5py.File(f'{self.base_path_hydro}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5','r') as f:
             header = dict( f['Header'].attrs.items() )
             self.m_dmpart = header['MassTable'][1] # this times 10^10 msun/h
             self.box_size = header['BoxSize'] # c kpc/h
 
 
-        fields = ['SubhaloMass','SubhaloPos','SubhaloMassType', 'SubhaloLenType', 'SubhaloHalfmassRad', 'SubhaloGrNr']
+    def read_simulations(self, subhalo_fields_to_load=None):
 
-        self.subhalos_hydro = il.groupcat.loadSubhalos(self.base_path_hydro,self.snap_num,fields=fields)
+        if subhalo_fields_to_load is None:
+            subhalo_fields_to_load = ['SubhaloMass','SubhaloPos','SubhaloMassType', 'SubhaloLenType', 'SubhaloHalfmassRad', 'SubhaloGrNr']
+
+        self.subhalos_hydro = il.groupcat.loadSubhalos(self.base_path_hydro,self.snap_num,fields=subhalo_fields_to_load)
         self.halos_hydro = il.groupcat.loadHalos(self.base_path_hydro,self.snap_num)
 
-        self.subhalos_dark = il.groupcat.loadSubhalos(self.base_path_dark,self.snap_num,fields=fields)
+        self.subhalos_dark = il.groupcat.loadSubhalos(self.base_path_dark,self.snap_num,fields=subhalo_fields_to_load)
         self.halos_dark = il.groupcat.loadHalos(self.base_path_dark,self.snap_num)
 
-        self.idxs_halos_hydro_all = np.array(list(range(self.halos_hydro['count'])))
-        self.idxs_halos_dark_all = np.array(list(range(self.halos_dark['count'])))
+        self.idxs_halos_hydro_all = np.arange(self.halos_hydro['count'])
+        self.idxs_halos_dark_all = np.arange(self.halos_dark['count'])
 
         self.ipart_dm = il.snapshot.partTypeNum('dm') # 0
         self.ipart_star = il.snapshot.partTypeNum('stars') # 4
 
+        self.has_read_simulations = True
+
 
     def match_twins(self):
         # Load twin-matching file
-        with h5py.File(f'{self.tng_path_hydro}/postprocessing/subhalo_matching_to_dark.hdf5','r') as f:
-            # Note: there are two different matching algorithms: 'SubhaloIndexDark_LHaloTree' & 
-            # 'SubhaloIndexDark_SubLink'. choosing first for now
-            subhalo_full_to_dark_inds = f[f'Snapshot_{self.snap_num}']['SubhaloIndexDark_LHaloTree']
+        fn_match_dark_to_full = f'../data/subhalo_dark_to_full_dict_{self.sim_name}.npy'
+        fn_match_full_to_dark = f'../data/subhalo_full_to_dark_dict_{self.sim_name}.npy'
+        if os.path.exists(fn_match_dark_to_full) and os.path.exists(fn_match_full_to_dark):
+            self.subhalo_dark_to_full_dict = np.load(fn_match_dark_to_full, allow_pickle=True).item()
+            self.subhalo_full_to_dark_dict = np.load(fn_match_full_to_dark, allow_pickle=True).item()
+        else:
+            with h5py.File(f'{self.tng_path_hydro}/postprocessing/subhalo_matching_to_dark.hdf5','r') as f:
+                # Note: there are two different matching algorithms: 'SubhaloIndexDark_LHaloTree' & 
+                # 'SubhaloIndexDark_SubLink'. choosing first for now
+                subhalo_full_to_dark_inds = f[f'Snapshot_{self.snap_num}']['SubhaloIndexDark_LHaloTree']
 
-            # Build dicts to match subhalos both ways. If a full subhalo has no dark subhalo twin, exclude it.
-            self.subhalo_full_to_dark_dict = {}
-            self.subhalo_dark_to_full_dict = {}
-            for i in range(len(subhalo_full_to_dark_inds)):
-                idx_full = i
-                idx_dark = subhalo_full_to_dark_inds[idx_full]
-                if idx_dark == -1:
-                    continue
-                self.subhalo_dark_to_full_dict[idx_dark] = idx_full
-                self.subhalo_full_to_dark_dict[idx_full] = idx_dark
+                # Build dicts to match subhalos both ways. If a full subhalo has no dark subhalo twin, exclude it.
+                self.subhalo_full_to_dark_dict = {}
+                self.subhalo_dark_to_full_dict = {}
+                for i in range(len(subhalo_full_to_dark_inds)):
+                    idx_full = i
+                    idx_dark = subhalo_full_to_dark_inds[idx_full]
+                    if idx_dark == -1:
+                        continue
+                    self.subhalo_dark_to_full_dict[idx_dark] = idx_full
+                    self.subhalo_full_to_dark_dict[idx_full] = idx_dark
+            np.save(fn_match_dark_to_full, self.subhalo_dark_to_full_dict)
+            np.save(fn_match_full_to_dark, self.subhalo_full_to_dark_dict)
 
     
-    def select_halos(self, num_star_particles_min=1, halo_mass_min=1e10, 
-                     halo_mass_difference_factor=3.0):
+    def load_halo_dicts(self, num_star_particles_min=1, halo_mass_min='1e10', 
+                        halo_mass_min_str=None,
+                        halo_mass_difference_factor=3.0, force_reload=False):
+        if halo_mass_min_str is None:
+            halo_mass_min_str = f'{halo_mass_min:.1e}'.replace('+', '')
+        fn_halo_dicts = f'../data/halo_dicts_{self.sim_name}_nstarmin{num_star_particles_min}_hmassmin{halo_mass_min_str}_mdifffac{halo_mass_difference_factor:.1f}.npy'
+        if os.path.exists(fn_halo_dicts) and not force_reload:
+            print(f"Halo file {fn_halo_dicts} exists, loading")
+            self.halo_dicts = np.load(fn_halo_dicts, allow_pickle=True)
+        else:
+            print(f"Halo file {fn_halo_dicts} does not exist, computing")
+            self.read_simulations()
+            self.match_twins()
+            self.select_halos(num_star_particles_min, halo_mass_min, halo_mass_difference_factor)
+            self.add_info_to_halo_dicts()
+            np.save(fn_halo_dicts, self.halo_dicts)
+        
+        self.N_halos = len(self.halo_dicts)
+        self.idx_halos_in_halodict = np.arange(self.N_halos)
+
+
+    def select_halos(self, num_star_particles_min, halo_mass_min, 
+                     halo_mass_difference_factor):
         # GroupFirstSub: Index into the Subhalo table of the first/primary/most massive 
         # Subfind group within this FoF group. Note: This value is signed (or should be interpreted as signed)! 
         # In this case, a value of -1 indicates that this FoF group has no subhalos.
@@ -103,12 +109,13 @@ class Featurizer:
         idxs_halos_dark_withsubhalos = self.idxs_halos_dark_all[mask_has_subhalos]
         idxs_largestsubs_dark_all = self.halos_dark['GroupFirstSub'][mask_has_subhalos]
 
+        halo_mass_min /= 1e10 # because masses in catalog have units of 10^10 M_sun/h
+
         halo_dicts = []
         for i, idx_halo_dark in enumerate(idxs_halos_dark_withsubhalos):
             
             idx_largestsub_dark = idxs_largestsubs_dark_all[i]
             if idx_largestsub_dark in self.subhalo_dark_to_full_dict:
-                
                 halo_dict = {}
                 
                 # This is the index of the hydro subhalo that is the twin of the largest subhalo in the dark halo
@@ -123,7 +130,6 @@ class Featurizer:
                     continue
 
                 # if halo is below a minimum mass, exclude
-                halo_mass_min /= 1e10 # because Mass is in units of 10^10 M_sun/h
                 if self.halos_dark['GroupMass'][idx_halo_dark] < halo_mass_min: 
                     continue
                     
@@ -139,8 +145,7 @@ class Featurizer:
                 halo_dicts.append(halo_dict)
                 
         self.halo_dicts = np.array(halo_dicts)
-        self.N_halos = len(halo_dicts)
-        self.idx_halos_in_halodict = np.arange(self.N_halos)
+
 
     
     def add_info_to_halo_dicts(self):
@@ -154,6 +159,7 @@ class Featurizer:
             halo_dict['mass_dark_halo_dm'] = self.halos_dark['GroupMassType'][:,self.ipart_dm][idx_halo_dark]
 
             idx_halo_hydro = halo_dict['idx_halo_hydro']
+            halo_dict['mass_hydro_halo'] = self.halos_hydro['GroupMass'][idx_halo_hydro]
             halo_dict['mass_hydro_halo_dm'] = self.halos_hydro['GroupMassType'][:,self.ipart_dm][idx_halo_hydro]
             halo_dict['mass_hydro_halo_star'] = self.halos_hydro['GroupMassType'][:,self.ipart_star][idx_halo_hydro]
             
@@ -163,16 +169,22 @@ class Featurizer:
 
     def get_catalog_features(self, catalog_feature_names):
 
-        # self.x_catalog_features = np.empty((self.N_halos, len(catalog_feature_names)))
-        # for i_hd, halo_dict in enumerate(self.halo_dicts): 
-        #     idx_halo_dark = halo_dict['idx_halo_dark']
-        #     for i_f, feature_name in enumerate(catalog_feature_names):
-        #         self.x_catalog_features[i_hd, i_f] = self.halos_dark[feature_name][idx_halo_dark]
         self.x_catalog_features = []
-        with h5py.File(f'{self.tng_path_dark}/postprocessing/halo_structure_{snap_num_str}.hdf5','r') as f:
+        with h5py.File(f'{self.tng_path_dark}/postprocessing/halo_structure_{self.snap_num_str}.hdf5','r') as f:
             
-            for c_feat in catalog_feature_names:
-                x_catalog_features.append( f[c_feat] )
+            x_catalog_features_all = []
+            for i, c_feat in enumerate(catalog_feature_names):
+                x_catalog_features_all.append(f[c_feat])
+            x_catalog_features_all = np.array(x_catalog_features_all).T
+            idxs_halos_dark = np.array([halo_dict['idx_halo_dark'] for halo_dict in self.halo_dicts])
+            self.x_catalog_features = x_catalog_features_all[idxs_halos_dark]
+
+            # Delete halos with NaNs as any feature 
+            # TODO, figure out: why are these still here???
+            self.idxs_nan = np.argwhere(np.isnan(self.x_catalog_features).any(axis=1)).flatten()
+            print(f"{len(self.idxs_nan)} halos with NaN values of structure properties detected!")
+            # self.x_catalog_features = np.delete(self.x_catalog_features, self.idxs_nan, axis=0)
+            # self.halo_dicts = np.delete(self.halo_dicts, self.idxs_nan, axis=0)
         
     
     def set_y_labels(self, y_scalar_feature_name='mass_hydro_halo_star'):
@@ -256,9 +268,9 @@ class Fitter:
         # e.g. from a broken power law model of the stellar-to-halo mass relation
         self.y_val_current = np.array(y_val_current)
 
-        self.N_halos =x_scalar_features.shape[0]
+        self.N_halos = x_scalar_features.shape[0]
         assert y_scalar.shape[0]==self.N_halos, "Must have same number of x features and y labels!"
-        assert y_val_current.shape[0]==self.N_halos, "Must have same number of x features and feature arrays!"
+        assert y_val_current.shape[0]==self.N_halos, "Must have same number of x features and y val current!"
 
         if uncertainties is None:
             uncertainties = np.ones(self.N_halos)
@@ -401,8 +413,3 @@ class Fitter:
         y_pred_scaled = A @ self.theta
         y_pred = self.unscale_y(y_pred_scaled)
         return y_pred
-
-
-            
-if __name__=='__main__':
-    run()
