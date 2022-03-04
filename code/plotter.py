@@ -21,7 +21,8 @@ base_path_dark = '/scratch/ksf293/gnn-cosmology/data/TNG50-4-Dark/output'
 snap_num = 99
 
 
-def plot_halos_dark_and_hydro(halo_dicts, nrows_outer, ncols_outer, titles):
+def plot_halos_dark_and_hydro(halo_dicts, base_path_dark, base_path_hydro, snap_num,
+                             nrows_outer, ncols_outer, titles):
     
     sub_width, sub_height = 5.5, 5
     fig = plt.figure(figsize=(sub_width*ncols_outer, sub_height*nrows_outer*2))
