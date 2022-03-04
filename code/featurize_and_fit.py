@@ -41,17 +41,16 @@ def run():
 # set up paths
 class Featurizer:
         
-    def __init__(self):
 
-        self.tng_path_hydro = '/scratch/ksf293/gnn-cosmology/data/TNG50-4'
-        self.tng_path_dark = '/scratch/ksf293/gnn-cosmology/data/TNG50-4-Dark'
-        self.base_path_hydro = '/scratch/ksf293/gnn-cosmology/data/TNG50-4/output'
-        self.base_path_dark = '/scratch/ksf293/gnn-cosmology/data/TNG50-4-Dark/output'
-        self.snap_num_str = '099'
+    def read_simulations(self, base_dir, sim_name, snap_num_str):
+
+        self.tng_path_hydro = f'{base_dir}/{sim_name}'
+        self.tng_path_dark = f'{base_dir}/{sim_name}-Dark'
+        self.base_path_hydro = f'{base_dir}/{sim_name}/output'
+        self.base_path_dark = f'{base_dir}/{sim_name}-Dark/output'
+        self.snap_num_str = snap_num_str
         self.snap_num = int(self.snap_num_str)
 
-
-    def read_simulations(self):
         
         with h5py.File(f'{self.base_path_hydro}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5','r') as f:
             header = dict( f['Header'].attrs.items() )
@@ -76,21 +75,21 @@ class Featurizer:
 
     def match_twins(self):
         # Load twin-matching file
-        f = h5py.File(f'{self.tng_path_hydro}/postprocessing/subhalo_matching_to_dark.hdf5','r')
-        # Note: there are two different matching algorithms: 'SubhaloIndexDark_LHaloTree' & 
-        # 'SubhaloIndexDark_SubLink'. choosing first for now
-        subhalo_full_to_dark_inds = f[f'Snapshot_{self.snap_num}']['SubhaloIndexDark_LHaloTree']
+        with h5py.File(f'{self.tng_path_hydro}/postprocessing/subhalo_matching_to_dark.hdf5','r') as f:
+            # Note: there are two different matching algorithms: 'SubhaloIndexDark_LHaloTree' & 
+            # 'SubhaloIndexDark_SubLink'. choosing first for now
+            subhalo_full_to_dark_inds = f[f'Snapshot_{self.snap_num}']['SubhaloIndexDark_LHaloTree']
 
-        # Build dicts to match subhalos both ways. If a full subhalo has no dark subhalo twin, exclude it.
-        self.subhalo_full_to_dark_dict = {}
-        self.subhalo_dark_to_full_dict = {}
-        for i in range(len(subhalo_full_to_dark_inds)):
-            idx_full = i
-            idx_dark = subhalo_full_to_dark_inds[idx_full]
-            if idx_dark == -1:
-                continue
-            self.subhalo_dark_to_full_dict[idx_dark] = idx_full
-            self.subhalo_full_to_dark_dict[idx_full] = idx_dark
+            # Build dicts to match subhalos both ways. If a full subhalo has no dark subhalo twin, exclude it.
+            self.subhalo_full_to_dark_dict = {}
+            self.subhalo_dark_to_full_dict = {}
+            for i in range(len(subhalo_full_to_dark_inds)):
+                idx_full = i
+                idx_dark = subhalo_full_to_dark_inds[idx_full]
+                if idx_dark == -1:
+                    continue
+                self.subhalo_dark_to_full_dict[idx_dark] = idx_full
+                self.subhalo_full_to_dark_dict[idx_full] = idx_dark
 
     
     def select_halos(self, num_star_particles_min=1, halo_mass_min=1e10, 
@@ -161,6 +160,20 @@ class Featurizer:
             idx_subhalo_hydro = halo_dict['idx_subhalo_hydro']
             halo_dict['mass_hydro_subhalo_star'] = self.subhalos_hydro['SubhaloMassType'][:,self.ipart_star][idx_subhalo_hydro]
             
+
+    def get_catalog_features(self, catalog_feature_names):
+
+        # self.x_catalog_features = np.empty((self.N_halos, len(catalog_feature_names)))
+        # for i_hd, halo_dict in enumerate(self.halo_dicts): 
+        #     idx_halo_dark = halo_dict['idx_halo_dark']
+        #     for i_f, feature_name in enumerate(catalog_feature_names):
+        #         self.x_catalog_features[i_hd, i_f] = self.halos_dark[feature_name][idx_halo_dark]
+        self.x_catalog_features = []
+        with h5py.File(f'{self.tng_path_dark}/postprocessing/halo_structure_{snap_num_str}.hdf5','r') as f:
+            
+            for c_feat in catalog_feature_names:
+                x_catalog_features.append( f[c_feat] )
+        
     
     def set_y_labels(self, y_scalar_feature_name='mass_hydro_halo_star'):
         self.y_scalar = np.empty(self.N_halos) # 1 mass dimension
@@ -210,7 +223,8 @@ class Featurizer:
 
 
     def compute_scalar_features(self, m_order_max, x_order_max, v_order_max,
-                                include_eigenvalues=False, include_eigenvectors=False):
+                                include_eigenvalues=False, include_eigenvectors=False,
+                                print_features=False):
         self.x_scalar_arrs = np.empty(self.N_halos, dtype=object)
         self.x_scalar_features = []
         for i_hd in range(self.N_halos):
@@ -219,7 +233,7 @@ class Featurizer:
                                                     include_eigenvectors=include_eigenvectors)
 
             scalar_vals = [s.value for s in scalar_arr_i]
-            if i_hd==0:
+            if print_features and i_hd==0:
                 for s in scalar_arr_i:
                     print(s.to_string())
                 print()
@@ -233,21 +247,19 @@ class Featurizer:
 
 class Fitter:
 
-    def __init__(self, x_scalar_features, y_scalar, x_scalar_arrs, 
+    def __init__(self, x_scalar_features, y_scalar, 
                  y_val_current, uncertainties=None):
-        x_scalar_features = np.array(x_scalar_features)
-        y_scalar = np.array(y_scalar)
-        x_scalar_arrs = np.array(x_scalar_arrs)
-        y_val_current = np.array(y_val_current)
-        # TODO: clean up checks here
-        assert x_scalar_features.shape[0]==y_scalar.shape[0], "Must have same number of x features and y labels!"
-        assert x_scalar_features.shape[0]==len(x_scalar_arrs), "Must have same number of x features and feature arrays!"
-        self.x_scalar_features = x_scalar_features
-        self.y_scalar = y_scalar
-        self.x_scalar_arrs = x_scalar_arrs
-        self.N_halos = x_scalar_features.shape[0]
-        #TODO: document what y_val_current means
-        self.y_val_current = y_val_current
+
+        self.x_scalar_features = np.array(x_scalar_features)
+        self.y_scalar = np.array(y_scalar)
+        # y_val_current is our current best-guess for the y value, 
+        # e.g. from a broken power law model of the stellar-to-halo mass relation
+        self.y_val_current = np.array(y_val_current)
+
+        self.N_halos =x_scalar_features.shape[0]
+        assert y_scalar.shape[0]==self.N_halos, "Must have same number of x features and y labels!"
+        assert y_val_current.shape[0]==self.N_halos, "Must have same number of x features and feature arrays!"
+
         if uncertainties is None:
             uncertainties = np.ones(self.N_halos)
         self.uncertainties = np.array(uncertainties)
@@ -266,12 +278,19 @@ class Fitter:
             y = np.log10(y)
         return y
 
+    def scale_uncertainties(self, uncertainties_input, y_input):
+        # will need to manually compute derivatives to figure out y uncertainty scaling!
+        # reference: http://openbooks.library.umass.edu/p132-lab-manual/chapter/uncertainty-for-natural-logarithms/
+        uncertainties = np.copy(uncertainties_input)
+        if self.log_y:
+            uncertainties /= y_input
+        return uncertainties
+
     def unscale_y(self, y_input):
         y = np.copy(y_input)
         if self.log_y:
             y = 10**y
         return y
-
 
 
     def split_train_test(self, frac_test=0.2, seed=42):
@@ -287,29 +306,25 @@ class Fitter:
         self.y_scalar_train = self.y_scalar[self.idx_train]
         self.y_scalar_test = self.y_scalar[self.idx_test]
 
-        # Split lists of feature dicts
-        self.x_scalar_arrs_train = self.x_scalar_arrs[self.idx_train]
-        self.x_scalar_arrs_test = self.x_scalar_arrs[self.idx_test]
+        # Split uncertainties and y_val_currents
         self.uncertainties_train = self.uncertainties[self.idx_train]
         self.uncertainties_test = self.uncertainties[self.idx_test]
-
         self.y_val_current_train = self.y_val_current[self.idx_train]
         self.y_val_current_test = self.y_val_current[self.idx_test]
 
+        # Set number values
         self.n_train = len(self.x_scalar_train)
         self.n_test = len(self.x_scalar_test)
         self.n_x_features = self.x_scalar_features.shape[1]
 
-        #print(f'n_train: {self.n_train}, n_test: {self.n_test}')
-        #print(f'n_features: {self.n_features}')
         if self.n_x_features > self.n_train/2:
-            print('WARNING!!! Number of features ({self.n_features}) is close to the number of training samples ({self.n_train})')
+            print('WARNING!!! Number of features ({self.n_features}) greater than half the number of training samples ({self.n_train})')
 
 
     def scale_y_values(self):
         self.y_scalar_train_scaled = self.scale_y(self.y_scalar_train)
         self.y_scalar_test_scaled = self.scale_y(self.y_scalar_test)
-        self.uncertainties_train_scaled = self.scale_y(self.uncertainties_train)
+        self.uncertainties_train_scaled = self.scale_uncertainties(self.uncertainties_train, self.y_scalar_train)
         self.y_val_current_train_scaled = self.scale_y(self.y_val_current_train)
         self.y_val_current_test_scaled = self.scale_y(self.y_val_current_test)
 
@@ -319,61 +334,74 @@ class Fitter:
         y_current = np.atleast_2d(y_current).T
         A = np.concatenate((ones_feature, y_current, x_features), axis=1)
         if training_mode:
-            #self.x_scales = np.concatenate(([1.0, 1.0], self.x_scales))
             self.n_extra_features = 2
             self.n_A_features = self.n_x_features + self.n_extra_features
         return A
 
-    def scale_and_fit(self, rms_x=False, log_x=False, log_y=False, check_cond=False):
+    def scale_and_fit(self, rms_x=False, log_x=False, log_y=False, check_cond=False, fit_mode='leastsq'):
         self.log_x, self.log_y = log_x, log_y
         self.scale_y_values()
         self.x_scalar_train_scaled = self.scale_x_features(self.x_scalar_train)
-        if rms_x:
-            self.x_scales = np.sqrt(np.mean(self.x_scalar_train_scaled**2, axis=0))
-        else:
-            self.x_scales = np.ones(self.x_scalar_train_scaled.shape[1])
-        self.x_scalar_train_scaled /= self.x_scales
-
         self.A_train = self.construct_feature_matrix(self.x_scalar_train_scaled, self.y_val_current_train_scaled,
                                                      training_mode=True)
 
+        if rms_x:
+            x_fitscales = np.sqrt(np.mean(self.A_train**2, axis=0))
+        else:
+            x_fitscales = np.ones(self.x_scalar_train_scaled.shape[1])
+
+        # "scaled" denotes pre-done x-scalings to data, e.g. log
+        # "fitscaled" denotes scaling just for the fit, and then quickly scaled out of the best-fit vector
+        self.A_train_fitscaled = self.A_train / x_fitscales
+
         # in this code, A=x_vals, diag(C_inv)=inverse_variances, Y=y_vals
         if check_cond:
-            u, s, v = np.linalg.svd(self.A, full_matrices=False)
+            u, s, v = np.linalg.svd(self.A_train, full_matrices=False)
             print('x_vals condition number:',  np.max(s)/np.min(s))
         inverse_variances = 1/self.uncertainties_train_scaled**2
-        AtCinvA = self.A_train.T @ (inverse_variances[:,None] * self.A_train)
-        AtCinvY = self.A_train.T @ (inverse_variances * self.y_scalar_train_scaled)
-        self.res_scalar = np.linalg.lstsq(AtCinvA, AtCinvY, rcond=None)
+        self.AtCinvA = self.A_train_fitscaled.T @ (inverse_variances[:,None] * self.A_train_fitscaled)
+        self.AtCinvY = self.A_train_fitscaled.T @ (inverse_variances * self.y_scalar_train_scaled)
+    
+        if fit_mode=='leastsq':
+            res = np.linalg.lstsq(self.AtCinvA, self.AtCinvY, rcond=None)
+            self.theta_fitscaled = res[0]
+            self.rank = res[2]
+        elif fit_mode=='solve':
+            self.theta_fitscaled = np.linalg.solve(self.AtCinvA, self.AtCinvY)
+            self.rank = np.linalg.matrix_rank(self.AtCinvA)
+        else:
+            raise ValueError(f"Input fit_mode={fit_mode} not recognized! Use one of: ['leastsq', 'solve']")
+        self.theta = self.theta_fitscaled / x_fitscales
 
-        self.AtCinvA = AtCinvA
-
-        # only modified the scaled features by x_scales
-        self.theta_scalar = self.res_scalar[0]
-        self.theta_scalar[self.n_extra_features:] /= self.x_scales
         # This chi^2 is in units of the data as given, so does not include the mass_multiplier
-        # use original res_scalar in chi^2 to match space of A_train, which *is* scaled by x_scales
-        self.chi2 = np.sum((self.y_scalar_train_scaled - self.A_train @ self.res_scalar[0])**2 * inverse_variances)
+        self.y_scalar_train_pred = self.predict_from_A(self.A_train)
+        self.chi2 = np.sum((self.y_scalar_train - self.y_scalar_train_pred)**2 * inverse_variances)
+        #self.chi2 = np.sum((self.y_scalar_train_scaled - self.A_train_scaled @ self.theta_scaled)**2 * inverse_variances)
 
-        assert self.res_scalar[0].shape[0] == self.A_train.shape[1], 'Number of coefficients from theta vector should equal number of features!'
+        assert len(self.theta) == self.A_train.shape[1], 'Number of coefficients from theta vector should equal number of features!'
 
     
     def predict_test(self):
         self.x_scalar_test_scaled = self.scale_x_features(self.x_scalar_test)
-        # note that x_scalar_test_scaled has NOT been scaled by x_scales, as it shouldn't be
-        # then use self.theta_scalar, which deals with the x_scales
         self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, self.y_val_current_test_scaled)
-        self.y_scalar_pred_scaled = self.A_test @ self.theta_scalar
-        self.y_scalar_pred = self.unscale_y(self.y_scalar_pred_scaled)
+        self.y_scalar_pred = self.predict_from_A(self.A_test)
 
 
     def predict(self, x, y_current):
         x_scaled = self.scale_x_features(x)
         y_current_scaled = self.scale_y(y_current)
         A = self.construct_feature_matrix(x_scaled, y_current_scaled)
-        y_pred_scaled = A @ self.theta_scalar
+        y_pred = self.predict_from_A(A)
+        return y_pred
+
+
+    def predict_from_A(self, A):
+        # A is assumed to be NOT "fitscaled" by x_fitscales
+        # but A is "scaled": pre-scaled by other means, e.g. log
+        y_pred_scaled = A @ self.theta
         y_pred = self.unscale_y(y_pred_scaled)
         return y_pred
+
 
             
 if __name__=='__main__':

@@ -130,3 +130,93 @@ def plot_halos_dark_and_hydro(halo_dicts, nrows_outer, ncols_outer, titles):
     handles = np.concatenate((handles0, handles1))
     labels = np.concatenate((labels0, labels1))
     plt.legend(handles, labels, fontsize=18, loc=(1.2, 4))
+
+
+
+def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred, 
+                      fitter, msfe_test, chi2_train, save_fn=None):
+    fig = plt.figure(figsize=(6,6))
+    ax = plt.gca()
+
+    # main scatter plotting
+    plt.scatter(y_train, y_train_pred, s=12, alpha=0.3, c='m', label='training')
+    plt.scatter(y_true, y_pred, s=12, alpha=0.6, c='k', label='testing')
+
+
+    # get limits, plot true line
+    m_minmin = min(min(y_true[np.where(y_true > 0)]), 
+                   min(y_pred[np.where(y_pred > 0)]))
+    m_maxmax = max(max(y_true[np.where(y_true > 0)]), 
+                   max(y_pred[np.where(y_pred > 0)]))
+    true_line = np.linspace(0.5*m_minmin, 2*m_maxmax)
+    plt.plot(true_line, true_line, color='grey', zorder=0)
+
+    # labels & adjustments
+    plt.xlabel(r'$m_\mathrm{true}$')
+    plt.ylabel(r'$m_\mathrm{pred}$')
+    plt.xscale('log')
+    plt.yscale('log')
+    ax.set_aspect('equal')
+    plt.xlim(0.5*m_minmin, 2*m_maxmax)
+    plt.ylim(0.5*m_minmin, 2*m_maxmax)
+
+    n_neg = len(np.where(fitter.y_scalar_pred*mass_multiplier < 0)[0])
+    plt.text(0.1, 0.9, fr'$n_\mathrm{{features}}$: {fitter.n_A_features}, rank: {fitter.res_scalar[2]}' '\n'
+                       fr'MSFE: {msfe_test:.3e}, $n_\mathrm{{test}}$: {fitter.n_test}' '\n'
+                       fr'$\chi^2$: {chi2_train:.3e}, $n_\mathrm{{train}}$: {fitter.n_train}' '\n'
+                       fr'# m_pred < 0: {n_neg}', 
+             transform=ax.transAxes, verticalalignment='top', fontsize=12)
+    plt.title(save_tag)
+    plt.legend(loc='lower right', fontsize=12)
+
+    # save
+    if save_fn is not None and save_plots:
+          plt.savefig(f"{plot_dir}/{save_fn}", bbox_inches='tight')
+
+
+def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred, 
+                      fitter, msfe_test, chi2_train, save_fn=None):
+    fig = plt.figure(figsize=(8,6))
+    ax = plt.gca()
+    
+    # main scatter plotting
+    #plt.scatter(mass_train, y_train_pred, s=12, alpha=0.3, c='m', label='training')
+    plt.scatter(mass, y_true, s=12, alpha=0.3, c='c', label='true (test)')
+    plt.scatter(mass, y_pred, s=12, alpha=0.2, c='k', label='predicted (test)')
+
+    # get limits, plot true line
+    mass_minmin = min(min(mass[np.where(mass > 0)]), 
+                   min(mass_train[np.where(mass_train > 0)]))
+    mass_maxmax = max(max(mass[np.where(mass > 0)]), 
+                   max(mass_train[np.where(mass_train > 0)]))
+    y_minmin = min(min(y_pred[np.where(y_pred > 0)]), 
+                   min(y_train_pred[np.where(y_train_pred > 0)]))
+    y_maxmax = max(max(y_pred[np.where(y_pred > 0)]), 
+                   max(y_train_pred[np.where(y_train_pred > 0)]))
+
+    # overplot power law
+    masses = np.logspace(np.log10(mass_minmin), np.log10(mass_maxmax), 100)
+    y_powerlaw = broken_power_law_feature(masses/mass_multiplier)*mass_multiplier
+    plt.plot(masses, y_powerlaw, color='forestgreen', label='input broken power law')
+    
+    # labels & adjustments
+    plt.xlabel(r'$M_\mathrm{halo,DM}$')
+    plt.ylabel(r'$m_\mathrm{stellar,pred}$')
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlim(0.5*mass_minmin, 2*mass_maxmax)
+    plt.ylim(0.5*y_minmin, 2*y_maxmax)
+
+    n_neg = len(np.where(fitter.y_scalar_pred*mass_multiplier < 0)[0])
+    plt.text(0.1, 0.9, fr'$n_\mathrm{{features}}$: {fitter.n_A_features}, rank: {fitter.res_scalar[2]}' '\n'
+                       fr'MSFE: {msfe_test:.3e}, $n_\mathrm{{test}}$: {fitter.n_test}' '\n'
+                       fr'$\chi^2$: {chi2_train:.3e}, $n_\mathrm{{train}}$: {fitter.n_train}' '\n'
+                       fr'# m_pred < 0: {n_neg}', 
+             transform=ax.transAxes, verticalalignment='top', fontsize=12)
+    plt.title(save_tag)
+    plt.legend(loc='lower right', fontsize=12)
+
+    
+    # save
+    if save_fn is not None and save_plots:
+          plt.savefig(f"{plot_dir}/{save_fn}", bbox_inches='tight')
