@@ -8,9 +8,11 @@
 import numpy as np
 from matplotlib import pyplot as plt
 import matplotlib.gridspec as gridspec
+import socket
 import sys
 
-sys.path.insert(1, '/home/ksf293/external')
+if 'jupyter' not in socket.gethostname():
+    sys.path.insert(1, '/home/ksf293/external')
 import illustris_python as il
 
 
