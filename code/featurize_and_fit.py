@@ -2,9 +2,11 @@ import h5py
 import numpy as np
 import os
 import sys
+import socket
 
 # shouldn't need this if have illustris_python properly in python path! todo: check if fixed upon reload
-sys.path.insert(1, '/home/ksf293/external')
+if 'jupyter' not in socket.gethostname():
+    sys.path.insert(1, '/home/ksf293/external')
 import illustris_python as il
 
 import utils
@@ -14,12 +16,13 @@ import scalars
 # set up paths
 class Featurizer:
 
-    def __init__(self, base_dir, sim_name, snap_num_str):
+    def __init__(self, base_dir, sim_name, sim_name_dark, snap_num_str):
         self.sim_name = sim_name
+        self.sim_name_dark = sim_name_dark
         self.tng_path_hydro = f'{base_dir}/{self.sim_name}'
-        self.tng_path_dark = f'{base_dir}/{self.sim_name}-Dark'
+        self.tng_path_dark = f'{base_dir}/{self.sim_name_dark}'
         self.base_path_hydro = f'{base_dir}/{self.sim_name}/output'
-        self.base_path_dark = f'{base_dir}/{self.sim_name}-Dark/output'
+        self.base_path_dark = f'{base_dir}/{self.sim_name_dark}/output'
         self.snap_num_str = snap_num_str
         self.snap_num = int(self.snap_num_str)
         self.has_read_simulations = False
@@ -77,9 +80,9 @@ class Featurizer:
             np.save(fn_match_full_to_dark, self.subhalo_full_to_dark_dict)
 
     
-    def load_halo_dicts(self, num_star_particles_min=1, halo_mass_min='1e10', 
+    def load_halo_dicts(self, num_star_particles_min=0, halo_mass_min=0, 
                         halo_mass_min_str=None,
-                        halo_mass_difference_factor=3.0, force_reload=False):
+                        halo_mass_difference_factor=0, force_reload=False):
         if halo_mass_min_str is None:
             halo_mass_min_str = f'{halo_mass_min:.1e}'.replace('+', '')
         fn_halo_dicts = f'../data/halo_dicts_{self.sim_name}_nstarmin{num_star_particles_min}_hmassmin{halo_mass_min_str}_mdifffac{halo_mass_difference_factor:.1f}.npy'

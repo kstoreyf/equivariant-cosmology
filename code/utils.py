@@ -18,3 +18,11 @@ def roll_array(arr, n_dim=3):
     N = int( arr.shape[0] / n_dim )
     arr_rolled = np.array([arr[d*N:(d+1)*N] for d in range(n_dim)]).T
     return arr_rolled
+
+def get_alt_sim_name(sim_name):
+    sim_name_dict = {'TNG100-1': 'L75n1820TNG',
+                     'TNG100-1-Dark': 'L75n1820TNG_DM',
+                     'TNG50-4': 'L35n270TNG',
+                     'TNG50-4-Dark': 'L35n270TNG_DM'
+                    }
+    return sim_name_dict[sim_name]
