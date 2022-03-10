@@ -138,7 +138,7 @@ def plot_halos_dark_and_hydro(halo_dicts, base_path_dark, base_path_hydro, snap_
 
 def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred, 
                       fitter, msfe_test, chi2_train, mass_multiplier,
-                      plot_dir=None, save_tag=None):
+                      title=None, save_fn=None):
     fig = plt.figure(figsize=(6,6))
     ax = plt.gca()
 
@@ -166,22 +166,21 @@ def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred,
 
     n_neg = len(np.where(fitter.y_scalar_pred*mass_multiplier < 0)[0])
     plt.text(0.1, 0.9, fr'$n_\mathrm{{features}}$: {fitter.n_A_features}, rank: {fitter.rank}' '\n'
-                       fr'MSFE: {msfe_test:.3e}, $n_\mathrm{{test}}$: {fitter.n_test}' '\n'
+                       fr'MSFE: {msfe_test:.3f}, $n_\mathrm{{test}}$: {fitter.n_test}' '\n'
                        fr'$\chi^2$: {chi2_train:.3e}, $n_\mathrm{{train}}$: {fitter.n_train}' '\n'
                        fr'# m_pred < 0: {n_neg}', 
              transform=ax.transAxes, verticalalignment='top', fontsize=12)
-    plt.title(save_tag)
+    plt.title(title)
     plt.legend(loc='lower right', fontsize=12)
 
     # save
-    if save_tag is not None:
-        save_fn = f'mass_recovery{save_tag}.png'
-        plt.savefig(f"{plot_dir}/{save_fn}", bbox_inches='tight')
+    if save_fn is not None:
+        plt.savefig(save_fn, bbox_inches='tight')
 
 
 def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred, 
                       fitter, msfe_test, chi2_train, mass_multiplier,
-                      plot_dir=None, save_tag=None, overplot_function=None):
+                      title=None, save_fn=None, overplot_function=None):
     fig = plt.figure(figsize=(8,6))
     ax = plt.gca()
     
@@ -220,11 +219,10 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
                        fr'$\chi^2$: {chi2_train:.3e}, $n_\mathrm{{train}}$: {fitter.n_train}' '\n'
                        fr'# m_pred < 0: {n_neg}', 
              transform=ax.transAxes, verticalalignment='top', fontsize=12)
-    plt.title(save_tag)
+    plt.title(title)
     plt.legend(loc='lower right', fontsize=12)
 
     
     # save
-    if save_tag is not None:
-        save_fn = f'mass_vs_pred{save_tag}.png'
-        plt.savefig(f"{plot_dir}/{save_fn}", bbox_inches='tight')
+    if save_fn is not None:
+        plt.savefig(save_fn, bbox_inches='tight')

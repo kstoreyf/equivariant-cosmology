@@ -55,8 +55,8 @@ class Featurizer:
 
     def match_twins(self):
         # Load twin-matching file
-        fn_match_dark_to_full = f'../data/subhalo_dark_to_full_dict_{self.sim_name}.npy'
-        fn_match_full_to_dark = f'../data/subhalo_full_to_dark_dict_{self.sim_name}.npy'
+        fn_match_dark_to_full = f'../data/subhalo_dicts/subhalo_dark_to_full_dict_{self.sim_name}.npy'
+        fn_match_full_to_dark = f'../data/subhalo_dicts/subhalo_full_to_dark_dict_{self.sim_name}.npy'
         if os.path.exists(fn_match_dark_to_full) and os.path.exists(fn_match_full_to_dark):
             self.subhalo_dark_to_full_dict = np.load(fn_match_dark_to_full, allow_pickle=True).item()
             self.subhalo_full_to_dark_dict = np.load(fn_match_full_to_dark, allow_pickle=True).item()
@@ -80,12 +80,35 @@ class Featurizer:
             np.save(fn_match_full_to_dark, self.subhalo_full_to_dark_dict)
 
     
-    def load_halo_dicts(self, num_star_particles_min=0, halo_mass_min=0, 
-                        halo_mass_min_str=None,
-                        halo_mass_difference_factor=0, force_reload=False):
-        if halo_mass_min_str is None:
+    def load_halo_dicts(self, num_star_particles_min=None, 
+                        halo_mass_min=None, halo_mass_min_str=None,
+                        halo_mass_max=None, halo_mass_max_str=None,
+                        halo_mass_difference_factor=None, 
+                        subsample_frac=None, force_reload=False):
+        if halo_mass_min is not None and halo_mass_min_str is None:
             halo_mass_min_str = f'{halo_mass_min:.1e}'.replace('+', '')
-        fn_halo_dicts = f'../data/halo_dicts_{self.sim_name}_nstarmin{num_star_particles_min}_hmassmin{halo_mass_min_str}_mdifffac{halo_mass_difference_factor:.1f}.npy'
+        if halo_mass_max is not None and halo_mass_max_str is None:
+            halo_mass_max_str = f'{halo_mass_max:.1e}'.replace('+', '') 
+
+        self.halo_tag = ''
+        if num_star_particles_min is not None:
+            self.halo_tag += f'_nstarmin{num_star_particles_min}'
+        
+        if halo_mass_min is not None:
+            self.halo_tag += f'_hmassmin{halo_mass_min_str}'            
+
+        if halo_mass_max is not None:
+            self.halo_tag += f'_hmassmax{halo_mass_max_str}'
+        
+        if halo_mass_difference_factor is not None:
+            self.halo_tag += f'_mdifffac{halo_mass_difference_factor:.1f}'
+
+        if subsample_frac is not None:
+            self.halo_tag += f'_subfrac{subsample_frac:.2f}'
+
+        #self.halo_tag = f'_nstarmin{num_star_particles_min}_hmassmin{halo_mass_min_str}_mdifffac{halo_mass_difference_factor:.1f}.npy'
+        
+        fn_halo_dicts = f'../data/halo_dicts/halo_dicts_{self.sim_name}{self.halo_tag}.npy'
         if os.path.exists(fn_halo_dicts) and not force_reload:
             print(f"Halo file {fn_halo_dicts} exists, loading")
             self.halo_dicts = np.load(fn_halo_dicts, allow_pickle=True)
@@ -93,16 +116,19 @@ class Featurizer:
             print(f"Halo file {fn_halo_dicts} does not exist, computing")
             self.read_simulations()
             self.match_twins()
-            self.select_halos(num_star_particles_min, halo_mass_min, halo_mass_difference_factor)
+            self.select_halos(num_star_particles_min, halo_mass_min, halo_mass_max, 
+                              halo_mass_difference_factor, subsample_frac)
             self.add_info_to_halo_dicts()
             np.save(fn_halo_dicts, self.halo_dicts)
         
         self.N_halos = len(self.halo_dicts)
         self.idx_halos_in_halodict = np.arange(self.N_halos)
+        print(f"{self.N_halos} halos in matched, selected halo dicts")
+         
 
 
     def select_halos(self, num_star_particles_min, halo_mass_min, 
-                     halo_mass_difference_factor):
+                     halo_mass_max, halo_mass_difference_factor, subsample_frac):
         # GroupFirstSub: Index into the Subhalo table of the first/primary/most massive 
         # Subfind group within this FoF group. Note: This value is signed (or should be interpreted as signed)! 
         # In this case, a value of -1 indicates that this FoF group has no subhalos.
@@ -128,16 +154,20 @@ class Featurizer:
                 # This is the largest hydro subhalo of that hydro halo
                 idx_subhalo_hydro = self.halos_hydro['GroupFirstSub'][idx_halo_hydro]
 
-                # if no stars in this subhalo, exclude
-                if self.subhalos_hydro['SubhaloLenType'][:,self.ipart_star][idx_subhalo_hydro] < num_star_particles_min: 
+                # if number of stars below a minimum, exclude
+                if num_star_particles_min is not None and self.subhalos_hydro['SubhaloLenType'][:,self.ipart_star][idx_subhalo_hydro] < num_star_particles_min: 
                     continue
 
                 # if halo is below a minimum mass, exclude
-                if self.halos_dark['GroupMass'][idx_halo_dark] < halo_mass_min: 
+                if halo_mass_min is not None and self.halos_dark['GroupMass'][idx_halo_dark] < halo_mass_min: 
                     continue
-                    
+                
+                # if halo is above a maximum mass, exclude
+                if halo_mass_max is not None and self.halos_dark['GroupMass'][idx_halo_dark] > halo_mass_max: 
+                    continue
+
                 # if dark halo and hydro halo masses differ significantly, likely a mismatch; exclude
-                if self.halos_hydro['GroupMass'][idx_halo_hydro] > halo_mass_difference_factor*self.halos_dark['GroupMass'][idx_halo_dark]: 
+                if halo_mass_difference_factor is not None and self.halos_hydro['GroupMass'][idx_halo_hydro] > halo_mass_difference_factor*self.halos_dark['GroupMass'][idx_halo_dark]: 
                     continue
                 
                 halo_dict['idx_halo_dark'] = idx_halo_dark
@@ -146,7 +176,11 @@ class Featurizer:
                 halo_dict['idx_halo_hydro'] = idx_halo_hydro
                 
                 halo_dicts.append(halo_dict)
-                
+
+        if subsample_frac is not None:
+            np.random.seed(42)
+            halo_dicts = np.random.choice(halo_dicts, size=int(subsample_frac*len(halo_dicts)), replace=False)        
+            
         self.halo_dicts = np.array(halo_dicts)
 
 
@@ -236,6 +270,10 @@ class Featurizer:
             self.g_arrs_halos.append(g_arrs)
             self.g_normed_arrs_halos.append(g_normed_arrs)
 
+            # geo = scalars.GeometricFeature(1.0, m_order=0, x_order=0, v_order=0, n=0)
+            # self.g_arrs_halos.append([geo])
+            # self.g_normed_arrs_halos.append([geo])
+
 
     def compute_scalar_features(self, m_order_max, x_order_max, v_order_max,
                                 include_eigenvalues=False, include_eigenvectors=False,
@@ -257,6 +295,10 @@ class Featurizer:
 
         self.x_scalar_features = np.array(self.x_scalar_features)
         self.n_features = self.x_scalar_features.shape[1]
+
+    
+    def load_x_scalar_features(self, feature_fn):
+        self.x_scalar_features = np.load(feature_fn, allow_pickle=True)
 
 
 
