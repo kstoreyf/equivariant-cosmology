@@ -1,6 +1,8 @@
 # my directories
 plots/
 data/
+logs/
+profiling/
 
 # other
 *.swp
