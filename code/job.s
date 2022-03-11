@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name=featurizer_tng50_min1e10.8
+#SBATCH --job-name=featurizer_tng100_min1e10.8_nstarmin1_x1v1
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=12
-#SBATCH --mem=10GB
-#SBATCH --time=4:00:00
+#SBATCH --mem=100GB
+#SBATCH --time=6:00:00
 
 cd ~
 overlay_ext3=/scratch/ksf293/overlay-50G-10M.ext3

@@ -3,6 +3,7 @@ import numpy as np
 import os
 import sys
 import socket
+from pathlib import Path
 
 # shouldn't need this if have illustris_python properly in python path! todo: check if fixed upon reload
 if 'jupyter' not in socket.gethostname():
@@ -244,35 +245,56 @@ class Featurizer:
         self.p_arr = np.array(p_arr)
 
         self.g_arrs_halos = []
-        self.g_normed_arrs_halos = []
+        #self.g_normed_arrs_halos = []
 
-        v_halo_dark_dm = None
-        for i_hd, halo_dict in enumerate(self.halo_dicts):
-            idx_halo_dark = halo_dict['idx_halo_dark']
-            halo_dark_dm = il.snapshot.loadHalo(self.base_path_dark,self.snap_num,idx_halo_dark,'dm')
-            x_halo_dark_dm = halo_dark_dm['Coordinates']
-            v_data_halo = halo_dark_dm['Velocities']
-            # particle0_pos is the first particle, choosing random one as proxy for pos of halo
-            particle0_pos = x_halo_dark_dm[0]
-            x_data_halo_shifted = self.shift_points_torus(x_halo_dark_dm, particle0_pos)
 
-            x_halo_dark_dm_com = np.mean(x_data_halo_shifted, axis=0) + particle0_pos
-            # Subtract off center of mass for each halo
-            x_data_halo = self.shift_points_torus(x_halo_dark_dm, x_halo_dark_dm_com)
+        save_dir = f'../data/features/features_{self.sim_name}/halos{self.halo_tag}'
+        Path(save_dir).mkdir(parents=True, exist_ok=True)
 
-            if self.r_units=='r200':
-                r_edges = self.r_edges * halo_dict['r_mean200_dark_halo']
-            else:
-                r_edges = self.r_edges
-    
-            g_arrs, g_normed_arrs = scalars.get_geometric_features(x_data_halo, v_data_halo, r_edges, self.l_arr, self.p_arr, self.n_arr, 
-                                                                   self.m_dmpart)
-            self.g_arrs_halos.append(g_arrs)
-            self.g_normed_arrs_halos.append(g_normed_arrs)
+        l_tag = ''.join(map(str,l_arr))
+        p_tag = ''.join(map(str,p_arr))
+        geo_tag_glob = f'_larr{l_tag}*_parr{p_tag}*_rbins{n_rbins}'
+        geo_fn_glob = f'{save_dir}/geometric_features{geo_tag_glob}.npy'
 
-            # geo = scalars.GeometricFeature(1.0, m_order=0, x_order=0, v_order=0, n=0)
-            # self.g_arrs_halos.append([geo])
-            # self.g_normed_arrs_halos.append([geo])
+        found_geo_file = False
+        # This will find any geo object files that include the l's and ps given (in proper order)
+        for path in Path().glob(geo_fn_glob):
+            print(f"Geometric features exist, loading from {path}")
+            self.g_arrs_halos = np.load(path, allow_pickle=True)
+            found_geo_file = True
+            break # first matching path is enough
+            
+        if not found_geo_file:
+            print(f"No files matching {geo_fn_glob} found.")
+            print(f"Computing new geometric features")
+            for i_hd, halo_dict in enumerate(self.halo_dicts):
+                idx_halo_dark = halo_dict['idx_halo_dark']
+                halo_dark_dm = il.snapshot.loadHalo(self.base_path_dark,self.snap_num,idx_halo_dark,'dm')
+                x_halo_dark_dm = halo_dark_dm['Coordinates']
+                v_data_halo = halo_dark_dm['Velocities']
+                # particle0_pos is the first particle, choosing random one as proxy for pos of halo
+                particle0_pos = x_halo_dark_dm[0]
+                x_data_halo_shifted = self.shift_points_torus(x_halo_dark_dm, particle0_pos)
+
+                x_halo_dark_dm_com = np.mean(x_data_halo_shifted, axis=0) + particle0_pos
+                # Subtract off center of mass for each halo
+                x_data_halo = self.shift_points_torus(x_halo_dark_dm, x_halo_dark_dm_com)
+
+                if self.r_units=='r200':
+                    r_edges = self.r_edges * halo_dict['r_mean200_dark_halo']
+                else:
+                    r_edges = self.r_edges
+        
+                g_arrs, g_normed_arrs = scalars.get_geometric_features(x_data_halo, v_data_halo, r_edges, self.l_arr, self.p_arr, self.n_arr, 
+                                                                    self.m_dmpart)
+                self.g_arrs_halos.append(g_arrs)
+                #self.g_normed_arrs_halos.append(g_normed_arrs)
+            
+            geo_tag = f'_larr{l_tag}_parr{p_tag}_rbins{n_rbins}'
+            geo_fn = f'{save_dir}/geometric_features{geo_tag_glob}.npy'
+            print(f"Saving new geometric features to {geo_fn}")
+            np.save(geo_fn, self.g_arrs_halos)
+
 
 
     def compute_scalar_features(self, m_order_max, x_order_max, v_order_max,

@@ -15,10 +15,10 @@ def run():
     tag = ''
 
     # feature params
-    n_rbins_arr = np.array([4])
-    m_order_max_arr = [2,3]
-    x_order_max_arr = [0,2] 
-    v_order_max_arr = [0]
+    n_rbins_arr = np.array([1,2,4])
+    m_order_max_arr = [1,2,3]
+    x_order_max_arr = [0] 
+    v_order_max_arr = [0, 2]
     include_eigenvalues = False
     include_eigenvectors = False
 
@@ -67,6 +67,7 @@ def run():
         featurizer.compute_geometric_features(r_edges, l_arr, p_arr, r_units=r_units)
         print("Done!")
 
+
         for m_order_max in m_order_max_arr:
             for x_order_max in x_order_max_arr:
                 for v_order_max in v_order_max_arr:
@@ -76,9 +77,9 @@ def run():
                                                     include_eigenvalues=include_eigenvalues, 
                                                     include_eigenvectors=include_eigenvectors)
 
-                    save_tag = f'_mordmax{m_order_max}_xordmax{x_order_max}_vordmax{v_order_max}_rbins{n_rbins}{tag}'
-                    save_fn = f'{save_dir}/scalar_features{save_tag}.npy'
-                    np.save(save_fn, featurizer.x_scalar_features)
+                    scalar_tag = f'_mordmax{m_order_max}_xordmax{x_order_max}_vordmax{v_order_max}_rbins{n_rbins}{tag}'
+                    scalar_fn = f'{save_dir}/scalar_features{scalar_tag}.npy'
+                    np.save(scalar_fn, featurizer.x_scalar_features)
                     
 
 if __name__=='__main__':

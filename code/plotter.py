@@ -180,7 +180,8 @@ def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred,
 
 def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred, 
                       fitter, msfe_test, chi2_train, mass_multiplier,
-                      title=None, save_fn=None, overplot_function=None):
+                      title=None, save_fn=None, overplot_function=None,
+                      logx='log', logy='log'):
     fig = plt.figure(figsize=(8,6))
     ax = plt.gca()
     
@@ -208,10 +209,11 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
     # labels & adjustments
     plt.xlabel(r'$M_\mathrm{halo,DM}$')
     plt.ylabel(r'$m_\mathrm{stellar,pred}$')
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.xlim(0.5*mass_minmin, 2*mass_maxmax)
-    plt.ylim(0.5*y_minmin, 2*y_maxmax)
+    plt.xscale(logx)
+    plt.yscale(logy)
+    #plt.xlim(0.5*mass_minmin, 2*mass_maxmax)
+    #plt.xlim(0.5*mass_minmin, 2*mass_maxmax)
+    #plt.ylim(0.5*y_minmin, 2*y_maxmax)
 
     n_neg = len(np.where(fitter.y_scalar_pred*mass_multiplier < 0)[0])
     plt.text(0.1, 0.9, fr'$n_\mathrm{{features}}$: {fitter.n_A_features}, rank: {fitter.rank}' '\n'
