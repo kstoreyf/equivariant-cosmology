@@ -217,7 +217,7 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
 
     n_neg = len(np.where(fitter.y_scalar_pred*mass_multiplier < 0)[0])
     plt.text(0.1, 0.9, fr'$n_\mathrm{{features}}$: {fitter.n_A_features}, rank: {fitter.rank}' '\n'
-                       fr'MSFE: {msfe_test:.3e}, $n_\mathrm{{test}}$: {fitter.n_test}' '\n'
+                       fr'MSFE: {msfe_test:.3f}, $n_\mathrm{{test}}$: {fitter.n_test}' '\n'
                        fr'$\chi^2$: {chi2_train:.3e}, $n_\mathrm{{train}}$: {fitter.n_train}' '\n'
                        fr'# m_pred < 0: {n_neg}', 
              transform=ax.transAxes, verticalalignment='top', fontsize=12)
