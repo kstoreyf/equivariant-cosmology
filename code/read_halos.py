@@ -1,0 +1,176 @@
+class DarkHalo:
+
+    def __init__(self, base_path, snap_num, idx_dark_halo):
+        self.base_path = base_path
+        self.snap_num = snap_num
+        self.idx_dark_halo = idx_dark_halo
+
+    def set_associated_halos(idx_dark_subhalo, idx_hydro_halo, idx_hydro_subhalo):
+        self.idx_dark_subhalo = idx_dark_subhalo
+        self.idx_hydro_halo = idx_hydro_halo
+        self.idx_hydro_subhalo = idx_hydro_subhalo
+
+    def load_positions_and_velocities(self):
+        halo_dark_dm = il.snapshot.loadHalo(self.base_path,self.snap_num,self.idx_dark_halo,'dm')
+        x_data_halo = halo_dark_dm['Coordinates']
+        v_data_halo = halo_dark_dm['Velocities']
+
+        x_data_halo_shifted = self.shift_x(x_arr)
+        v_data_halo_shifted = self.shift_v(v_arr)
+
+        return x_data_halo, v_data_halo
+
+    def shift_x(self, x_arr):
+        particle0_pos = x_arr[0]
+        x_arr_shifted_byparticle = self.shift_points_torus(x_arr, particle0_pos)
+        x_arr_com = np.mean(x_arr_shifted_byparticle, axis=0) + particle0_pos
+        # Subtract off center of mass for each halo
+        x_arr_shifted = self.shift_points_torus(x_arr, x_arr_com)
+        return x_arr_shifted
+
+    def shift_points_torus(self, points, shift):
+        return (points - shift + 0.5*self.box_size) % self.box_size - 0.5*self.box_size
+
+    # TODO: is this correct?
+    def shift_v(self, v_arr):
+        v_arr_com = np.mean(v_arr, axis=0)
+        return v_arr - v_arr_com
+    
+
+
+class HaloReader:
+
+    def __init__(self, base_dir, sim_name, sim_name_dark, snap_num_str):
+        self.sim_name = sim_name
+        self.sim_name_dark = sim_name_dark
+        self.tng_path_hydro = f'{base_dir}/{self.sim_name}'
+        self.tng_path_dark = f'{base_dir}/{self.sim_name_dark}'
+        self.base_path_hydro = f'{base_dir}/{self.sim_name}/output'
+        self.base_path_dark = f'{base_dir}/{self.sim_name_dark}/output'
+        self.snap_num_str = snap_num_str
+        self.snap_num = int(self.snap_num_str)
+
+        self.dark_halo_arr = []
+
+        with h5py.File(f'{self.base_path_hydro}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5','r') as f:
+            header = dict( f['Header'].attrs.items() )
+            self.m_dmpart = header['MassTable'][1] # this times 10^10 msun/h
+            self.box_size = header['BoxSize'] # c kpc/h
+
+    def read_halo_idx_dicts(self, fn_halo_idx_dicts):
+        self.halo_idx_dicts = np.load(fn_halo_idx_dicts)
+
+    def construct_halo_arr():
+        for halo_idx_dict in self.halo_idx_dicts:
+            halo = DarkHalo(self.base_path_dark, self.snap_num, halo_idx_dict[''])
+            self.dark_halo_arr.append(halo)
+
+
+
+
+class HaloSelector:
+
+    # TODO: replace snap_num_str with proper zfill (i think? check works)
+    def __init__(self, base_dir, sim_name, sim_name_dark, snap_num_str):
+        self.sim_name = sim_name
+        self.sim_name_dark = sim_name_dark
+        self.tng_path_hydro = f'{base_dir}/{self.sim_name}'
+        self.tng_path_dark = f'{base_dir}/{self.sim_name_dark}'
+        self.base_path_hydro = f'{base_dir}/{self.sim_name}/output'
+        self.base_path_dark = f'{base_dir}/{self.sim_name_dark}/output'
+        self.snap_num_str = snap_num_str
+        self.snap_num = int(self.snap_num_str)
+        self.halo_arr = []
+
+        with h5py.File(f'{self.base_path_hydro}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5','r') as f:
+            header = dict( f['Header'].attrs.items() )
+            self.m_dmpart = header['MassTable'][1] # this times 10^10 msun/h
+            self.box_size = header['BoxSize'] # c kpc/h
+
+
+    def match_twins(self):
+        # Load twin-matching file
+        fn_match_dark_to_full = f'../data/subhalo_dicts/subhalo_dark_to_full_dict_{self.sim_name}.npy'
+        fn_match_full_to_dark = f'../data/subhalo_dicts/subhalo_full_to_dark_dict_{self.sim_name}.npy'
+        if os.path.exists(fn_match_dark_to_full) and os.path.exists(fn_match_full_to_dark):
+            self.subhalo_dark_to_full_dict = np.load(fn_match_dark_to_full, allow_pickle=True).item()
+            self.subhalo_full_to_dark_dict = np.load(fn_match_full_to_dark, allow_pickle=True).item()
+        else:
+            with h5py.File(f'{self.tng_path_hydro}/postprocessing/subhalo_matching_to_dark.hdf5','r') as f:
+                # Note: there are two different matching algorithms: 'SubhaloIndexDark_LHaloTree' & 
+                # 'SubhaloIndexDark_SubLink'. choosing first for now
+                subhalo_full_to_dark_inds = f[f'Snapshot_{self.snap_num}']['SubhaloIndexDark_LHaloTree']
+
+                # Build dicts to match subhalos both ways. If a full subhalo has no dark subhalo twin, exclude it.
+                self.subhalo_full_to_dark_dict = {}
+                self.subhalo_dark_to_full_dict = {}
+                for i in range(len(subhalo_full_to_dark_inds)):
+                    idx_full = i
+                    idx_dark = subhalo_full_to_dark_inds[idx_full]
+                    if idx_dark == -1:
+                        continue
+                    self.subhalo_dark_to_full_dict[idx_dark] = idx_full
+                    self.subhalo_full_to_dark_dict[idx_full] = idx_dark
+            np.save(fn_match_dark_to_full, self.subhalo_dark_to_full_dict)
+            np.save(fn_match_full_to_dark, self.subhalo_full_to_dark_dict)
+
+
+    def select_halos(self, num_star_particles_min, halo_mass_min, 
+                     halo_mass_max, halo_mass_difference_factor, subsample_frac):
+        # GroupFirstSub: Index into the Subhalo table of the first/primary/most massive 
+        # Subfind group within this FoF group. Note: This value is signed (or should be interpreted as signed)! 
+        # In this case, a value of -1 indicates that this FoF group has no subhalos.
+        self.halos_dark['GroupFirstSub'] = self.halos_dark['GroupFirstSub'].astype('int32')
+        mask_has_subhalos = np.where(self.halos_dark['GroupFirstSub'] >= 0) # filter out halos with no subhalos
+
+        idxs_halos_dark_withsubhalos = self.idxs_halos_dark_all[mask_has_subhalos]
+        idxs_largestsubs_dark_all = self.halos_dark['GroupFirstSub'][mask_has_subhalos]
+
+        # TODO: should be passing in mass multiplier? or getting from elsewhere?
+        halo_mass_min /= 1e10 # because masses in catalog have units of 10^10 M_sun/h
+        halo_mass_max /= 1e10 # because masses in catalog have units of 10^10 M_sun/h
+
+        dark_halo_arr = []
+        for i, idx_halo_dark in enumerate(idxs_halos_dark_withsubhalos):
+            
+            idx_largestsub_dark = idxs_largestsubs_dark_all[i]
+            if idx_largestsub_dark in self.subhalo_dark_to_full_dict:
+                
+                # This is the index of the hydro subhalo that is the twin of the largest subhalo in the dark halo
+                idx_subtwin_hydro = self.subhalo_dark_to_full_dict[idx_largestsub_dark]
+                # This is that hydro subhalo's parent halo in the hydro sim
+                idx_halo_hydro = self.subhalos_hydro['SubhaloGrNr'][idx_subtwin_hydro]
+                # This is the largest hydro subhalo of that hydro halo
+                idx_subhalo_hydro = self.halos_hydro['GroupFirstSub'][idx_halo_hydro]
+
+                # if number of stars below a minimum, exclude
+                if num_star_particles_min is not None and self.subhalos_hydro['SubhaloLenType'][:,self.ipart_star][idx_subhalo_hydro] < num_star_particles_min: 
+                    continue
+
+                # if halo is below a minimum mass, exclude
+                if halo_mass_min is not None and self.halos_dark['GroupMass'][idx_halo_dark] < halo_mass_min: 
+                    continue
+                
+                # if halo is above a maximum mass, exclude
+                if halo_mass_max is not None and self.halos_dark['GroupMass'][idx_halo_dark] > halo_mass_max: 
+                    continue
+
+                # if dark halo and hydro halo masses differ significantly, likely a mismatch; exclude
+                if halo_mass_difference_factor is not None and self.halos_hydro['GroupMass'][idx_halo_hydro] > halo_mass_difference_factor*self.halos_dark['GroupMass'][idx_halo_dark]: 
+                    continue
+                
+                halo = DarkHalo(self.base_path_dark, self.snap_num, halo_idx_dict['idx_halo_dark'])
+                halo.set_associated_halos(idx_largestsub_dark, idx_halo_hydro, idx_subhalo_hydro)
+
+                dark_halo_arr.append(halo)
+
+
+        if subsample_frac is not None:
+            np.random.seed(42)
+            dark_halo_arr = np.random.choice(dark_halo_arr, size=int(subsample_frac*len(dark_halo_arr)), replace=False)        
+            
+        self.dark_halo_arr = np.array(dark_halo_arr)
+
+
+    def save_halo_idx_dicts(self, fn_halo_idx_dicts):
+        np.save(fn_halo_idx_dicts, self.halo_idx_dicts)

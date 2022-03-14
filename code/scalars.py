@@ -64,17 +64,6 @@ def get_needed_vec_orders_scalars(x_order_max, v_order_max):
     return l_arr, p_arr
 
 
-class GeometricFeature:
-
-    def __init__(self, value, m_order, x_order, v_order, n):
-        self.value = value
-        self.m_order = m_order
-        self.x_order = x_order
-        self.v_order = v_order
-        self.n = n
-        
-    def to_string(self):
-        return f"g_{self.x_order}{self.v_order}{self.n}"
 
 
 class ScalarFeature:
