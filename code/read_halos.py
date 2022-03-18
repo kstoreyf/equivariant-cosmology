@@ -1,24 +1,35 @@
+import h5py
+import numpy as np
+import os
+import sys
+
+sys.path.insert(1, '/home/ksf293/external')
+import illustris_python as il
+
+
 class DarkHalo:
 
-    def __init__(self, base_path, snap_num, idx_dark_halo):
+    def __init__(self, idx_halo_dark, base_path, snap_num, box_size):
+        self.idx_halo_dark = idx_halo_dark
         self.base_path = base_path
         self.snap_num = snap_num
-        self.idx_dark_halo = idx_dark_halo
+        self.box_size = box_size
+        self.catalog_properties = {}
 
-    def set_associated_halos(idx_dark_subhalo, idx_hydro_halo, idx_hydro_subhalo):
-        self.idx_dark_subhalo = idx_dark_subhalo
-        self.idx_hydro_halo = idx_hydro_halo
-        self.idx_hydro_subhalo = idx_hydro_subhalo
+    def set_associated_halos(self, idx_subhalo_dark, idx_halo_hydro, idx_subhalo_hydro):
+        self.idx_subhalo_dark = idx_subhalo_dark
+        self.idx_halo_hydro = idx_halo_hydro
+        self.idx_subhalo_hydro = idx_subhalo_hydro
 
     def load_positions_and_velocities(self):
-        halo_dark_dm = il.snapshot.loadHalo(self.base_path,self.snap_num,self.idx_dark_halo,'dm')
+        halo_dark_dm = il.snapshot.loadHalo(self.base_path,self.snap_num,self.idx_halo_dark,'dm')
         x_data_halo = halo_dark_dm['Coordinates']
         v_data_halo = halo_dark_dm['Velocities']
 
-        x_data_halo_shifted = self.shift_x(x_arr)
-        v_data_halo_shifted = self.shift_v(v_arr)
+        x_data_halo_shifted = self.shift_x(x_data_halo)
+        v_data_halo_shifted = self.shift_v(v_data_halo)
 
-        return x_data_halo, v_data_halo
+        return x_data_halo_shifted, v_data_halo_shifted
 
     def shift_x(self, x_arr):
         particle0_pos = x_arr[0]
@@ -35,40 +46,12 @@ class DarkHalo:
     def shift_v(self, v_arr):
         v_arr_com = np.mean(v_arr, axis=0)
         return v_arr - v_arr_com
-    
+
+    def set_catalog_property(self, property_name, value):
+        self.catalog_properties[property_name] = value
 
 
-class HaloReader:
-
-    def __init__(self, base_dir, sim_name, sim_name_dark, snap_num_str):
-        self.sim_name = sim_name
-        self.sim_name_dark = sim_name_dark
-        self.tng_path_hydro = f'{base_dir}/{self.sim_name}'
-        self.tng_path_dark = f'{base_dir}/{self.sim_name_dark}'
-        self.base_path_hydro = f'{base_dir}/{self.sim_name}/output'
-        self.base_path_dark = f'{base_dir}/{self.sim_name_dark}/output'
-        self.snap_num_str = snap_num_str
-        self.snap_num = int(self.snap_num_str)
-
-        self.dark_halo_arr = []
-
-        with h5py.File(f'{self.base_path_hydro}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5','r') as f:
-            header = dict( f['Header'].attrs.items() )
-            self.m_dmpart = header['MassTable'][1] # this times 10^10 msun/h
-            self.box_size = header['BoxSize'] # c kpc/h
-
-    def read_halo_idx_dicts(self, fn_halo_idx_dicts):
-        self.halo_idx_dicts = np.load(fn_halo_idx_dicts)
-
-    def construct_halo_arr():
-        for halo_idx_dict in self.halo_idx_dicts:
-            halo = DarkHalo(self.base_path_dark, self.snap_num, halo_idx_dict[''])
-            self.dark_halo_arr.append(halo)
-
-
-
-
-class HaloSelector:
+class SimulationReader:
 
     # TODO: replace snap_num_str with proper zfill (i think? check works)
     def __init__(self, base_dir, sim_name, sim_name_dark, snap_num_str):
@@ -88,10 +71,33 @@ class HaloSelector:
             self.box_size = header['BoxSize'] # c kpc/h
 
 
+    def load_sim_dark_halos(self):
+        self.halos_dark = il.groupcat.loadHalos(self.base_path_dark,self.snap_num)
+
+    def read_simulations(self, subhalo_fields_to_load=None):
+
+        if subhalo_fields_to_load is None:
+            subhalo_fields_to_load = ['SubhaloLenType', 'SubhaloGrNr', 'SubhaloMassType']
+            #subhalo_fields_to_load = ['SubhaloMass','SubhaloPos','SubhaloMassType', 'SubhaloLenType', 'SubhaloHalfmassRad', 'SubhaloGrNr']
+
+        self.subhalos_hydro = il.groupcat.loadSubhalos(self.base_path_hydro,self.snap_num,fields=subhalo_fields_to_load)
+        self.halos_hydro = il.groupcat.loadHalos(self.base_path_hydro,self.snap_num)
+
+        self.subhalos_dark = il.groupcat.loadSubhalos(self.base_path_dark,self.snap_num,fields=subhalo_fields_to_load)
+        self.load_sim_dark_halos() # separate out bc will need these on own
+
+        self.idxs_halos_hydro_all = np.arange(self.halos_hydro['count'])
+        self.idxs_halos_dark_all = np.arange(self.halos_dark['count'])
+
+        self.ipart_dm = il.snapshot.partTypeNum('dm') # 0
+        self.ipart_star = il.snapshot.partTypeNum('stars') # 4
+
+
+    # TODO: clean up
     def match_twins(self):
         # Load twin-matching file
-        fn_match_dark_to_full = f'../data/subhalo_dicts/subhalo_dark_to_full_dict_{self.sim_name}.npy'
-        fn_match_full_to_dark = f'../data/subhalo_dicts/subhalo_full_to_dark_dict_{self.sim_name}.npy'
+        fn_match_dark_to_full = f'../data/subhalo_matching_dicts/subhalo_dark_to_full_dict_{self.sim_name}.npy'
+        fn_match_full_to_dark = f'../data/subhalo_matching_dicts/subhalo_full_to_dark_dict_{self.sim_name}.npy'
         if os.path.exists(fn_match_dark_to_full) and os.path.exists(fn_match_full_to_dark):
             self.subhalo_dark_to_full_dict = np.load(fn_match_dark_to_full, allow_pickle=True).item()
             self.subhalo_full_to_dark_dict = np.load(fn_match_full_to_dark, allow_pickle=True).item()
@@ -115,6 +121,7 @@ class HaloSelector:
             np.save(fn_match_full_to_dark, self.subhalo_full_to_dark_dict)
 
 
+    # TODO: clean up
     def select_halos(self, num_star_particles_min, halo_mass_min, 
                      halo_mass_max, halo_mass_difference_factor, subsample_frac):
         # GroupFirstSub: Index into the Subhalo table of the first/primary/most massive 
@@ -127,8 +134,10 @@ class HaloSelector:
         idxs_largestsubs_dark_all = self.halos_dark['GroupFirstSub'][mask_has_subhalos]
 
         # TODO: should be passing in mass multiplier? or getting from elsewhere?
-        halo_mass_min /= 1e10 # because masses in catalog have units of 10^10 M_sun/h
-        halo_mass_max /= 1e10 # because masses in catalog have units of 10^10 M_sun/h
+        if halo_mass_min is not None:
+            halo_mass_min /= 1e10 # because masses in catalog have units of 10^10 M_sun/h
+        if halo_mass_max is not None:
+            halo_mass_max /= 1e10 # because masses in catalog have units of 10^10 M_sun/h
 
         dark_halo_arr = []
         for i, idx_halo_dark in enumerate(idxs_halos_dark_withsubhalos):
@@ -159,11 +168,10 @@ class HaloSelector:
                 if halo_mass_difference_factor is not None and self.halos_hydro['GroupMass'][idx_halo_hydro] > halo_mass_difference_factor*self.halos_dark['GroupMass'][idx_halo_dark]: 
                     continue
                 
-                halo = DarkHalo(self.base_path_dark, self.snap_num, halo_idx_dict['idx_halo_dark'])
+                halo = DarkHalo(idx_halo_dark, self.base_path_dark, self.snap_num, self.box_size)
                 halo.set_associated_halos(idx_largestsub_dark, idx_halo_hydro, idx_subhalo_hydro)
 
                 dark_halo_arr.append(halo)
-
 
         if subsample_frac is not None:
             np.random.seed(42)
@@ -172,5 +180,21 @@ class HaloSelector:
         self.dark_halo_arr = np.array(dark_halo_arr)
 
 
-    def save_halo_idx_dicts(self, fn_halo_idx_dicts):
-        np.save(fn_halo_idx_dicts, self.halo_idx_dicts)
+    def add_catalog_property_to_halos(self, property_name):
+        for halo in self.dark_halo_arr:
+            if property_name=='r200m':
+                halo.set_catalog_property(property_name, self.halos_dark['Group_R_Mean200'][halo.idx_halo_dark])
+            elif property_name=='mass_hydro_subhalo_star':
+                halo.set_catalog_property(property_name, self.subhalos_hydro['SubhaloMassType'][:,self.ipart_star][halo.idx_subhalo_hydro])
+            elif property_name=='m200m':
+                halo.set_catalog_property(property_name, self.halos_dark['Group_M_Mean200'][halo.idx_halo_dark])
+            else:
+                raise ValueError(f"Property name {property_name} not recognized!")
+
+
+    def save_dark_halo_arr(self, fn_dark_halo_arr):
+        np.save(fn_dark_halo_arr, self.dark_halo_arr)
+
+
+    def load_dark_halo_arr(self, fn_dark_halo_arr):
+        self.dark_halo_arr = np.load(fn_dark_halo_arr, allow_pickle=True)
