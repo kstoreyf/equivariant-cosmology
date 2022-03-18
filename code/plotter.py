@@ -138,7 +138,7 @@ def plot_halos_dark_and_hydro(halo_dicts, base_path_dark, base_path_hydro, snap_
 
 def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred, 
                       fitter, msfe_test, chi2_train, mass_multiplier,
-                      title=None, save_fn=None):
+                      title=None, save_fn=None, y_lim=None):
     fig = plt.figure(figsize=(6,6))
     ax = plt.gca()
 
@@ -161,8 +161,14 @@ def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred,
     plt.xscale('log')
     plt.yscale('log')
     ax.set_aspect('equal')
-    plt.xlim(0.5*m_minmin, 2*m_maxmax)
-    plt.ylim(0.5*m_minmin, 2*m_maxmax)
+    
+    if y_lim is not None:
+        # because plotting same quantity
+        plt.xlim(y_lim)
+        plt.ylim(y_lim)
+    else:
+        plt.xlim(0.5*m_minmin, 2*m_maxmax)
+        plt.ylim(0.5*m_minmin, 2*m_maxmax)
 
     n_neg = len(np.where(fitter.y_scalar_pred*mass_multiplier < 0)[0])
     plt.text(0.1, 0.9, fr'$n_\mathrm{{features}}$: {fitter.n_A_features}, rank: {fitter.rank}' '\n'
@@ -181,7 +187,7 @@ def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred,
 def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred, 
                       fitter, msfe_test, chi2_train, mass_multiplier,
                       title=None, save_fn=None, overplot_function=None,
-                      logx='log', logy='log'):
+                      logx='log', logy='log', y_lim=None):
     fig = plt.figure(figsize=(8,6))
     ax = plt.gca()
     
@@ -211,6 +217,8 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
     plt.ylabel(r'$m_\mathrm{stellar,pred}$')
     plt.xscale(logx)
     plt.yscale(logy)
+    if y_lim is not None:
+        plt.ylim(y_lim)
     #plt.xlim(0.5*mass_minmin, 2*mass_maxmax)
     #plt.xlim(0.5*mass_minmin, 2*mass_maxmax)
     #plt.ylim(0.5*y_minmin, 2*y_maxmax)

@@ -4,7 +4,6 @@ import numpy as np
 import sys
 from pathlib import Path
 
-sys.path.insert(1, '../code')
 from featurize_and_fit import Featurizer, Fitter
 import scalars
 
