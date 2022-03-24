@@ -101,34 +101,35 @@ class ScalarFeaturizer:
 
 
     def compute_X_rms(self, geo_feature_arr_onebin):
-        self.X_rms = np.empty(self.N_halos)
+        x_tensor_traces = np.empty(self.N_halos)
+        # rms is sqrt(mean(x^2)), and tr(g_20n/M_tot) = sum(x^2) (this einsum is the trace)
         for i_g, geo_features_halo in enumerate(self.geo_feature_arr):
             x_tensors = np.array([g.value for g in geo_feature_arr_onebin[i_g] if g.x_order==2 and g.v_order==0])
             assert len(x_tensors)==1, "Should be exactly one second order tensor for each x and v!"
-            # rms is sqrt(mean(x^2)), and tr(g_20n) = sum(x^2) (this einsum is the trace)
-            self.X_rms[i_g] = np.sqrt( np.einsum('jj', x_tensors[0]) )
+            x_tensor_traces[i_g] = np.einsum('jj', x_tensors[0])
+        self.X_rms = np.sqrt( x_tensor_traces / self.M_tot )
 
 
     def compute_V_rms(self, geo_feature_arr_onebin):
-        self.V_rms = np.empty(self.N_halos)
+        v_tensor_traces = np.empty(self.N_halos)
+        # rms is sqrt(mean(v^2)), and tr(g_02n/M_tot) = sum(v^2) (this einsum is the trace)
         for i_g, geo_features_halo in enumerate(self.geo_feature_arr):
             v_tensors = np.array([g.value for g in geo_feature_arr_onebin[i_g] if g.x_order==0 and g.v_order==2])
             assert len(v_tensors)==1, "Should be exactly one second order tensor for each x and v!"
-            # rms is sqrt(mean(x^2)), and tr(g_20n) = sum(x^2) (this einsum is the trace)
-            self.V_rms[i_g] = np.sqrt( np.einsum('jj', v_tensors[0]) )
+            v_tensor_traces[i_g] = np.einsum('jj', v_tensors[0])
+        self.V_rms = np.sqrt( v_tensor_traces / self.M_tot )
 
 
     # does rescaling in-place in self.geo_feature_arr!
     def rescale_geometric_features(self, Ms, Xs, Vs):
         
         for i_g, geo_features_halo in enumerate(self.geo_feature_arr):
-            M, X, V = Ms[i_g], Xs[i_g], Vs[i_g]
             for geo_feat in geo_features_halo:
-                geo_feat.value /= M # all have single m term
+                geo_feat.value /= Ms[i_g] # all have single m term
                 for _ in range(geo_feat.x_order):
-                    geo_feat.value /= X
+                    geo_feat.value /= Xs[i_g]
                 for _ in range(geo_feat.v_order):
-                    geo_feat.value /= V
+                    geo_feat.value /= Vs[i_g]
 
 
     def make_scalar_feature(self, geo_terms, eigenvalues_not_trace=False):

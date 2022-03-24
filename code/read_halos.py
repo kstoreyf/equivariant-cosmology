@@ -31,6 +31,7 @@ class DarkHalo:
 
         return x_data_halo_shifted, v_data_halo_shifted
 
+    # for now, masses of all particles is considered to be same
     def shift_x(self, x_arr):
         particle0_pos = x_arr[0]
         x_arr_shifted_byparticle = self.shift_points_torus(x_arr, particle0_pos)
@@ -42,7 +43,7 @@ class DarkHalo:
     def shift_points_torus(self, points, shift):
         return (points - shift + 0.5*self.box_size) % self.box_size - 0.5*self.box_size
 
-    # TODO: is this correct?
+    # for now, masses of all particles is considered to be same
     def shift_v(self, v_arr):
         v_arr_com = np.mean(v_arr, axis=0)
         return v_arr - v_arr_com
