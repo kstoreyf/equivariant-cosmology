@@ -110,7 +110,7 @@ class Fitter:
             self.n_A_features = self.n_x_features + self.n_extra_features
         return A
 
-    def scale_and_fit(self, rms_x=False, log_x=False, log_y=False, check_cond=False, fit_mode='leastsq'):
+    def scale_and_fit(self, rms_x=False, log_x=False, log_y=False, check_cond_of_A=False, fit_mode='leastsq'):
         self.log_x, self.log_y = log_x, log_y
         self.scale_y_values()
         self.x_scalar_train_scaled = self.scale_x_features(self.x_scalar_train)
@@ -132,7 +132,7 @@ class Fitter:
         self.A_train_fitscaled = self.A_train / x_fitscales
 
         # in this code, A=x_vals, diag(C_inv)=inverse_variances, Y=y_vals
-        if check_cond:
+        if check_cond_of_A:
             u, s, v = np.linalg.svd(self.A_train, full_matrices=False)
             print('x_vals condition number:',  np.max(s)/np.min(s))
         inverse_variances = 1/self.uncertainties_train_scaled**2
@@ -143,9 +143,14 @@ class Fitter:
             res = np.linalg.lstsq(self.AtCinvA, self.AtCinvY, rcond=None)
             self.theta_fitscaled = res[0]
             self.rank = res[2]
+            s = res[3]
+            print(len(s), np.max(s), np.min(s))
+            self.condition_number = np.max(s)/np.min(s)
         elif fit_mode=='solve':
             self.theta_fitscaled = np.linalg.solve(self.AtCinvA, self.AtCinvY)
             self.rank = np.linalg.matrix_rank(self.AtCinvA)
+            u, s, v = np.linalg.svd(self.AtCinvA, full_matrices=False)
+            self.condition_number = np.max(s)/np.min(s)
         else:
             raise ValueError(f"Input fit_mode={fit_mode} not recognized! Use one of: ['leastsq', 'solve']")
         self.theta = self.theta_fitscaled / x_fitscales
@@ -153,7 +158,6 @@ class Fitter:
         # This chi^2 is in units of the data as given, so does not include the mass_multiplier
         self.y_scalar_train_pred = self.predict_from_A(self.A_train)
         self.chi2 = np.sum((self.y_scalar_train - self.y_scalar_train_pred)**2 * inverse_variances)
-        #self.chi2 = np.sum((self.y_scalar_train_scaled - self.A_train_scaled @ self.theta_scaled)**2 * inverse_variances)
 
         assert len(self.theta) == self.A_train.shape[1], 'Number of coefficients from theta vector should equal number of features!'
 
