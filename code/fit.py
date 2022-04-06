@@ -110,7 +110,17 @@ class Fitter:
             self.n_A_features = self.n_x_features + self.n_extra_features
         return A
 
-    def scale_and_fit(self, rms_x=False, log_x=False, log_y=False, check_cond_of_A=False, fit_mode='leastsq'):
+
+class LinearFitter(Fitter):
+
+    def __init__(self, x_scalar_features, y_scalar, 
+                 y_val_current, x_features_extra=None, uncertainties=None):
+        super().__init__(x_scalar_features, y_scalar, 
+                 y_val_current, x_features_extra=x_features_extra, uncertainties=uncertainties)
+
+
+    def scale_and_fit(self, rms_x=False, log_x=False, log_y=False, check_cond_of_A=False, 
+                            fit_mode='leastsq', regularization_lambda=0.0):
         self.log_x, self.log_y = log_x, log_y
         self.scale_y_values()
         self.x_scalar_train_scaled = self.scale_x_features(self.x_scalar_train)
@@ -139,15 +149,17 @@ class Fitter:
         self.AtCinvA = self.A_train_fitscaled.T @ (inverse_variances[:,None] * self.A_train_fitscaled)
         self.AtCinvY = self.A_train_fitscaled.T @ (inverse_variances * self.y_scalar_train_scaled)
     
+        # Regularize (if regularization_lambda=0, no regularization)
+        lhs = self.AtCinvA + regularization_lambda * np.sum(inverse_variances) * np.identity(self.AtCinvA.shape[0])
+
         if fit_mode=='leastsq':
-            res = np.linalg.lstsq(self.AtCinvA, self.AtCinvY, rcond=None)
+            res = np.linalg.lstsq(lhs, self.AtCinvY, rcond=None)
             self.theta_fitscaled = res[0]
             self.rank = res[2]
             s = res[3]
-            print(len(s), np.max(s), np.min(s))
             self.condition_number = np.max(s)/np.min(s)
         elif fit_mode=='solve':
-            self.theta_fitscaled = np.linalg.solve(self.AtCinvA, self.AtCinvY)
+            self.theta_fitscaled = np.linalg.solve(lhs, self.AtCinvY)
             self.rank = np.linalg.matrix_rank(self.AtCinvA)
             u, s, v = np.linalg.svd(self.AtCinvA, full_matrices=False)
             self.condition_number = np.max(s)/np.min(s)
@@ -187,3 +199,6 @@ class Fitter:
         y_pred_scaled = A @ self.theta
         y_pred = self.unscale_y(y_pred_scaled)
         return y_pred
+
+
+    
