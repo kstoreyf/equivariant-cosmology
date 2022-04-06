@@ -138,7 +138,8 @@ def plot_halos_dark_and_hydro(halo_dicts, base_path_dark, base_path_hydro, snap_
 
 def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred, 
                       text_results='', 
-                      title=None, save_fn=None, y_lim=None):
+                      title=None, save_fn=None, 
+                      x_lim=(7,12), y_lim=(7,12)):
     fig = plt.figure(figsize=(6,6))
     ax = plt.gca()
 
@@ -148,32 +149,34 @@ def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred,
 
 
     # get limits, plot true line
-    m_minmin = min(min(y_true[np.where(y_true > 0)]), 
-                   min(y_pred[np.where(y_pred > 0)]))
-    m_maxmax = max(max(y_true[np.where(y_true > 0)]), 
-                   max(y_pred[np.where(y_pred > 0)]))
-    true_line = np.linspace(0.5*m_minmin, 2*m_maxmax)
+    # m_minmin = min(min(y_true[np.where(y_true > 0)]), 
+    #                min(y_pred[np.where(y_pred > 0)]))
+    # m_maxmax = max(max(y_true[np.where(y_true > 0)]), 
+    #                max(y_pred[np.where(y_pred > 0)]))
+    m_minmin = min(np.min(y_true), 
+                   np.min(y_pred))
+    m_maxmax = max(np.max(y_true), 
+                   np.max(y_pred))
+    true_line = np.linspace(0.9*m_minmin, 1.1*m_maxmax)
     plt.plot(true_line, true_line, color='grey', zorder=0)
 
     # labels & adjustments
-    plt.xlabel(r'$m_\mathrm{true}$')
-    plt.ylabel(r'$m_\mathrm{pred}$')
-    plt.xscale('log')
-    plt.yscale('log')
+    plt.xlabel(r'log($m_\mathrm{true}$)')
+    plt.ylabel(r'log($m_\mathrm{pred}$)')
+    #plt.xscale('log')
+    #plt.yscale('log')
     ax.set_aspect('equal')
     
-    if y_lim is not None:
-        # because plotting same quantity
-        plt.xlim(y_lim)
-        plt.ylim(y_lim)
-    else:
-        plt.xlim(0.5*m_minmin, 2*m_maxmax)
-        plt.ylim(0.5*m_minmin, 2*m_maxmax)
+    plt.xlim(x_lim)
+    plt.ylim(y_lim)
+    # else:
+    #     plt.xlim(0.5*m_minmin, 2*m_maxmax)
+    #     plt.ylim(0.5*m_minmin, 2*m_maxmax)
 
-    plt.text(0.1, 0.9, text_results, 
+    plt.text(0.5, 0.3, text_results, 
              transform=ax.transAxes, verticalalignment='top', fontsize=12)
     plt.title(title)
-    plt.legend(loc='lower right', fontsize=12)
+    plt.legend(loc='upper left', fontsize=12)
 
     # save
     if save_fn is not None:
@@ -183,7 +186,7 @@ def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred,
 def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred, 
                       text_results='',
                       title=None, save_fn=None, overplot_function=None,
-                      logx='log', logy='log', y_lim=None):
+                      x_scale='linear', y_scale='linear', x_lim=(10.5, 14), y_lim=(7, 12)):
     fig = plt.figure(figsize=(8,6))
     ax = plt.gca()
     
@@ -209,20 +212,21 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
         plt.plot(masses, y_powerlaw, color='forestgreen', label='input broken power law')
     
     # labels & adjustments
-    plt.xlabel(r'$M_\mathrm{halo,DM}$')
-    plt.ylabel(r'$m_\mathrm{stellar,pred}$')
-    plt.xscale(logx)
-    plt.yscale(logy)
-    if y_lim is not None:
-        plt.ylim(y_lim)
+    plt.xlabel(r'log($M_\mathrm{halo,DM}$)')
+    plt.ylabel(r'log($m_\mathrm{stellar,pred}$)')
+    plt.xscale(x_scale)
+    plt.yscale(y_scale)
+
+    plt.xlim(x_lim)
+    plt.ylim(y_lim)
     #plt.xlim(0.5*mass_minmin, 2*mass_maxmax)
     #plt.xlim(0.5*mass_minmin, 2*mass_maxmax)
     #plt.ylim(0.5*y_minmin, 2*y_maxmax)
 
-    plt.text(0.1, 0.9, text_results, 
+    plt.text(0.5, 0.3, text_results, 
              transform=ax.transAxes, verticalalignment='top', fontsize=12)
     plt.title(title)
-    plt.legend(loc='lower right', fontsize=12)
+    plt.legend(loc='upper left', fontsize=12)
     
     # save
     if save_fn is not None:

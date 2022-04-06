@@ -199,3 +199,26 @@ class SimulationReader:
 
     def load_dark_halo_arr(self, fn_dark_halo_arr):
         self.dark_halo_arr = np.load(fn_dark_halo_arr, allow_pickle=True)
+
+
+    def get_structure_catalog_features(self, catalog_feature_names):
+
+        self.x_catalog_features = []
+        with h5py.File(f'{self.tng_path_dark}/postprocessing/halo_structure_{self.snap_num_str}.hdf5','r') as f:
+
+            x_catalog_features_all = []
+            for i, c_feat in enumerate(catalog_feature_names):
+                x_catalog_features_all.append(f[c_feat])
+            x_catalog_features_all = np.array(x_catalog_features_all).T
+            idxs_halos_dark = np.array([dark_halo.idx_halo_dark for dark_halo in self.dark_halo_arr])
+            self.x_catalog_features = x_catalog_features_all[idxs_halos_dark]
+
+            # Delete halos with NaNs as any feature 
+            idxs_nan_structure_catalog = np.argwhere(np.isnan(self.x_catalog_features).any(axis=1)).flatten()
+            print(f"{len(idxs_nan_structure_catalog)} halos with NaN values of structure properties detected!")
+            #self.x_catalog_features = np.delete(self.x_catalog_features, self.idxs_nan, axis=0)
+            #self.halo_dicts = np.delete(self.halo_dicts, self.idxs_nan, axis=0)
+            # TODO: for now, leaving power to delete with the notebook, not here;
+            # if want a completely direct comparison, will have to build this in to halo selection
+        
+        return idxs_nan_structure_catalog

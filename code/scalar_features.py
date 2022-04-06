@@ -1,3 +1,4 @@
+import copy
 import itertools
 import numpy as np
 
@@ -9,7 +10,8 @@ class ScalarFeaturizer:
 
     def __init__(self, geo_feature_arr=None):
         self.geo_feature_arr_orig = geo_feature_arr
-        self.geo_feature_arr = np.copy(geo_feature_arr)
+        # must use deepcopy because our array has opjects! np.copy doesn't work
+        self.geo_feature_arr = copy.deepcopy(geo_feature_arr)
         self.N_halos = len(self.geo_feature_arr)
 
 
@@ -53,7 +55,7 @@ class ScalarFeaturizer:
         geo_feature_arr_rebinned = []
         number_of_groups = len(n_groups)
         count = 0
-        for geo_features_halo in self.geo_feature_arr:
+        for geo_features_halo in geo_feature_arr:
             count += 1
             # group geometric features into n groups
             geo_feats_grouped = [[] for _ in range(number_of_groups)]
