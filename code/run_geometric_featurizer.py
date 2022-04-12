@@ -27,15 +27,18 @@ def run():
     # save info
     geo_dir = f'../data/geometric_features/geometric_features_{sim_name}'
     Path(geo_dir).mkdir(parents=True, exist_ok=True)
-    geo_tag = ''
+    geo_tag = '_xminPE'
     fn_geo_features = f'{geo_dir}/geometric_features{halo_tag}{geo_tag}.npy'
 
     # Go!
     sim_reader = SimulationReader(base_dir, sim_name, sim_name_dark, snap_num_str)
     sim_reader.load_dark_halo_arr(fn_dark_halo_arr)
+    sim_reader.load_sim_dark_halos()
+    sim_reader.add_catalog_property_to_halos('x_minPE')
 
     geo_featurizer = GeometricFeaturizer()
-    geo_featurizer.featurize(sim_reader, r_edges, x_order_max, v_order_max)
+    geo_featurizer.featurize(sim_reader, r_edges, x_order_max, v_order_max, 
+                             center_halo='x_minPE')
     geo_featurizer.save_features(fn_geo_features)
     print(f'Saved geometric features to {fn_geo_features}')
 

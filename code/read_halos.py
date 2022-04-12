@@ -21,23 +21,33 @@ class DarkHalo:
         self.idx_halo_hydro = idx_halo_hydro
         self.idx_subhalo_hydro = idx_subhalo_hydro
 
-    def load_positions_and_velocities(self):
+    def load_positions_and_velocities(self, shift=True, center='x_com'):
         halo_dark_dm = il.snapshot.loadHalo(self.base_path,self.snap_num,self.idx_halo_dark,'dm')
         x_data_halo = halo_dark_dm['Coordinates']
         v_data_halo = halo_dark_dm['Velocities']
 
-        x_data_halo_shifted = self.shift_x(x_data_halo)
-        v_data_halo_shifted = self.shift_v(v_data_halo)
+        if shift:
+            center_options = ['x_com','x_minPE']
+            assert center in center_options, f"Center choice must be one of {center_options}!"
+                 
+            if center=='x_minPE':
+                assert 'x_minPE' in self.catalog_properties, "Must first add 'x_minPE' to catalog property dict!"
+            x_data_halo = self.shift_x(x_data_halo, center)
+            v_data_halo = self.shift_v(v_data_halo)
 
-        return x_data_halo_shifted, v_data_halo_shifted
+        return x_data_halo, v_data_halo
 
-    # for now, masses of all particles is considered to be same
-    def shift_x(self, x_arr):
-        particle0_pos = x_arr[0]
-        x_arr_shifted_byparticle = self.shift_points_torus(x_arr, particle0_pos)
-        x_arr_com = np.mean(x_arr_shifted_byparticle, axis=0) + particle0_pos
-        # Subtract off center of mass for each halo
-        x_arr_shifted = self.shift_points_torus(x_arr, x_arr_com)
+    # for now, masses of all particles are assumed to be same
+    def shift_x(self, x_arr, center):
+        if center=='x_com':
+            # Add particle position to make sure CoM falls within halo
+            particle0_pos = x_arr[0]
+            x_arr_shifted_byparticle = self.shift_points_torus(x_arr, particle0_pos)
+            x_shift = np.mean(x_arr_shifted_byparticle, axis=0) + particle0_pos
+        elif center=='x_minPE':
+            x_shift = self.catalog_properties['x_minPE']
+        # Subtract off shift for each halo, wrapping around torus
+        x_arr_shifted = self.shift_points_torus(x_arr, x_shift)
         return x_arr_shifted
 
     def shift_points_torus(self, points, shift):
@@ -189,6 +199,10 @@ class SimulationReader:
                 halo.set_catalog_property(property_name, self.subhalos_hydro['SubhaloMassType'][:,self.ipart_star][halo.idx_subhalo_hydro])
             elif property_name=='m200m':
                 halo.set_catalog_property(property_name, self.halos_dark['Group_M_Mean200'][halo.idx_halo_dark])
+            elif property_name=='x_minPE':
+                halo.set_catalog_property(property_name, self.halos_dark['GroupPos'][halo.idx_halo_dark])
+            elif property_name=='x_com':
+                halo.set_catalog_property(property_name, self.halos_dark['GroupCM'][halo.idx_halo_dark])
             else:
                 raise ValueError(f"Property name {property_name} not recognized!")
 

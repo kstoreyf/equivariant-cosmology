@@ -1,6 +1,6 @@
 #!/bin/bash
 ##SBATCH --job-name=halo_selector_tng100_nstarmin1
-#SBATCH --job-name=geo_featurizer_tng100_nstarmin1
+#SBATCH --job-name=geo_featurizer_tng100_nstarmin1_xminPE
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=12

@@ -16,6 +16,7 @@ class ScalarFeaturizer:
 
 
     def featurize(self, m_order_max, n_groups_rebin=None, 
+                  x_order_max=np.inf, v_order_max=np.inf,
                   eigenvalues_not_trace=False):
 
         if n_groups_rebin is not None:
@@ -27,6 +28,7 @@ class ScalarFeaturizer:
         self.scalar_features = []
         for geo_features_halo in self.geo_feature_arr:
             scalar_arr_i = self.get_scalar_features(geo_features_halo, m_order_max,
+                                                    x_order_max, v_order_max,
                                                     eigenvalues_not_trace=eigenvalues_not_trace)
             scalar_vals = np.array([s.value for s in scalar_arr_i])
             self.scalar_feature_arr.append(scalar_arr_i)
@@ -36,7 +38,7 @@ class ScalarFeaturizer:
         self.n_features = self.scalar_features.shape[1]
 
 
-    def get_scalar_features(self, geometric_features, m_order_max,
+    def get_scalar_features(self, geometric_features, m_order_max, x_order_max, v_order_max,
                             eigenvalues_not_trace=False):
         scalar_features = []
         num_terms = np.arange(1, m_order_max+1)
@@ -44,7 +46,8 @@ class ScalarFeaturizer:
         for nt in num_terms:
             geo_term_combos = list(itertools.combinations_with_replacement(geometric_features, nt))
             for geo_terms in geo_term_combos:
-                s_features = self.make_scalar_feature(list(geo_terms),
+                s_features = self.make_scalar_feature(list(geo_terms), 
+                                        x_order_max=x_order_max, v_order_max=v_order_max,
                                         eigenvalues_not_trace=eigenvalues_not_trace)
                 if s_features != -1:
                     scalar_features.extend(s_features)
@@ -134,7 +137,7 @@ class ScalarFeaturizer:
                     geo_feat.value /= Vs[i_g]
 
 
-    def make_scalar_feature(self, geo_terms, eigenvalues_not_trace=False):
+    def make_scalar_feature(self, geo_terms, x_order_max, v_order_max, eigenvalues_not_trace=False):
 
         # should these orders be degree?
         x_order_tot = np.sum([g.x_order for g in geo_terms])
@@ -142,7 +145,7 @@ class ScalarFeaturizer:
         xv_order_tot = x_order_tot + v_order_tot
         xv_orders_allowed = [0, 2, 4] # allowing two-tensor terms, but not odd-order!
         # i think if the first case is satisfied the others will be too, but keeping to be safe
-        if xv_order_tot not in xv_orders_allowed:
+        if xv_order_tot not in xv_orders_allowed or x_order_tot > x_order_max or v_order_tot > v_order_max:
             return -1
                 
         geo_vals_contracted = []

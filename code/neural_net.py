@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from fit import Fitter
 
@@ -12,25 +12,41 @@ class NeuralNet(torch.nn.Module):
         super(NeuralNet, self).__init__()
         self.input_size = input_size
         self.hidden_size  = hidden_size
-        self.fc1 = torch.nn.Linear(self.input_size, self.hidden_size)
-        self.tanh = torch.nn.Tanh()
-        self.fc2 = torch.nn.Linear(self.hidden_size, 1)
-        #self.activation = torch.nn.Linear()
+        self.lin1 = torch.nn.Linear(self.input_size, self.hidden_size)
+        self.act1 = torch.nn.SELU()
+        self.lin2 = torch.nn.Linear(self.hidden_size, self.hidden_size)
+        self.act2 = torch.nn.SELU()
+        self.lin3 = torch.nn.Linear(self.hidden_size, self.hidden_size)
+        self.act3 = torch.nn.SELU()
+        self.linfinal = torch.nn.Linear(self.hidden_size, 1)
+
+        torch.nn.init.xavier_uniform_(self.lin1.weight)
+        torch.nn.init.zeros_(self.lin1.bias)
+        torch.nn.init.xavier_uniform_(self.lin2.weight)
+        torch.nn.init.zeros_(self.lin2.bias)
+        torch.nn.init.xavier_uniform_(self.lin3.weight)
+        torch.nn.init.zeros_(self.lin3.bias)
+        torch.nn.init.xavier_uniform_(self.linfinal.weight)
+        torch.nn.init.zeros_(self.linfinal.bias)
+
 
     def forward(self, x):
-        hidden = self.fc1(x)
-        tanh = self.tanh(hidden)
-        output = self.fc2(tanh)
-        #output = self.activation(output)
+        x = self.lin1(x)
+        x = self.act1(x)
+        x = self.lin2(x)
+        x = self.act2(x)
+        x = self.lin3(x)
+        x = self.act3(x)
+        output = self.linfinal(x)
         return output
 
 
 class NNFitter(Fitter):
 
     def __init__(self, x_scalar_features, y_scalar, 
-                 y_val_current, x_features_extra=None, uncertainties=None):
+                 y_val_current, x_features_extra=None):
         super().__init__(x_scalar_features, y_scalar, 
-                 y_val_current, x_features_extra=x_features_extra, uncertainties=uncertainties)
+                 y_val_current, x_features_extra=x_features_extra)
 
 
     def set_up_data(self, log_x=False, log_y=False):
@@ -46,7 +62,8 @@ class NNFitter(Fitter):
                                         x_features_extra=self.x_features_extra_train_scaled,
                                         training_mode=True)
 
-        self.scaler = StandardScaler()
+        #self.scaler = StandardScaler()
+        self.scaler = MinMaxScaler()
         self.scaler.fit(A_train)
         A_train_scaled = self.scaler.transform(A_train)
 
@@ -67,12 +84,10 @@ class NNFitter(Fitter):
         return A
 
 
-    def train(self, max_epochs=500):
+    def train(self, max_epochs=500, learning_rate=0.01):
 
-        input_size = self.n_A_features
-        self.model = NeuralNet(input_size)
         self.criterion = torch.nn.MSELoss()
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
 
         # Training loop
         self.loss = []
@@ -85,7 +100,7 @@ class NNFitter(Fitter):
             # Compute Loss
             loss = self.criterion(y_pred.squeeze(), y)
             self.loss.append(loss.item())
-            print('Epoch {}: train loss: {}'.format(epoch, loss.item()))
+            #print('Epoch {}: train loss: {}'.format(epoch, loss.item()))
             # Backward pass
             loss.backward()
             optimizer.step()

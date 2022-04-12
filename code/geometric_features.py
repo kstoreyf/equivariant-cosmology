@@ -10,7 +10,8 @@ class GeometricFeaturizer:
 
     # need sim reader or just halo_arr?
     # now, need for m_dmpart
-    def featurize(self, sim_reader, r_edges, x_order_max, v_order_max, r_units='r200m'):
+    def featurize(self, sim_reader, r_edges, x_order_max, v_order_max, 
+                 center_halo='x_com', r_units='r200m'):
 
         self.sim_reader = sim_reader
         self.geo_feature_arr = []
@@ -25,7 +26,7 @@ class GeometricFeaturizer:
 
         print("Computing geometric features for all dark halos")
         for dark_halo in self.sim_reader.dark_halo_arr:
-            x_halo, v_halo = dark_halo.load_positions_and_velocities()
+            x_halo, v_halo = dark_halo.load_positions_and_velocities(shift=True, center=center_halo)
 
             r_edges_scaled = r_edges
             if r_units is not None:
