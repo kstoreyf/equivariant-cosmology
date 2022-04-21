@@ -88,7 +88,7 @@ class GeometricFeaturizer:
                     geo_features_halo.append(geo)  
 
         return geo_features_halo
-    
+
 
     def save_features(self, fn_geo_features):
         np.save(fn_geo_features, self.geo_feature_arr)

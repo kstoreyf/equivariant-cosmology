@@ -14,6 +14,7 @@ import sys
 if 'jupyter' not in socket.gethostname():
     sys.path.insert(1, '/home/ksf293/external')
 import illustris_python as il
+import utils
 
 
 tng_path_hydro = '/scratch/ksf293/gnn-cosmology/data/TNG50-4'
@@ -47,6 +48,8 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
         
         ax0.set_title(titles[i_hd], pad=10)
         alpha = 0.5
+        
+        print(halo.idx_halo_dark, halo.idx_halo_hydro)
         
         # Dark sim
         # want absolute positions, not shifted, so get directly from illustris
@@ -103,7 +106,12 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
         # Crosshairs at center of mass of DM particles of halos
         dark_color = 'grey'
         lw = 2
-        com_dark = np.mean(x_halo_dark_dm, axis=0)
+        
+        # compute dark CoM
+        particle0_pos = x_halo_dark_dm[0]
+        x_arr_shifted_byparticle = utils.shift_points_torus(x_halo_dark_dm, particle0_pos, halo.box_size)
+        com_dark = np.mean(x_arr_shifted_byparticle, axis=0) + particle0_pos
+
         ax0.axvline(com_dark[0], c=dark_color, lw=lw, label='CoM of dark halo DM particles')
         ax0.axhline(com_dark[1], c=dark_color, lw=lw)
         ax1.axvline(com_dark[0], c=dark_color, lw=lw)
@@ -111,6 +119,12 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
         
         light_color = 'skyblue'
         com_hydro = np.mean(x_halo_hydro_dm, axis=0)
+
+        # compute hydro CoM
+        particle0_pos = x_halo_hydro_dm[0]
+        x_arr_shifted_byparticle = utils.shift_points_torus(x_halo_hydro_dm, particle0_pos, halo.box_size)
+        com_hydro = np.mean(x_arr_shifted_byparticle, axis=0) + particle0_pos
+
         ax0.axvline(com_hydro[0], c=light_color, lw=lw, label='CoM of hydro halo DM particles')
         ax0.axhline(com_hydro[1], c=light_color, lw=lw)
         ax1.axvline(com_hydro[0], c=light_color, lw=lw)
@@ -326,3 +340,74 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
     # save
     if save_fn is not None:
         plt.savefig(save_fn, bbox_inches='tight')
+
+
+def plot_fits(fitter, log_m_halo, test_error_type='percentile', 
+              regularization_lambda=0.0, colors_test=None, colorbar_label='',
+              log_mass_shift=10):
+
+    # Extract arrays and plot
+    y_true = fitter.y_scalar_test
+    y_pred = fitter.y_scalar_pred
+    
+    y_train_pred = fitter.predict(fitter.x_scalar_train, fitter.y_val_current_train,
+                                  x_extra=fitter.x_features_extra_train)
+    y_train_true = fitter.y_scalar_train
+    
+    log_m_halo_test = log_m_halo[fitter.idx_test]
+    log_m_halo_train = log_m_halo[fitter.idx_train]
+
+    # Compute error
+    n_bins = 6
+    err_bins_mstellar = np.linspace(min(y_true), max(y_true), n_bins+1)
+    err_bins_mhalo = np.linspace(min(log_m_halo_test), max(log_m_halo_test), n_bins+1) # do only for test set
+    idx_bins_mstellar = np.digitize(y_true, err_bins_mstellar)
+    idx_bins_mhalo = np.digitize(log_m_halo_test, err_bins_mhalo)
+    groups_mstellar = []
+    groups_mhalo = []
+    for i_err in range(n_bins):
+        groups_mstellar.append( y_pred[idx_bins_mstellar==i_err-1] ) # -1 bc of how digitize returns results
+        groups_mhalo.append( y_pred[idx_bins_mhalo==i_err-1] ) # -1 bc of how digitize returns results
+        
+    if test_error_type=='msfe':
+        frac_err = (y_pred - y_true)/y_true
+        msfe_test = np.mean(frac_err**2)
+        error_str = f'MSFE: {msfe_test:.3f}'
+        n_outliers = len(frac_err[frac_err > 5*msfe_test])
+        # TODO: finish implementing binned errors
+    elif test_error_type=='percentile':
+        delta_y = y_pred - y_true
+        percentile_16 = np.percentile(delta_y, 16, axis=0)
+        percentile_84 = np.percentile(delta_y, 84, axis=0)
+        error_inner68_test = (percentile_84-percentile_16)/2
+
+        error_str = fr"$\sigma_{{68}}$: {error_inner68_test:.3f}"
+        n_outliers = len(delta_y[delta_y > 5*error_inner68_test])
+        
+    
+    train_text = ''
+    if hasattr(fitter, 'chi2'):
+        train_text = fr'$\chi^2$: {fitter.chi2:.3e}; $\kappa$: {fitter.condition_number:.1e}' '\n'
+
+    #n_neg = len(np.where(fitter.y_scalar_pred < 0)[0])
+    text_results = fr'$n_\mathrm{{features}}$: {fitter.n_A_features}' '\n' \
+                       fr'{error_str} ($n_\mathrm{{test}}$: {fitter.n_test})' '\n' \
+                       f'{train_text}' \
+                       f'\t \t' fr'($n_\mathrm{{train}}$: {fitter.n_train})' '\n' \
+                       fr'$N > 5\sigma$: {n_outliers}'
+
+    
+    y_true += log_mass_shift
+    y_pred += log_mass_shift
+    y_train_true += log_mass_shift
+    y_train_pred += log_mass_shift
+    
+    plot_pred_vs_true(y_true, y_pred, y_train_true, y_train_pred, 
+                              text_results=text_results, 
+                              colors_test=colors_test, colorbar_label=colorbar_label)
+
+    log_m_halo_test += log_mass_shift
+    log_m_halo_train += log_mass_shift
+    plot_pred_vs_mass(log_m_halo_test, y_true, y_pred, log_m_halo_train, y_train_true, y_train_pred, 
+                              text_results=text_results,
+                              colors_test=colors_test, colorbar_label=colorbar_label)

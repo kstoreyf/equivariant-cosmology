@@ -1,7 +1,9 @@
 import copy
 import itertools
 import numpy as np
+from collections import defaultdict
 
+import utils
 from geometric_features import GeometricFeature
 
 
@@ -9,20 +11,16 @@ from geometric_features import GeometricFeature
 class ScalarFeaturizer:
 
     def __init__(self, geo_feature_arr=None):
-        self.geo_feature_arr_orig = geo_feature_arr
+        self.geo_feature_arr = geo_feature_arr
+        #self.geo_feature_arr_orig = geo_feature_arr
         # must use deepcopy because our array has opjects! np.copy doesn't work
-        self.geo_feature_arr = copy.deepcopy(geo_feature_arr)
+        #self.geo_feature_arr = copy.deepcopy(geo_feature_arr)
         self.N_halos = len(self.geo_feature_arr)
 
 
-    def featurize(self, m_order_max, n_groups_rebin=None, 
+    def featurize(self, m_order_max, 
                   x_order_max=np.inf, v_order_max=np.inf,
                   eigenvalues_not_trace=False):
-
-        if n_groups_rebin is not None:
-            print(f"Rebinning")
-            self.geo_feature_arr = self.rebin_geometric_features(self.geo_feature_arr, n_groups_rebin)
-            print(f"Rebinned to {len(n_groups_rebin)} bins!")
 
         self.scalar_feature_arr = []
         self.scalar_features = []
@@ -46,54 +44,18 @@ class ScalarFeaturizer:
         for nt in num_terms:
             geo_term_combos = list(itertools.combinations_with_replacement(geometric_features, nt))
             for geo_terms in geo_term_combos:
-                s_features = self.make_scalar_feature(list(geo_terms), 
-                                        x_order_max=x_order_max, v_order_max=v_order_max,
+                s_features = self.make_scalar_feature(list(geo_terms), m_order_max,
+                                        x_order_max, v_order_max,
                                         eigenvalues_not_trace=eigenvalues_not_trace)
                 if s_features != -1:
                     scalar_features.extend(s_features)
         return scalar_features
 
-    # n_groups should be lists of the "n" to include in each group
-    def rebin_geometric_features(self, geo_feature_arr, n_groups):
-        geo_feature_arr_rebinned = []
-        number_of_groups = len(n_groups)
-        count = 0
-        for geo_features_halo in geo_feature_arr:
-            count += 1
-            # group geometric features into n groups
-            geo_feats_grouped = [[] for _ in range(number_of_groups)]
-            for geo_feat in geo_features_halo:
-                for i_n, n_group in enumerate(n_groups):
-                    if geo_feat.n in n_group:
-                        geo_feats_grouped[i_n].append(geo_feat)
-
-            # sum over same features (matching orders) in each group
-            geo_features_halo_rebinned = []
-            # m order same for all geo features so don't need to worry bout it
-            x_order_highest = np.max([g.x_order for g in geo_features_halo])
-            v_order_highest = np.max([g.v_order for g in geo_features_halo])
-            for i_newn, geo_feat_group in enumerate(geo_feats_grouped):
-                # plus 1 because want to include that highest order!
-                for x_order in range(x_order_highest+1):
-                    for v_order in range(v_order_highest+1):
-                        geo_feats_this_order = [g for g in geo_feat_group if g.x_order==x_order and g.v_order==v_order]
-                        # continue if there are no values at this order (e.g. none at x=2, v=1)
-                        if not geo_feats_this_order:
-                            continue
-                        geo_rebinned_value = np.sum([g.value for g in geo_feats_this_order], axis=0)
-                        hermitian = geo_feats_this_order[0].hermitian # if one is hermitian, all are at this order
-                        geo_rebinned = GeometricFeature(geo_rebinned_value, m_order=1, x_order=x_order, v_order=v_order, 
-                                                        n=i_newn, hermitian=hermitian)
-                        geo_features_halo_rebinned.append(geo_rebinned)
-            geo_feature_arr_rebinned.append(geo_features_halo_rebinned)
-
-        return geo_feature_arr_rebinned
-
 
     def compute_MXV_from_features(self):
         # to see what n's we have, get a set of them for just one halo (should all be same)
         ns_all = list(set([g.n for g in self.geo_feature_arr[0]]))
-        geo_feature_arr_onebin = self.rebin_geometric_features(self.geo_feature_arr, [ns_all])
+        geo_feature_arr_onebin = utils.rebin_geometric_features(self.geo_feature_arr, [ns_all])
         self.compute_M_tot(geo_feature_arr_onebin)
         self.compute_X_rms(geo_feature_arr_onebin)
         self.compute_V_rms(geo_feature_arr_onebin)
@@ -137,7 +99,10 @@ class ScalarFeaturizer:
                     geo_feat.value /= Vs[i_g]
 
 
-    def make_scalar_feature(self, geo_terms, x_order_max, v_order_max, eigenvalues_not_trace=False):
+    def make_scalar_feature(self, geo_terms, m_order_max, x_order_max, v_order_max, 
+                            eigenvalues_not_trace=False):
+
+        #print("GEO TERMS:", [g.to_string() for g in geo_terms])
 
         # should these orders be degree?
         x_order_tot = np.sum([g.x_order for g in geo_terms])
@@ -148,10 +113,14 @@ class ScalarFeaturizer:
         if xv_order_tot not in xv_orders_allowed or x_order_tot > x_order_max or v_order_tot > v_order_max:
             return -1
                 
+        subcombo_table = []
         geo_vals_contracted = []
         geo_vals_from_tensors = []
+        names_contracted = []
+        names_tensor = []
 
         # construct symmetric and antisymmetric tensors
+        geo_terms_xv_antisymm = []
         geo_vals_xv_antisymm = []
         for i_g, g in enumerate(geo_terms):
             if not g.hermitian:
@@ -159,62 +128,114 @@ class ScalarFeaturizer:
                 xv_symm = 0.5*(g.value + g.value.T)
                 xv_antisymm =  0.5*(g.value - g.value.T)
                 geo_vals_xv_antisymm.append(xv_antisymm)
+                geo_terms_xv_antisymm.append(g)
                 # replace g value with its symmetric value
                 geo_symm = GeometricFeature(xv_symm, m_order=g.m_order, x_order=g.x_order, v_order=g.v_order, n=g.n, hermitian=True)
                 geo_terms[i_g] = geo_symm
         # for antisymmetric tensors, only think we can do is multiply them with each other to recover the symmetry
-        if len(geo_vals_xv_antisymm)==2:
-            geo_vals_contracted.append(np.einsum('jk,jk', *geo_vals_xv_antisymm))
-        
+        if len(geo_terms_xv_antisymm)==2:
+            name = f'[A({geo_terms_xv_antisymm[0].to_string()})]_jk [A({geo_terms_xv_antisymm[1].to_string()})]_jk'
+            value = np.einsum('jk,jk', *geo_vals_xv_antisymm)
+            subcombo_table.append([name, value, geo_terms_xv_antisymm])
+                    
         # multi t terms
         # two-vector terms
-        geo_vals_vec = [g.value for g in geo_terms if g.x_order+g.v_order==1]
-        assert len(geo_vals_vec) <= 2, "not going above 3 terms so shouldnt have more than 2 vector terms for scalars!"
+        geo_terms_vec = [g for g in geo_terms if g.x_order+g.v_order==1]
+        assert len(geo_terms_vec) <= 2, "not going above 3 terms so shouldnt have more than 2 vector terms for scalars!"
         # t10n t10n', t01n t01n', t10n t01n'
-        # TODO: i don't understand this rn - why not when eigenvalues!
-        # if 0, continue; if include_eigenvectors, this term will be included later
-        if len(geo_vals_vec)==2: #and not eigenvalues_not_trace:
+        if len(geo_terms_vec)==2:
             # vector & vector: take inner product
-            geo_vals_contracted.append(np.einsum('j,j', *geo_vals_vec))
+            geo_vals_vec = [g.value for g in geo_terms_vec]
+            #geo_vals_contracted.append((np.einsum('j,j', *geo_vals_vec), 2))
+            #names_contracted.append( f'[{geo_terms_vec[0].to_string()}]_j [{geo_terms_vec[1].to_string()}]_j' )
+            name = f'[{geo_terms_vec[0].to_string()}]_j [{geo_terms_vec[1].to_string()}]_j'
+            value = np.einsum('j,j', *geo_vals_vec)
+            subcombo_table.append([name, value, geo_terms_vec])
 
         # two tensor terms
         # shouldn't be any non-hermitian left in here, but making sure!
-        geo_vals_tensor = [g.value for g in geo_terms if g.x_order+g.v_order==2 and g.hermitian] 
-        assert len(geo_vals_tensor) <= 2, "not going above 4th order so shouldnt have more than 2 tensor terms!"
-        if len(geo_vals_tensor)==2:
+        geo_terms_tensor = [g for g in geo_terms if g.x_order+g.v_order==2 and g.hermitian] 
+        assert len(geo_terms_tensor) <= 2, "not going above 4th order so shouldnt have more than 2 tensor terms!"
+        if len(geo_terms_tensor)==2:
+            geo_vals_tensor = [g.value for g in geo_terms_tensor]
             # tensor and tensor: do contraction
-            # not adding to geo_vals_from_tensors bc those get multiplied in everywhere, like eigenvalues
+            # not adding to geo_vals_from_tensors bc those get multiplied in everywhere 
+            # (only single-tensor contraction or eigenvalues)
             # (but shouldnt matter when limiting to two terms)
-            geo_vals_contracted.append(np.einsum('jk,jk', *geo_vals_tensor))
+            #geo_vals_contracted.append((np.einsum('jk,jk', *geo_vals_tensor), 2))
+            #names_contracted.append( f'[{geo_terms_tensor[0].to_string()}]_jk [{geo_terms_tensor[1].to_string()}]_jk' )
+            name = f'[{geo_terms_tensor[0].to_string()}]_jk [{geo_terms_tensor[1].to_string()}]_jk'
+            value = np.einsum('jk,jk', *geo_vals_tensor)
+            subcombo_table.append([name, value, geo_terms_tensor])
 
         # single t terms
         for g in geo_terms:
             xv_order = g.x_order + g.v_order
             if xv_order==0:
                 # t00n
-                geo_vals_contracted.append(g.value)
+                # geo_vals_contracted.append((g.value, 1))
+                # names_contracted.append(g.to_string())
+                name = g.to_string()
+                subcombo_table.append([name, g.value, [g]])
             elif xv_order==2:
                 # t20n, t02n, t11n
                 # if g is hermitian, include trace OR eigenvalues
                 if g.hermitian:
                     if eigenvalues_not_trace:
                         # eigenvalues
-                        eigenvalues = np.linalg.eigvalsh(g.value)
-                        geo_vals_from_tensors.extend(eigenvalues)
+                        eigenvalues = np.linalg.eigvalsh(g.value) # returns in ascending order
+                        #geo_vals_from_tensors.extend(list(zip(eigenvalues, np.ones(len(eigenvalues)))))
+                        #names_tensor.extend( [f'e{eig_num}({g.to_string()})' for eig_num in range(len(eigenvalues))] )
+                        for i, eigenvalue in enumerate(eigenvalues):
+                            eig_num = 3 - i  # this makes lambda_1 = max, lambda_3 = min
+                            name = f'e{eig_num}({g.to_string()})'
+                            subcombo_table.append([name, eigenvalue, [g]])
                     else:
                         # trace
-                        geo_vals_from_tensors.append(np.einsum('jj', g.value))
+                        #geo_vals_from_tensors.append((np.einsum('jj', g.value), 1))
+                        #names_tensor.append( f'[{g.to_string()}]_jj' )
+                        name = f'[{g.to_string()}]_jj'
+                        value = np.einsum('jj', g.value)
+                        subcombo_table.append([name, value, [g]])
 
-        # if there are any geometric values from a tensor, multiply each of these
-        # separately into the rest of the contracted scalar term, because of eigenvalues
+        subcombo_table = np.array(subcombo_table, dtype=object)
+        n_geo_terms = len(geo_terms)
+        geo_terms_names = [g.to_string() for g in geo_terms]
+        geo_term_names_set = set(geo_terms_names)
+
         s_features = []
-        geo_val_product = np.product(geo_vals_contracted)
-        # if no vectors or tensors, still need to add feature with rest of values
-        if not geo_vals_from_tensors:
-            geo_vals_from_tensors.append(1.0)
-        for g_tensor in geo_vals_from_tensors:
-            value = g_tensor * geo_val_product
-            s_features.append(ScalarFeature(value, geo_terms))
+        num_subcombos = np.arange(1, m_order_max+1) #+1 to include m_order_max; this is max possible subcombos
+        # Get all combinations of geometric features with m_order_max terms or fewer
+        for nsc in num_subcombos:
+            idx_subcombos = np.arange(len(subcombo_table))
+            idx_lists_combos = list(itertools.combinations(idx_subcombos, nsc)) # no replacement!
+
+            for idx_list in idx_lists_combos:
+                subcombo = subcombo_table[idx_list,:]
+                subcombo = np.atleast_2d(subcombo)
+                subcombo_geo_terms = subcombo[:,2]
+                subcombo_geo_terms_flat = [g for g_subcombo in subcombo_geo_terms for g in g_subcombo]
+
+                # # Only if each original geo_term appears in subcombo exactly once does it make a valid term
+                if len(subcombo_geo_terms_flat)==n_geo_terms:
+                    subcombo_geo_term_names = [g.to_string() for g in subcombo_geo_terms_flat]
+                    if set(subcombo_geo_term_names)==geo_term_names_set: 
+                        subcombo_vals = subcombo[:,1]
+                        value = np.product(subcombo_vals)
+                        name = ' '.join(subcombo[:,0])
+                        #print("including:", name)
+                        s_features.append(ScalarFeature(value, subcombo_geo_terms_flat, name=name))
+            
+        # geo_val_product = np.product(geo_vals_contracted)
+        # name_product = ' '.join(names_contracted)
+        # # if no vectors or tensors, still need to add feature with rest of values
+        # if not geo_vals_from_tensors:
+        #     geo_vals_from_tensors.append(1.0)
+        #     names_tensor.append('')
+        # for i, g_tensor in enumerate(geo_vals_from_tensors):
+        #     value = g_tensor * geo_val_product
+        #     name = f'{name_product} {names_tensor[i]}' 
+        #     s_features.append(ScalarFeature(value, geo_terms, name=name))
 
         return s_features
     
@@ -225,19 +246,29 @@ class ScalarFeaturizer:
 
     def load_features(self, fn_scalar_features):
         self.scalar_feature_arr = np.load(fn_scalar_features, allow_pickle=True)
+        scalar_features = []
+        for i in range(self.scalar_feature_arr.shape[0]):
+            scalar_vals = np.array([s.value for s in self.scalar_feature_arr[i]])
+            scalar_features.append(scalar_vals)
+        self.scalar_features = np.array(scalar_features)
+
 
 
 class ScalarFeature:
 
-    def __init__(self, value, geo_terms):
+    def __init__(self, value, geo_terms, name=''):
         self.value = value
         self.geo_terms = geo_terms
         self.m_order = np.sum([g.m_order for g in self.geo_terms])
         self.x_order = np.sum([g.x_order for g in self.geo_terms])
         self.v_order = np.sum([g.v_order for g in self.geo_terms])
+        self.name = name
 
     def to_string(self):
-        return ' '.join(np.array([g.to_string() for g in self.geo_terms]))
+        if self.name:
+            return self.name
+        else:
+            return ' '.join(np.array([g.to_string() for g in self.geo_terms]))
             
 
         
