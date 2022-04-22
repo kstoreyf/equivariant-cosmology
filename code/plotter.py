@@ -25,10 +25,13 @@ snap_num = 99
 
 
 def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_num,
-                             nrows_outer, ncols_outer, titles):
+                             nrows_outer, ncols_outer, titles, title=None):
     
     sub_width, sub_height = 5.5, 5
     fig = plt.figure(figsize=(sub_width*ncols_outer, sub_height*nrows_outer*2))
+
+    if title is not None:
+        plt.title(title, pad=40, fontsize=24)
 
     outer = gridspec.GridSpec(nrows_outer, ncols_outer, wspace=0.5, hspace=0.25)
 
@@ -102,42 +105,44 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
         ax1.set_aspect('equal', adjustable='datalim')
         
         plt.setp(ax0.get_xticklabels(), visible=False)
-    
-        # Crosshairs at center of mass of DM particles of halos
-        dark_color = 'grey'
-        lw = 2
+            
+        # get pos properties
+        x_minPE = halo.catalog_properties['x_minPE']
+        x_minPE_hydro = halo.catalog_properties['x_minPE_hydro']
         
         # compute dark CoM
         particle0_pos = x_halo_dark_dm[0]
         x_arr_shifted_byparticle = utils.shift_points_torus(x_halo_dark_dm, particle0_pos, halo.box_size)
         com_dark = np.mean(x_arr_shifted_byparticle, axis=0) + particle0_pos
 
-        ax0.axvline(com_dark[0], c=dark_color, lw=lw, label='CoM of dark halo DM particles')
-        ax0.axhline(com_dark[1], c=dark_color, lw=lw)
-        ax1.axvline(com_dark[0], c=dark_color, lw=lw)
-        ax1.axhline(com_dark[1], c=dark_color, lw=lw)
-        
-        light_color = 'skyblue'
-        com_hydro = np.mean(x_halo_hydro_dm, axis=0)
-
         # compute hydro CoM
         particle0_pos = x_halo_hydro_dm[0]
         x_arr_shifted_byparticle = utils.shift_points_torus(x_halo_hydro_dm, particle0_pos, halo.box_size)
         com_hydro = np.mean(x_arr_shifted_byparticle, axis=0) + particle0_pos
 
-        ax0.axvline(com_hydro[0], c=light_color, lw=lw, label='CoM of hydro halo DM particles')
-        ax0.axhline(com_hydro[1], c=light_color, lw=lw)
-        ax1.axvline(com_hydro[0], c=light_color, lw=lw)
-        ax1.axhline(com_hydro[1], c=light_color, lw=lw)
+
+        # Plot position points
+        lw = 2
+        dark_color = 'grey'
+        ax0.axvline(x_minPE[0], c=dark_color, lw=lw, label='CoM of dark halo DM particles')
+        ax0.axhline(x_minPE[1], c=dark_color, lw=lw)
+        ax1.axvline(x_minPE[0], c=dark_color, lw=lw)
+        ax1.axhline(x_minPE[1], c=dark_color, lw=lw)
+        
+        light_color = 'skyblue'
+        ax0.axvline(x_minPE_hydro[0], c=light_color, lw=lw, label='CoM of hydro halo DM particles')
+        ax0.axhline(x_minPE_hydro[1], c=light_color, lw=lw)
+        ax1.axvline(x_minPE_hydro[0], c=light_color, lw=lw)
+        ax1.axhline(x_minPE_hydro[1], c=light_color, lw=lw)
 
         # Plot R200
         radius = halo.catalog_properties['r200m']
-        circle = plt.Circle((com_dark[0], com_dark[1]), radius, color='forestgreen', fill=False, label='R200')
+        circle = plt.Circle((x_minPE[0], x_minPE[1]), radius, color='forestgreen', fill=False, label='R200')
         ax0.add_patch(circle)
 
         # Plot most bound
-        x_minPE = halo.catalog_properties['x_minPE']
-        ax0.scatter(x_minPE[0], x_minPE[1], marker='+', color='magenta', s=200, lw=3, label='Most bound particle')
+        ax0.scatter(com_dark[0], com_dark[1], marker='+', color=dark_color, s=200, lw=3, label='Most bound dark halo particle')
+        ax1.scatter(com_hydro[0], com_hydro[1], marker='+', color=light_color, s=200, lw=3, label='Most bound hydro halo particle')
 
         # Add subplots
         fig.add_subplot(ax0)

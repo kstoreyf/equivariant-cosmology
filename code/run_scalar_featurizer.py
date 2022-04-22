@@ -13,17 +13,17 @@ def run():
     # scalar parameters
     m_order_max = 2
     x_order_max = 4
-    v_order_max = 0
+    v_order_max = 4
     n_groups_rebin = [[0,1,2], [3,4,5,6,7]]
-    eigenvalues_not_trace = True
+    eigenvalues_not_trace = False
 
     # sim / halo info
     base_dir = '/scratch/ksf293/equivariant-cosmology/data'
     snap_num_str = '099' # z = 0
     sim_name = 'TNG100-1'
     sim_name_dark = 'TNG100-1-Dark'
-    # sim_name = 'TNG50-4'
-    # sim_name_dark = 'TNG50-4-Dark'
+    #sim_name = 'TNG50-4'
+    #sim_name_dark = 'TNG50-4-Dark'
     halo_dir = f'../data/halos/halos_{sim_name}'
     halo_tag = '_nstarpartmin1'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
@@ -36,7 +36,7 @@ def run():
     # save info
     scalar_dir = f'../data/scalar_features/scalar_features_{sim_name}'
     Path(scalar_dir).mkdir(parents=True, exist_ok=True)
-    scalar_tag = f'_2bins_rescaled_mord{m_order_max}_xord{x_order_max}_vord{v_order_max}'
+    scalar_tag = f'_2bins_rescaled_mord{m_order_max}_xord{x_order_max}_vord{v_order_max}_trace'
     fn_scalar_features = f'{scalar_dir}/scalar_features{halo_tag}{geo_tag}{scalar_tag}.npy'
 
     # Go!

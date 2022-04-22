@@ -201,6 +201,8 @@ class SimulationReader:
                 halo.set_catalog_property(property_name, self.halos_dark['Group_M_Mean200'][halo.idx_halo_dark])
             elif property_name=='x_minPE':
                 halo.set_catalog_property(property_name, self.halos_dark['GroupPos'][halo.idx_halo_dark])
+            elif property_name=='x_minPE_hydro':
+                halo.set_catalog_property(property_name, self.halos_hydro['GroupPos'][halo.idx_halo_hydro])
             elif property_name=='x_com':
                 halo.set_catalog_property(property_name, self.halos_dark['GroupCM'][halo.idx_halo_dark])
             else:
