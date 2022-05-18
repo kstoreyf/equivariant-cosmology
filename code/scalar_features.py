@@ -11,16 +11,19 @@ from geometric_features import GeometricFeature
 class ScalarFeaturizer:
 
     def __init__(self, geo_feature_arr=None):
-        self.geo_feature_arr = geo_feature_arr
-        #self.geo_feature_arr_orig = geo_feature_arr
-        # must use deepcopy because our array has opjects! np.copy doesn't work
-        #self.geo_feature_arr = copy.deepcopy(geo_feature_arr)
+        self.geo_feature_arr_orig = geo_feature_arr
+        # must use deepcopy because our array has bpjects! np.copy doesn't work
+        self.geo_feature_arr = copy.deepcopy(geo_feature_arr)
         self.N_halos = len(self.geo_feature_arr)
 
 
     def featurize(self, m_order_max, 
                   x_order_max=np.inf, v_order_max=np.inf,
                   eigenvalues_not_trace=False):
+
+        self.m_order_max = m_order_max
+        self.x_order_max = x_order_max
+        self.v_order_max = v_order_max
 
         self.scalar_feature_arr = []
         self.scalar_features = []
@@ -32,7 +35,10 @@ class ScalarFeaturizer:
             self.scalar_feature_arr.append(scalar_arr_i)
             self.scalar_features.append(scalar_vals)
 
+        self.scalar_feature_arr = np.array(self.scalar_feature_arr, dtype=object)
         self.scalar_features = np.array(self.scalar_features)
+        self.scalar_features, self.scalar_feature_arr = self.sort_scalar_features(
+                                                        self.scalar_features, self.scalar_feature_arr)
         self.n_features = self.scalar_features.shape[1]
 
 
@@ -50,6 +56,27 @@ class ScalarFeaturizer:
                 if s_features != -1:
                     scalar_features.extend(s_features)
         return scalar_features
+
+
+    def sort_scalar_features(self, scalar_features, scalar_feature_arr):
+        scalar_features_single = scalar_feature_arr[0] # list of features for single halo
+
+        dtypes = [('name', str), ('m_order', int), ('x_order', int), ('v_order', int)]
+        n_col_names = [f'n_{i}' for i in range(self.m_order_max)]
+        dtypes.extend([(n_col_name, int) for n_col_name in n_col_names])
+        scalar_feature_table = np.empty(len(scalar_features_single), dtype=dtypes)
+
+        scalar_feature_table['name'] = [s.name for s in scalar_features_single]
+        scalar_feature_table['m_order'] = [s.m_order for s in scalar_features_single]
+        scalar_feature_table['x_order'] = [s.x_order for s in scalar_features_single]
+        scalar_feature_table['v_order'] = [s.v_order for s in scalar_features_single]
+
+        for i in range(self.m_order_max):
+            # -1 is #magic bc cant use nans for int structured array
+            scalar_feature_table[f'n_{i}'] = [s.ns[i] if len(s.ns) > i else -1 for s in scalar_features_single]
+        order = ['m_order','x_order','v_order'] + n_col_names + ['name']
+        i_sort = np.argsort(scalar_feature_table, order=order)
+        return scalar_features[:,i_sort], scalar_feature_arr[:,i_sort]
 
 
     def compute_MXV_from_features(self):
@@ -92,7 +119,7 @@ class ScalarFeaturizer:
         
         for i_g, geo_features_halo in enumerate(self.geo_feature_arr):
             for geo_feat in geo_features_halo:
-                geo_feat.value /= Ms[i_g] # all have single m term
+                geo_feat.value /= Ms[i_g] # all geometric features have single m term
                 for _ in range(geo_feat.x_order):
                     geo_feat.value /= Xs[i_g]
                 for _ in range(geo_feat.v_order):
@@ -238,6 +265,7 @@ class ScalarFeature:
         self.m_order = np.sum([g.m_order for g in self.geo_terms])
         self.x_order = np.sum([g.x_order for g in self.geo_terms])
         self.v_order = np.sum([g.v_order for g in self.geo_terms])
+        self.ns = np.array([g.n for g in self.geo_terms])
         self.name = name
 
     def to_string(self):

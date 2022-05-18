@@ -88,7 +88,7 @@ class SimulationReader:
     def read_simulations(self, subhalo_fields_to_load=None):
 
         if subhalo_fields_to_load is None:
-            subhalo_fields_to_load = ['SubhaloLenType', 'SubhaloGrNr', 'SubhaloMassType']
+            subhalo_fields_to_load = ['SubhaloLenType', 'SubhaloGrNr', 'SubhaloMassType', 'SubhaloMass']
             #subhalo_fields_to_load = ['SubhaloMass','SubhaloPos','SubhaloMassType', 'SubhaloLenType', 'SubhaloHalfmassRad', 'SubhaloGrNr']
 
         self.subhalos_hydro = il.groupcat.loadSubhalos(self.base_path_hydro,self.snap_num,fields=subhalo_fields_to_load)
@@ -134,7 +134,12 @@ class SimulationReader:
 
     # TODO: clean up
     def select_halos(self, num_star_particles_min, halo_mass_min, 
-                     halo_mass_max, halo_mass_difference_factor, subsample_frac):
+                     halo_mass_max, halo_mass_difference_factor, subsample_frac,
+                     subhalo_mode='most_massive'):
+
+        subhalo_mode_options = ['most_massive_subhalo', 'twin_subhalo']
+        assert subhalo_mode in subhalo_mode_options, f"Input subhalo_mode {subhalo_mode} not an \
+                                                      option; choose one of {subhalo_mode_options}"
         # GroupFirstSub: Index into the Subhalo table of the first/primary/most massive 
         # Subfind group within this FoF group. Note: This value is signed (or should be interpreted as signed)! 
         # In this case, a value of -1 indicates that this FoF group has no subhalos.
@@ -150,6 +155,9 @@ class SimulationReader:
         if halo_mass_max is not None:
             halo_mass_max /= 1e10 # because masses in catalog have units of 10^10 M_sun/h
 
+        # TODO: could I reformulate this starting from the subhalo_dark_to_full_dict,
+        # and then get each subhalo's parent and its twin's parent??
+        # FOLLOWUP: i could but then i would have to also check that it is the most massive dark subhalo in the dark halo!
         dark_halo_arr = []
         for i, idx_halo_dark in enumerate(idxs_halos_dark_withsubhalos):
             
@@ -160,9 +168,16 @@ class SimulationReader:
                 idx_subtwin_hydro = self.subhalo_dark_to_full_dict[idx_largestsub_dark]
                 # This is that hydro subhalo's parent halo in the hydro sim
                 idx_halo_hydro = self.subhalos_hydro['SubhaloGrNr'][idx_subtwin_hydro]
-                # This is the largest hydro subhalo of that hydro halo
-                idx_subhalo_hydro = self.halos_hydro['GroupFirstSub'][idx_halo_hydro]
 
+                if subhalo_mode=='most_massive_subhalo':
+                    # This is the largest hydro subhalo of that hydro halo
+                    idx_subhalomassive_hydro = self.halos_hydro['GroupFirstSub'][idx_halo_hydro]
+                    idx_subhalo_hydro = idx_subhalomassive_hydro
+                elif subhalo_mode=='twin_subhalo':
+                    idx_subhalo_hydro = idx_subtwin_hydro
+                else:
+                    raise ValueError("Mode not recognized! (should not get here, there's an assert above)")
+                    
                 # if number of stars below a minimum, exclude
                 if num_star_particles_min is not None and self.subhalos_hydro['SubhaloLenType'][:,self.ipart_star][idx_subhalo_hydro] < num_star_particles_min: 
                     continue
