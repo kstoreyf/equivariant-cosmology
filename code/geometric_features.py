@@ -12,6 +12,8 @@ class GeometricFeaturizer:
     # now, need for m_dmpart
     def featurize(self, sim_reader, r_edges, x_order_max, v_order_max, 
                  center_halo='x_com', r_units='r200m'):
+        # TODO: should be saving r_edges! now im just remembering...
+        # and other metadata!!
 
         self.sim_reader = sim_reader
         self.geo_feature_arr = []
