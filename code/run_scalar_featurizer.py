@@ -14,8 +14,8 @@ def run():
     m_order_max = 2
     x_order_max = 4
     v_order_max = 4
-    n_groups_rebin = [[0,1,2], [3,4,5,6,7]]
-    eigenvalues_not_trace = False
+    n_groups_rebin = [[0,1,2], [3,4,5,6,7], [8,9,10]]
+    eigenvalues_not_trace = True
 
     # sim / halo info
     base_dir = '/scratch/ksf293/equivariant-cosmology/data'
@@ -25,18 +25,19 @@ def run():
     #sim_name = 'TNG50-4'
     #sim_name_dark = 'TNG50-4-Dark'
     halo_dir = f'../data/halos/halos_{sim_name}'
-    halo_tag = '_nstarpartmin1'
+    halo_tag = '_nstarpartmin1_twin'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
 
     # geo info
     geo_dir = f'../data/geometric_features/geometric_features_{sim_name}'
-    geo_tag = '_xminPE'
+    geo_tag = '_xminPE_rall'
     fn_geo_features = f'{geo_dir}/geometric_features{halo_tag}{geo_tag}.npy'
 
     # save info
     scalar_dir = f'../data/scalar_features/scalar_features_{sim_name}'
     Path(scalar_dir).mkdir(parents=True, exist_ok=True)
-    scalar_tag = f'_2bins_rescaled_mord{m_order_max}_xord{x_order_max}_vord{v_order_max}_trace'
+    trace_str = '' if eigenvalues_not_trace else '_trace'
+    scalar_tag = f'_3bins_rescaled_mord{m_order_max}_xord{x_order_max}_vord{v_order_max}{trace_str}'
     fn_scalar_features = f'{scalar_dir}/scalar_features{halo_tag}{geo_tag}{scalar_tag}.npy'
 
     # Go!

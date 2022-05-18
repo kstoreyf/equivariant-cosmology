@@ -9,7 +9,11 @@ def run():
 
     # geo feature params
     n_rbins = 8
-    r_edges = np.linspace(0, 1, n_rbins+1) # eventually include info outside r200?
+    r_edges = np.linspace(0, 1, n_rbins+1) # in units of r200
+    #r_edges = np.linspace(0, 1, n_rbins+1) # eventually include info outside r200?
+    r_edges_outsider200 = np.array([2, 3, 10])
+    r_edges = np.concatenate((r_edges, r_edges_outsider200))
+    print(r_edges)
     x_order_max = 2
     v_order_max = 2
 
@@ -21,13 +25,13 @@ def run():
     # sim_name = 'TNG50-4'
     # sim_name_dark = 'TNG50-4-Dark'
     halo_dir = f'../data/halos/halos_{sim_name}'
-    halo_tag = '_nstarpartmin1'
+    halo_tag = '_nstarpartmin1_twin'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
 
     # save info
     geo_dir = f'../data/geometric_features/geometric_features_{sim_name}'
     Path(geo_dir).mkdir(parents=True, exist_ok=True)
-    geo_tag = '_xminPE'
+    geo_tag = '_xminPE_rall'
     fn_geo_features = f'{geo_dir}/geometric_features{halo_tag}{geo_tag}.npy'
 
     # Go!
