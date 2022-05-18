@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import curve_fit
 
 from geometric_features import GeometricFeature
 
@@ -45,6 +46,25 @@ def get_uncertainties_genel2019(log_m_stellar, sim_name):
 
     return uncertainties_genel2019
 
+# maybe a better way to do this, but just logging for now to be consistent
+def broken_power_law(log_m200, N=1, log_m1=12, beta=1, gamma=1):
+    # note that the 12 is without a log_mass_shift; defaults with shifted sample (shift of 10) should be 12-10=2
+    return log_m200 + np.log10( 2*N/((log_m200/log_m1)**(-beta) + (log_m200/log_m1)**gamma) )
+
+
+def fit_broken_power_law(log_m200, log_m_stellar, uncertainties, initial_guess=None,
+                         log_mass_shift=10, return_initial_guess=True):
+    if initial_guess is None:
+        m1 = 12-log_mass_shift
+        initial_guess = [0.01, m1, 1.5, 0.4]
+    bounds = [[0]*len(initial_guess), [np.inf]*len(initial_guess)]
+    popt, _ = curve_fit(broken_power_law, log_m200, log_m_stellar, sigma=uncertainties, 
+                        bounds=bounds, p0=initial_guess)
+    y_val_current_powerlaw_fit = broken_power_law(log_m200, *popt)
+    if return_initial_guess:
+        return y_val_current_powerlaw_fit, initial_guess
+    return y_val_current_powerlaw_fit
+
 
 def shift_points_torus(points, shift, box_size):
     return (points - shift + 0.5*box_size) % box_size - 0.5*box_size
@@ -79,6 +99,11 @@ def compute_error(fitter, test_error_type='percentile'):
 
 # n_groups should be lists of the "n" to include in each group
 def rebin_geometric_features(geo_feature_arr, n_groups):
+    # TODO: implement check that bins listed in n_groups matches bins in the geo_feature_arr
+    n_vals = [g.n for g in geo_feature_arr[0]] # 0 because just check first halo, features should be same
+    n_groups_flat = [n for group in n_groups for n in group]
+    assert set(n_groups_flat).issubset(set(n_vals)), 'Groups passed in contain bins not in geometric features!'
+
     geo_feature_arr_rebinned = []
     number_of_groups = len(n_groups)
     count = 0

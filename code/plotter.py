@@ -31,7 +31,7 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
     fig = plt.figure(figsize=(sub_width*ncols_outer, sub_height*nrows_outer*2))
 
     if title is not None:
-        plt.title(title, pad=40, fontsize=24)
+        fig.suptitle(title, fontsize=24)
 
     outer = gridspec.GridSpec(nrows_outer, ncols_outer, wspace=0.5, hspace=0.25)
 
@@ -51,9 +51,7 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
         
         ax0.set_title(titles[i_hd], pad=10)
         alpha = 0.5
-        
-        print(halo.idx_halo_dark, halo.idx_halo_hydro)
-        
+                
         # Dark sim
         # want absolute positions, not shifted, so get directly from illustris
         halo_dark_dm = il.snapshot.loadHalo(base_path_dark,snap_num,halo.idx_halo_dark,'dm')
@@ -124,25 +122,29 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
         # Plot position points
         lw = 2
         dark_color = 'grey'
-        ax0.axvline(x_minPE[0], c=dark_color, lw=lw, label='CoM of dark halo DM particles')
+        
+        ax0.axvline(x_minPE[0], c=dark_color, lw=lw, label='Most bound dark halo particle')
         ax0.axhline(x_minPE[1], c=dark_color, lw=lw)
         ax1.axvline(x_minPE[0], c=dark_color, lw=lw)
         ax1.axhline(x_minPE[1], c=dark_color, lw=lw)
         
         light_color = 'skyblue'
-        ax0.axvline(x_minPE_hydro[0], c=light_color, lw=lw, label='CoM of hydro halo DM particles')
+        ax0.axvline(x_minPE_hydro[0], c=light_color, lw=lw, label='Most bound hydro halo particle')
         ax0.axhline(x_minPE_hydro[1], c=light_color, lw=lw)
         ax1.axvline(x_minPE_hydro[0], c=light_color, lw=lw)
         ax1.axhline(x_minPE_hydro[1], c=light_color, lw=lw)
 
         # Plot R200
-        radius = halo.catalog_properties['r200m']
-        circle = plt.Circle((x_minPE[0], x_minPE[1]), radius, color='forestgreen', fill=False, label='R200')
-        ax0.add_patch(circle)
+        r200 = halo.catalog_properties['r200m']
+        circle_r200 = plt.Circle((x_minPE[0], x_minPE[1]), r200, color='forestgreen', fill=False, label='R200')
+        ax0.add_patch(circle_r200)
+
+        circle_innerouter = plt.Circle((x_minPE[0], x_minPE[1]), 3/8*r200, color='limegreen', fill=False, label='Inner/outer radius')
+        ax0.add_patch(circle_innerouter)
 
         # Plot most bound
-        ax0.scatter(com_dark[0], com_dark[1], marker='+', color=dark_color, s=200, lw=3, label='Most bound dark halo particle')
-        ax1.scatter(com_hydro[0], com_hydro[1], marker='+', color=light_color, s=200, lw=3, label='Most bound hydro halo particle')
+        ax0.scatter(com_dark[0], com_dark[1], marker='+', color=dark_color, s=200, lw=3, label='CoM of dark halo DM particles')
+        ax1.scatter(com_hydro[0], com_hydro[1], marker='+', color=light_color, s=200, lw=3, label='CoM of hydro halo DM particles')
 
         # Add subplots
         fig.add_subplot(ax0)
@@ -153,7 +155,7 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
     handles1, labels1 = ax1.get_legend_handles_labels()
     handles = np.concatenate((handles0, handles1))
     labels = np.concatenate((labels0, labels1))
-    plt.legend(handles, labels, fontsize=18, loc=(1.2, 4))
+    plt.legend(handles, labels, fontsize=18, loc=(1.2, 3))
 
 
 def plot_halos_dark_and_hydro_fromdict(halo_dicts, base_path_dark, base_path_hydro, snap_num,
