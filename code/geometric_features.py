@@ -6,10 +6,6 @@ import itertools
 class GeometricFeaturizer:
 
     
-    #def __init__(self):
-
-    # need sim reader or just halo_arr?
-    # now, need for m_dmpart
     def featurize(self, sim_reader, r_edges, x_order_max, v_order_max, 
                  center_halo='x_com', r_units='r200m'):
         # TODO: should be saving r_edges! now im just remembering...
@@ -109,9 +105,14 @@ class GeometricFeature:
         self.v_order = v_order
         self.n = n
         self.hermitian = hermitian
+        self.name = self.construct_name()
 
-    def to_string(self):
-        return f"g_{self.x_order}{self.v_order}{self.n}"
+    def construct_name(self):
+        n_str = self.n
+        if self.n > 9:
+            n_str = f'({self.n})'
+        # double curly braces escape f-string formatting, make single brace
+        return f"g_{{{self.x_order}{self.v_order}{n_str}}}"
 
 
 # should be called multiply_arbitrary_dim_terms ?
