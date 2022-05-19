@@ -8,10 +8,10 @@ def run():
     # sim info
     base_dir = '/scratch/ksf293/equivariant-cosmology/data'
     snap_num_str = '099' # z = 0
-    # sim_name = 'TNG100-1'
-    # sim_name_dark = 'TNG100-1-Dark'
-    sim_name = 'TNG50-4'
-    sim_name_dark = 'TNG50-4-Dark'
+    sim_name = 'TNG100-1'
+    sim_name_dark = 'TNG100-1-Dark'
+    # sim_name = 'TNG50-4'
+    # sim_name_dark = 'TNG50-4-Dark'
 
     # halo params 
     num_star_particles_min = 1

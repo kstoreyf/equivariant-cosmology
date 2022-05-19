@@ -21,6 +21,9 @@ class DarkHalo:
         self.idx_halo_hydro = idx_halo_hydro
         self.idx_subhalo_hydro = idx_subhalo_hydro
 
+    def set_random_int(self, random_int):
+        self.random_int = random_int
+
     def load_positions_and_velocities(self, shift=True, center='x_com'):
         halo_dark_dm = il.snapshot.loadHalo(self.base_path,self.snap_num,self.idx_halo_dark,'dm')
         x_data_halo = halo_dark_dm['Coordinates']
@@ -135,7 +138,7 @@ class SimulationReader:
     # TODO: clean up
     def select_halos(self, num_star_particles_min, halo_mass_min, 
                      halo_mass_max, halo_mass_difference_factor, subsample_frac,
-                     subhalo_mode='most_massive'):
+                     subhalo_mode='most_massive', seed=42):
 
         subhalo_mode_options = ['most_massive_subhalo', 'twin_subhalo']
         assert subhalo_mode in subhalo_mode_options, f"Input subhalo_mode {subhalo_mode} not an \
@@ -204,6 +207,14 @@ class SimulationReader:
             dark_halo_arr = np.random.choice(dark_halo_arr, size=int(subsample_frac*len(dark_halo_arr)), replace=False)        
             
         self.dark_halo_arr = np.array(dark_halo_arr)
+        self.N_halos = len(self.dark_halo_arr)
+
+        # give each a random number
+        rng = np.random.default_rng(seed=seed)
+        random_ints = np.arange(self.N_halos)
+        rng.shuffle(random_ints) #in-place
+        for i in range(self.N_halos):
+            dark_halo_arr[i].set_random_int(random_ints[i])
 
 
     def add_catalog_property_to_halos(self, property_name):
