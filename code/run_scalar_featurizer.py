@@ -20,10 +20,10 @@ def run():
     # sim / halo info
     base_dir = '/scratch/ksf293/equivariant-cosmology/data'
     snap_num_str = '099' # z = 0
-    sim_name = 'TNG100-1'
-    sim_name_dark = 'TNG100-1-Dark'
-    #sim_name = 'TNG50-4'
-    #sim_name_dark = 'TNG50-4-Dark'
+    # sim_name = 'TNG100-1'
+    # sim_name_dark = 'TNG100-1-Dark'
+    sim_name = 'TNG50-4'
+    sim_name_dark = 'TNG50-4-Dark'
     halo_dir = f'../data/halos/halos_{sim_name}'
     halo_tag = '_nstarpartmin1_twin'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
