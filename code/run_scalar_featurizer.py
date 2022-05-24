@@ -12,18 +12,18 @@ def run():
 
     # scalar parameters
     m_order_max = 2
-    x_order_max = 4
-    v_order_max = 4
+    x_order_max = 2
+    v_order_max = 2
     n_groups_rebin = [[0,1,2], [3,4,5,6,7], [8,9,10]]
     eigenvalues_not_trace = True
 
     # sim / halo info
     base_dir = '/scratch/ksf293/equivariant-cosmology/data'
     snap_num_str = '099' # z = 0
-    # sim_name = 'TNG100-1'
-    # sim_name_dark = 'TNG100-1-Dark'
-    sim_name = 'TNG50-4'
-    sim_name_dark = 'TNG50-4-Dark'
+    sim_name = 'TNG100-1'
+    sim_name_dark = 'TNG100-1-Dark'
+    #sim_name = 'TNG50-4'
+    #sim_name_dark = 'TNG50-4-Dark'
     halo_dir = f'../data/halos/halos_{sim_name}'
     halo_tag = '_nstarpartmin1_twin'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
@@ -49,10 +49,12 @@ def run():
                                      geo_featurizer.geo_feature_arr, n_groups_rebin)
 
     scalar_featurizer = ScalarFeaturizer(geo_feature_arr_rebinned)
-    scalar_featurizer.compute_MXV_from_features()
-    scalar_featurizer.rescale_geometric_features(scalar_featurizer.M_tot, 
-                                                 scalar_featurizer.X_rms, 
-                                                 scalar_featurizer.V_rms)
+    #scalar_featurizer.compute_MXV_from_features()
+    m_200m = np.array([dark_halo.catalog_properties['m200m'] for dark_halo in sim_reader.dark_halo_arr])
+    r_200m = np.array([dark_halo.catalog_properties['r200m'] for dark_halo in sim_reader.dark_halo_arr])
+    v_200m = np.array([dark_halo.catalog_properties['v200m'] for dark_halo in sim_reader.dark_halo_arr])
+
+    scalar_featurizer.rescale_geometric_features(m_200m, r_200m, v_200m)
     start = time.time()
     scalar_featurizer.featurize(m_order_max, x_order_max=x_order_max, 
                                 v_order_max=v_order_max,

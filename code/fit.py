@@ -55,18 +55,18 @@ class Fitter:
         return y
 
 
-    def split_train_test(self, frac_test=0.2, seed=42):
-        # split indices and then obtain training and test x and y, so can go back and get the full info later
-        np.random.seed(seed)
-        idx_traintest = np.arange(self.N_halos)
-        self.idx_test = np.random.choice(idx_traintest, size=int(frac_test*self.N_halos), replace=False)
-        self.idx_train = np.setdiff1d(idx_traintest, self.idx_test, assume_unique=True)
+    def split_train_test(self, idx_train, idx_test):
+
+        self.idx_train = idx_train
+        self.idx_test = idx_test
 
         # Split train and test arrays
         self.x_scalar_train = self.x_scalar_features[self.idx_train]
         self.x_scalar_test = self.x_scalar_features[self.idx_test]
         self.y_scalar_train = self.y_scalar[self.idx_train]
         self.y_scalar_test = self.y_scalar[self.idx_test]
+        print('y_scalar_test:', np.min(self.y_scalar_test), np.max(self.y_scalar_test))
+
 
         # Split uncertainties, y_val_currents, extra features if exist
         self.uncertainties_train = self.uncertainties[self.idx_train]
@@ -92,6 +92,7 @@ class Fitter:
     def scale_y_values(self):
         self.y_scalar_train_scaled = self.scale_y(self.y_scalar_train)
         self.y_scalar_test_scaled = self.scale_y(self.y_scalar_test)
+        print('scale_y:', np.min(self.y_scalar_test), np.max(self.y_scalar_test))
         self.uncertainties_train_scaled = self.scale_uncertainties(self.uncertainties_train, self.y_scalar_train)
         self.y_val_current_train_scaled = self.scale_y(self.y_val_current_train)
         self.y_val_current_test_scaled = self.scale_y(self.y_val_current_test)
@@ -182,6 +183,7 @@ class LinearFitter(Fitter):
             self.x_features_extra_test_scaled = self.scale_x_features(self.x_features_extra_test)
         self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, self.y_val_current_test_scaled,
                                                     x_features_extra=self.x_features_extra_test_scaled)
+        print('predict_test:', np.min(self.y_scalar_test), np.max(self.y_scalar_test))
         self.y_scalar_pred = self.predict_from_A(self.A_test)
 
 

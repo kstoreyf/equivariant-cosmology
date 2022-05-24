@@ -120,13 +120,13 @@ class ScalarFeaturizer:
 
 
     # does rescaling in-place in self.geo_feature_arr!
-    def rescale_geometric_features(self, Ms, Xs, Vs):
+    def rescale_geometric_features(self, Ms, Rs, Vs):
         
         for i_g, geo_features_halo in enumerate(self.geo_feature_arr):
             for geo_feat in geo_features_halo:
                 geo_feat.value /= Ms[i_g] # all geometric features have single m term
                 for _ in range(geo_feat.x_order):
-                    geo_feat.value /= Xs[i_g]
+                    geo_feat.value /= Rs[i_g]
                 for _ in range(geo_feat.v_order):
                     geo_feat.value /= Vs[i_g]
 
@@ -270,13 +270,12 @@ class ScalarFeaturizer:
 
 class ScalarFeature:
 
-    def __init__(self, value, idxs_geo_terms, m_order, x_order, v_order, ns, name):
+    def __init__(self, value, idxs_geo_terms, m_order, x_order, v_order, ns, operations):
         self.value = value
         self.idxs_geo_terms = idxs_geo_terms
         self.m_order = m_order
         self.x_order = x_order
         self.v_order = v_order
         self.ns = ns
-        self.name = name
+        self.operations = operations
 
-        

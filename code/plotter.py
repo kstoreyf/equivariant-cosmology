@@ -31,7 +31,7 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
     fig = plt.figure(figsize=(sub_width*ncols_outer, sub_height*nrows_outer*2))
 
     if title is not None:
-        fig.suptitle(title, fontsize=24)
+        fig.suptitle(title, fontsize=24, y=0.94)
 
     outer = gridspec.GridSpec(nrows_outer, ncols_outer, wspace=0.5, hspace=0.25)
 
@@ -159,7 +159,8 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
 
 
 def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred, 
-                      text_results='', title=None, save_fn=None, 
+                      text_results='', title=None, save_fn=None,
+                      y_label=r'log($m_\mathrm{stellar} \: [M_\odot]$)', 
                       x_lim=(7,12), y_lim=(7,12), colors_test=None,
                       colorbar_label=''):
     fig = plt.figure(figsize=(6,6))
@@ -177,8 +178,8 @@ def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred,
     plt.plot(true_line, true_line, color='grey', zorder=0)
 
     # labels & adjustments
-    plt.xlabel(r'log($m_\mathrm{true}$)')
-    plt.ylabel(r'log($m_\mathrm{pred}$)')
+    plt.xlabel(y_label + ', true')
+    plt.ylabel(y_label + ', predicted')
 
     ax.set_aspect('equal')
     
@@ -197,7 +198,7 @@ def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred,
 
 def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred, 
                       text_results='', title=None, save_fn=None, overplot_function=None,
-                      x_scale='linear', y_scale='linear', 
+                      x_scale='linear', y_scale='linear', y_label=r'log($m_\mathrm{stellar} \: [M_\odot]$)',
                       x_lim=(10.5, 14), y_lim=(7, 12), colors_test=None,
                       colorbar_label='', mass_multiplier=1e10):
     fig = plt.figure(figsize=(8,6))
@@ -218,8 +219,8 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
         plt.plot(masses, y_powerlaw, color='forestgreen', label='input broken power law')
     
     # labels & adjustments
-    plt.xlabel(r'log($M_\mathrm{halo,DM}$)')
-    plt.ylabel(r'log($m_\mathrm{stellar,pred}$)')
+    plt.xlabel(r'log($M_\mathrm{halo,DM} \: [M_\odot]$)')
+    plt.ylabel(y_label)
     plt.xscale(x_scale)
     plt.yscale(y_scale)
 
@@ -238,7 +239,8 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
 
 def plot_fits(fitter, log_m_halo, test_error_type='percentile', 
               regularization_lambda=0.0, colors_test=None, colorbar_label='',
-              log_mass_shift=10):
+              log_mass_shift=10, y_lim=(7,12), y_label=r'log($m_\mathrm{stellar} \: [M_\odot]$)',
+              show_pred_vs_mass=False):
 
     # Extract arrays and plot
     y_true = fitter.y_scalar_test
@@ -298,10 +300,12 @@ def plot_fits(fitter, log_m_halo, test_error_type='percentile',
     
     plot_pred_vs_true(y_true, y_pred, y_train_true, y_train_pred, 
                               text_results=text_results, 
-                              colors_test=colors_test, colorbar_label=colorbar_label)
+                              colors_test=colors_test, colorbar_label=colorbar_label,
+                              x_lim=y_lim, y_lim=y_lim, y_label=y_label)
 
     log_m_halo_test += log_mass_shift
     log_m_halo_train += log_mass_shift
     plot_pred_vs_mass(log_m_halo_test, y_true, y_pred, log_m_halo_train, y_train_true, y_train_pred, 
-                              text_results=text_results,
-                              colors_test=colors_test, colorbar_label=colorbar_label)
+                              text_results=text_results, 
+                              colors_test=colors_test, colorbar_label=colorbar_label, 
+                              y_lim=y_lim, y_label=y_label)

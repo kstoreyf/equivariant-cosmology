@@ -1,7 +1,11 @@
 import numpy as np
+from pathlib import Path
 
-from fit import LinearFitter
 import utils
+from fit import LinearFitter
+from geometric_features import GeometricFeaturizer
+from read_halos import SimulationReader
+from scalar_features import ScalarFeaturizer
 
 
 def main():
@@ -17,13 +21,14 @@ def main():
     # sim / halo info
     base_dir = '/scratch/ksf293/equivariant-cosmology/data'
     snap_num_str = '099' # z = 0
-    # sim_name = 'TNG100-1'
-    # sim_name_dark = 'TNG100-1-Dark'
-    sim_name = 'TNG50-4'
-    sim_name_dark = 'TNG50-4-Dark'
+    sim_name = 'TNG100-1'
+    sim_name_dark = 'TNG100-1-Dark'
+    #sim_name = 'TNG50-4'
+    #sim_name_dark = 'TNG50-4-Dark'
     halo_dir = f'../data/halos/halos_{sim_name}'
-    halo_tag = '_nstarpartmin1'
+    halo_tag = '_nstarpartmin1_twin'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
+    log_mass_shift = 10
 
     # Load in sim reader 
     sim_reader = SimulationReader(base_dir, sim_name, sim_name_dark, snap_num_str)
@@ -60,23 +65,37 @@ def main():
     scalar_featurizer.load_features(fn_scalar_features)
     features_all = scalar_featurizer.scalar_features
 
+    # Train test split
+    frac_train = 0.70
+    frac_test = 0.15
+    #frac_train = 0.8
+    #frac_test = 0.2
+    random_ints = np.array([dark_halo.random_int for dark_halo in sim_reader.dark_halo_arr])
+    idx_train, idx_val, idx_test = utils.split_train_val_test(random_ints, frac_train=frac_train, frac_test=frac_test)
+
     # Uncertainties, powerlaw
     uncertainties_genel2019 = utils.get_uncertainties_genel2019(log_m_stellar+log_mass_shift, sim_name=sim_name)
-    y_val_current_powerlaw_fit, initial_guess = utils.fit_broken_power_law(log_m_200m, log_m_stellar, 
-                                                       uncertainties=uncertainties_genel2019)
+    y_val_current_powerlaw_fit_train, params_best_fit = utils.fit_broken_power_law(
+                                                       log_m_200m[idx_train], log_m_stellar[idx_train], 
+                                                       uncertainties=uncertainties_genel2019[idx_train])
+    y_val_current_powerlaw_fit = utils.broken_power_law(log_m_200m, *params_best_fit)                                                
 
     # run and save!
-    results = get_importance_order_addonein(features_all, log_m_stellar, y_val_current,
-                                uncertainties=uncertainties, x_features_extra=x_features_extra)
+    # pass validation set as test set for this
+    results = get_importance_order_addonein(features_all, log_m_stellar, y_val_current_powerlaw_fit,
+                                idx_train, idx_val, top_n=50,
+                                uncertainties=uncertainties_genel2019, x_features_extra=x_features_extra)
+
     # save info
     feature_imp_dir = f'../data/feature_importance/feature_importance_{sim_name}'
-    Path(feature_imp).mkdir(parents=True, exist_ok=True)
-    feature_tag = ''
-    fn_feature_imp = f'{feature_imp}/idxs_ordered_best{halo_tag}{geo_tag}{scalar_tag}{feature_tag}.npy'
+    Path(feature_imp_dir).mkdir(parents=True, exist_ok=True)
+    feature_tag = '_top50'
+    fn_feature_imp = f'{feature_imp_dir}/feature_importance{halo_tag}{geo_tag}{scalar_tag}{feature_tag}.npy'
     save_feature_importance(fn_feature_imp, results)
+    print("Done and saved!")
 
 
-def get_importance_order_addonein(features_all, log_m_stellar, y_val_current, uncertainties=None,
+def get_importance_order_addonein(features_all, log_m_stellar, y_val_current, idx_train, idx_val, uncertainties=None,
                                   x_features_extra=None, top_n=None):
 
     N_feat = features_all.shape[1]
@@ -103,7 +122,7 @@ def get_importance_order_addonein(features_all, log_m_stellar, y_val_current, un
             fitter = LinearFitter(features, log_m_stellar, 
                                 y_val_current, uncertainties=uncertainties,
                                 x_features_extra=x_features_extra)
-            fitter.split_train_test()
+            fitter.split_train_test(idx_train, idx_val)
             fitter.scale_and_fit(rms_x=True, log_x=False, log_y=False)
             fitter.predict_test()
 
@@ -126,9 +145,12 @@ def get_importance_order_addonein(features_all, log_m_stellar, y_val_current, un
 
 
 
-def save_feature_importance(self, fn_feature_imp, results):
+def save_feature_importance(fn_feature_imp, results):
     np.save(fn_feature_imp, results)
 
+
+def load_feature_importance(fn_feature_imp):
+    return np.load(fn_feature_imp, allow_pickle=True)
 
 
 if __name__=='__main__':

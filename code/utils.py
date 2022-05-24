@@ -36,17 +36,17 @@ def broken_power_law(log_m200, N=1, log_m1=12, beta=1, gamma=1):
 
 
 def fit_broken_power_law(log_m200, log_m_stellar, uncertainties, initial_guess=None,
-                         log_mass_shift=10, return_initial_guess=True):
+                         log_mass_shift=10, return_initial_guess=False):
     if initial_guess is None:
         m1 = 12-log_mass_shift
-        initial_guess = [0.01, m1, 1.5, 0.4]
-    bounds = [[0]*len(initial_guess), [np.inf]*len(initial_guess)]
-    popt, _ = curve_fit(broken_power_law, log_m200, log_m_stellar, sigma=uncertainties, 
-                        bounds=bounds, p0=initial_guess)
-    y_val_current_powerlaw_fit = broken_power_law(log_m200, *popt)
+        params_initial_guess = [0.01, m1, 1.5, 0.4]
+    bounds = [[0]*len(params_initial_guess), [np.inf]*len(params_initial_guess)]
+    params_best_fit, _ = curve_fit(broken_power_law, log_m200, log_m_stellar, sigma=uncertainties, 
+                        bounds=bounds, p0=params_initial_guess)
+    y_val_current_powerlaw_fit = broken_power_law(log_m200, *params_best_fit)
     if return_initial_guess:
-        return y_val_current_powerlaw_fit, initial_guess
-    return y_val_current_powerlaw_fit
+        return y_val_current_powerlaw_fit, params_best_fit, params_initial_guess
+    return y_val_current_powerlaw_fit, params_best_fit
 
 
 def shift_points_torus(points, shift, box_size):
@@ -120,3 +120,17 @@ def rebin_geometric_features(geo_feature_arr, n_groups):
         geo_feature_arr_rebinned.append(geo_features_halo_rebinned)
 
     return geo_feature_arr_rebinned
+
+
+# the rest is val
+def split_train_val_test(random_ints, frac_train=0.70, frac_test=0.15):
+
+    N_halos = len(random_ints)
+    int_train = int(frac_train*N_halos)
+    int_test = int((1-frac_test)*N_halos)
+
+    idx_train = np.where(random_ints < int_train)[0]
+    idx_test = np.where(random_ints >= int_test)[0]
+    idx_val = np.where((random_ints >= int_train) & (random_ints < int_test))[0]
+
+    return idx_train, idx_val, idx_test

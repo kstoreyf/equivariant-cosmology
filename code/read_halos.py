@@ -91,13 +91,14 @@ class SimulationReader:
     def read_simulations(self, subhalo_fields_to_load=None):
 
         if subhalo_fields_to_load is None:
-            subhalo_fields_to_load = ['SubhaloLenType', 'SubhaloGrNr', 'SubhaloMassType', 'SubhaloMass']
+            subhalo_fields_to_load = ['SubhaloLenType', 'SubhaloGrNr', 'SubhaloMassType', 'SubhaloMass',
+                                      'SubhaloHalfmassRadType', 'SubhaloSFR', 'SubhaloPos']
             #subhalo_fields_to_load = ['SubhaloMass','SubhaloPos','SubhaloMassType', 'SubhaloLenType', 'SubhaloHalfmassRad', 'SubhaloGrNr']
 
         self.subhalos_hydro = il.groupcat.loadSubhalos(self.base_path_hydro,self.snap_num,fields=subhalo_fields_to_load)
         self.halos_hydro = il.groupcat.loadHalos(self.base_path_hydro,self.snap_num)
 
-        self.subhalos_dark = il.groupcat.loadSubhalos(self.base_path_dark,self.snap_num,fields=subhalo_fields_to_load)
+        self.subhalos_dark = il.groupcat.loadSubhalos(self.base_path_dark,self.snap_num)#,fields=subhalo_fields_to_load)
         self.load_sim_dark_halos() # separate out bc will need these on own
 
         self.idxs_halos_hydro_all = np.arange(self.halos_hydro['count'])
@@ -225,12 +226,27 @@ class SimulationReader:
                 halo.set_catalog_property(property_name, self.subhalos_hydro['SubhaloMassType'][:,self.ipart_star][halo.idx_subhalo_hydro])
             elif property_name=='m200m':
                 halo.set_catalog_property(property_name, self.halos_dark['Group_M_Mean200'][halo.idx_halo_dark])
+            elif property_name=='v200m':
+                import astropy
+                import astropy.constants as const
+                import astropy.units as u
+                mass_multiplier = 1e10
+                G = const.G.to('(kpc * km**2)/(Msun * s**2)')
+                # m200m really in Msun/h and r200m in ckpc/h; the h's cancel out, and the c is comoving meaning
+                # we need a factor of the scale factor, but here at z=0 just 1. if go to diff z need to 
+                # make sure to include!
+                v_200m = np.sqrt(G * (mass_multiplier*halo.catalog_properties['m200m']*u.Msun) / (halo.catalog_properties['r200m']*u.kpc))
+                halo.set_catalog_property(property_name, v_200m.value)
             elif property_name=='x_minPE':
-                halo.set_catalog_property(property_name, self.halos_dark['GroupPos'][halo.idx_halo_dark])
+                halo.set_catalog_property(property_name, self.subhalos_dark['SubhaloPos'][halo.idx_subhalo_dark])
             elif property_name=='x_minPE_hydro':
-                halo.set_catalog_property(property_name, self.halos_hydro['GroupPos'][halo.idx_halo_hydro])
+                halo.set_catalog_property(property_name, self.subhalos_hydro['SubhaloPos'][halo.idx_subhalo_hydro])
             elif property_name=='x_com':
                 halo.set_catalog_property(property_name, self.halos_dark['GroupCM'][halo.idx_halo_dark])
+            elif property_name=='sfr_hydro_subhalo_star':
+                halo.set_catalog_property(property_name, self.subhalos_hydro['SubhaloSFR'][halo.idx_subhalo_hydro])
+            elif property_name=='radius_hydro_subhalo_star':
+                halo.set_catalog_property(property_name, self.subhalos_hydro['SubhaloHalfmassRadType'][:,self.ipart_star][halo.idx_subhalo_hydro])
             else:
                 raise ValueError(f"Property name {property_name} not recognized!")
 
