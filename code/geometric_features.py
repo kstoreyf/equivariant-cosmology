@@ -5,9 +5,8 @@ import itertools
 
 class GeometricFeaturizer:
 
-    
     def featurize(self, sim_reader, r_edges, x_order_max, v_order_max, 
-                 center_halo='x_com', r_units='r200m'):
+                 center_halo='x_minPE', r_units='r200m'):
         # TODO: should be saving r_edges! now im just remembering...
         # and other metadata!!
 
@@ -98,21 +97,15 @@ class GeometricFeaturizer:
 
 class GeometricFeature:
 
-    def __init__(self, value, m_order, x_order, v_order, n, hermitian=True):
+    def __init__(self, value, m_order, x_order, v_order, n, 
+                 hermitian=True, modification=None):
         self.value = value
         self.m_order = m_order
         self.x_order = x_order
         self.v_order = v_order
         self.n = n
         self.hermitian = hermitian
-        self.name = self.construct_name()
-
-    def construct_name(self):
-        n_str = self.n
-        if self.n > 9:
-            n_str = f'({self.n})'
-        # double curly braces escape f-string formatting, make single brace
-        return f"g_{{{self.x_order}{self.v_order}{n_str}}}"
+        self.modification = modification
 
 
 # should be called multiply_arbitrary_dim_terms ?
@@ -136,6 +129,7 @@ def window(n_arr, rs, r_edges, n_rbins):
         Ws[k,idxs_r_n] = 1
     return Ws 
 
+
 def vector_outer_product_power(l, vec_arr):
     if l==0:
         return np.ones(len(vec_arr))
@@ -144,5 +138,34 @@ def vector_outer_product_power(l, vec_arr):
     # if l is 2 or greater, will take outer product with itself
     return vector_outer_product(vec_arr, vec_arr)
 
+
 def vector_outer_product(v1, v2):
     return np.einsum('...j,...k->...jk',v1,v2)
+
+
+def geo_name(geometric_feature, modification=None, mode='readable'):
+    assert mode in ['readable', 'multipole'], 'Name mode not recognized!'
+
+    n_str = geometric_feature.n
+    if geometric_feature.n > 9:
+        n_str = f'({geometric_feature.n})'
+    if mode=='multipole':
+        # double curly braces escape f-string formatting, make single brace
+        name = f"g_{{{geometric_feature.x_order}{geometric_feature.v_order}{n_str}}}"
+        if not geometric_feature.hermitian:
+            name += '^A'
+    elif mode=='readable':
+        geo_name_dict = {(0,0): 'm',
+                         (0,1): 'v',
+                         (0,2): 'C^{vv}',
+                         (1,0): 'x',
+                         (1,1): 'C^{xv}',
+                         (2,0): 'C^{vv}'}
+        if modification=='symmetrized':
+            name = '\frac{1}{2} (C^{xv} + C^{vx})'  
+        elif modification=='antisymmetrized':          
+            name = '\frac{1}{2} (C^{xv} - C^{vx})'
+        else:
+            name = geo_name_dict[(geometric_feature.x_order, geometric_feature.v_order)]
+        name += f'_{n_str}'
+    return name

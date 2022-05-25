@@ -158,7 +158,8 @@ class ScalarFeaturizer:
                 # replace g value with its symmetric value
                 geo_symm = GeometricFeature(xv_symm, m_order=g.m_order, x_order=g.x_order, v_order=g.v_order, n=g.n, hermitian=True)
                 geo_terms[i_g] = geo_symm
-        # for antisymmetric tensors, only think we can do is multiply them with each other to recover the symmetry
+                
+        # for antisymmetric tensors, only thing we can do is multiply them with each other to recover the symmetry
         if len(geo_terms_xv_antisymm)==2:
             name = f'[{geo_terms_xv_antisymm[0].name}^A]_{{jk}} \, [{geo_terms_xv_antisymm[1].name}^A]_{{jk}}'
             value = np.einsum('jk,jk', *geo_vals_xv_antisymm)
@@ -270,7 +271,8 @@ class ScalarFeaturizer:
 
 class ScalarFeature:
 
-    def __init__(self, value, idxs_geo_terms, m_order, x_order, v_order, ns, operations):
+    def __init__(self, value, idxs_geo_terms, m_order, x_order, v_order, ns, 
+                operations, modification):
         self.value = value
         self.idxs_geo_terms = idxs_geo_terms
         self.m_order = m_order
@@ -279,3 +281,24 @@ class ScalarFeature:
         self.ns = ns
         self.operations = operations
 
+
+def scalar_name(scalar_feature, geo_feature_arr):
+    name_parts = []
+    for i, idx_geo_term in enumerate(scalar_feature.idxs_geo_terms):
+        # the 0 just gets the first halo, should all be same features
+        g = geo_feature_arr[0][idx_geo_term] 
+        g_name = geometric_features.geo_name(g)
+        if scalar_feature.operations[i]=='':
+            name_parts.append(f'{g_name}')
+        elif scalar_feature.operations[i]=='j':
+            name_parts.append(f'[{g_name}]_{j}')
+        elif scalar_feature.operations[i]=='jk':
+            name_parts.append(f'[{g_name}]_{jk}')
+        elif scalar_feature.operations[i]=='jj':
+            name_parts.append(f'[{g_name}]_{jk}')
+        elif 'lambda' in scalar_feature.operations[i]::
+            name_parts.append(f'{scalar_feature.operations[i]}({g_name})')
+        
+    name = ' \, '.join(name_parts)
+    return '$'+name+'$'
+    

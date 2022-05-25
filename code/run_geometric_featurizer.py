@@ -25,19 +25,20 @@ def run():
     # sim_name = 'TNG50-4'
     # sim_name_dark = 'TNG50-4-Dark'
     halo_dir = f'../data/halos/halos_{sim_name}'
-    halo_tag = '_nstarpartmin1_twin'
+    halo_tag = '_nstarpartmin10_twin'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
 
     # save info
     geo_dir = f'../data/geometric_features/geometric_features_{sim_name}'
     Path(geo_dir).mkdir(parents=True, exist_ok=True)
-    geo_tag = '_xminPE_rall'
+    geo_tag = '_xminPEsub_rall'
     fn_geo_features = f'{geo_dir}/geometric_features{halo_tag}{geo_tag}.npy'
 
     # Go!
     sim_reader = SimulationReader(base_dir, sim_name, sim_name_dark, snap_num_str)
+    sim_reader.read_simulations()
+    #sim_reader.load_sim_dark_halos()
     sim_reader.load_dark_halo_arr(fn_dark_halo_arr)
-    sim_reader.load_sim_dark_halos()
     sim_reader.add_catalog_property_to_halos('x_minPE')
 
     geo_featurizer = GeometricFeaturizer()
