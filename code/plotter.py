@@ -50,32 +50,35 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
         axarr = [ax0, ax1]
         
         ax0.set_title(titles[i_hd], pad=10)
-        alpha = 0.5
+        alpha = 0.3
+        s_dm, s_hydro = 2, 2
                 
         # Dark sim
         # want absolute positions, not shifted, so get directly from illustris
         halo_dark_dm = il.snapshot.loadHalo(base_path_dark,snap_num,halo.idx_halo_dark,'dm')
         x_halo_dark_dm = halo_dark_dm['Coordinates']
+        #x_halo_dark_dm = halo.shift_x(x_halo_dark_dm, center='x_minPE')
         ax0.scatter(x_halo_dark_dm[:,0], x_halo_dark_dm[:,1], 
-                   s=30, alpha=alpha, marker='.', color='darkblue', label='Dark halo DM')
+                   s=s_dm, alpha=alpha, marker='.', color='darkblue', label='Dark halo DM')
         
         # Hydro sim
         halo_hydro_dm = il.snapshot.loadHalo(base_path_hydro,snap_num,halo.idx_halo_hydro,'dm')
         x_halo_hydro_dm = halo_hydro_dm['Coordinates']
+        #x_halo_hydro_dm = halo.shift_x(x_halo_hydro_dm, center='x_minPE')
         ax1.scatter(x_halo_hydro_dm[:,0], x_halo_hydro_dm[:,1], 
-                   s=30, alpha=alpha, marker='.', color='blue', label='Hydro halo DM')
+                   s=s_dm, alpha=alpha, marker='.', color='rebeccapurple', label='Hydro halo DM')
         
         halo_hydro_stars = il.snapshot.loadHalo(base_path_hydro,snap_num,halo.idx_halo_hydro,'stars')
         if halo_hydro_stars['count'] > 0:
             x_halo_hydro_stars = halo_hydro_stars['Coordinates']
             ax1.scatter(x_halo_hydro_stars[:,0], x_halo_hydro_stars[:,1], 
-                       s=60, alpha=alpha, marker='.', color='orange', label='Hydro halo stars')
+                       s=s_hydro, alpha=alpha, marker='.', color='darkorange', label='Hydro halo stars')
 
         subhalo_hydro_stars = il.snapshot.loadSubhalo(base_path_hydro,snap_num,halo.idx_subhalo_hydro,'stars')
         if subhalo_hydro_stars['count'] > 0:
             x_subhalo_hydro_stars = subhalo_hydro_stars['Coordinates']
             ax1.scatter(x_subhalo_hydro_stars[:,0], x_subhalo_hydro_stars[:,1],
-                       s=60, alpha=alpha, marker='.', color='yellow', label='Hydro subhalo stars')
+                       s=s_hydro, alpha=alpha, marker='.', color='gold', label='Hydro subhalo stars')
 
         # Set labels 
         ax0.set_ylabel(r'$y$')
@@ -88,25 +91,29 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
         ax1.text(0.5, 0.9, 'hydro', fontsize=16, horizontalalignment='center',
                  verticalalignment='center', transform=ax1.transAxes)
         
-
-        # Set limits
-        x_min = np.min([ax0.get_xlim()[0], ax1.get_xlim()[0]])
-        x_max = np.max([ax0.get_xlim()[1], ax1.get_xlim()[1]])
-        ax0.set_xlim([x_min, x_max])
-        ax1.set_xlim([x_min, x_max])
-        
-        y_min = np.min([ax0.get_ylim()[0], ax1.get_ylim()[0]])
-        y_max = np.max([ax0.get_ylim()[1], ax1.get_ylim()[1]])
-        ax0.set_ylim([y_min, y_max])
-        ax1.set_ylim([y_min, y_max])
-        ax0.set_aspect('equal', adjustable='datalim')
-        ax1.set_aspect('equal', adjustable='datalim')
-        
-        plt.setp(ax0.get_xticklabels(), visible=False)
-            
         # get pos properties
         x_minPE = halo.catalog_properties['x_minPE']
         x_minPE_hydro = halo.catalog_properties['x_minPE_hydro']
+
+        # Set limits
+        # x_min = np.min([ax0.get_xlim()[0], ax1.get_xlim()[0]])
+        # x_max = np.max([ax0.get_xlim()[1], ax1.get_xlim()[1]])
+        # ax0.set_xlim([x_min, x_max])
+        # #ax1.set_xlim([x_min, x_max])
+        
+        # y_min = np.min([ax0.get_ylim()[0], ax1.get_ylim()[0]])
+        # y_max = np.max([ax0.get_ylim()[1], ax1.get_ylim()[1]])
+        # ax0.set_ylim([y_min, y_max])
+        # #ax1.set_ylim([y_min, y_max])
+        # ax0.set_aspect('equal', adjustable='datalim')
+        # x_min_set, x_max_set = ax0.get_xlim()
+        # y_min_set, y_max_set = ax0.get_ylim()
+        # ax1.set_xlim([x_min_set, x_max_set])
+        # ax1.set_ylim([y_min_set, y_max_set])
+        #ax1.set_aspect('equal'), adjustable='datalim')
+
+            
+
         
         # compute dark CoM
         particle0_pos = x_halo_dark_dm[0]
@@ -119,30 +126,29 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
         com_hydro = np.mean(x_arr_shifted_byparticle, axis=0) + particle0_pos
 
 
-        # Plot position points
-        lw = 2
-        dark_color = 'grey'
-        
-        ax0.axvline(x_minPE[0], c=dark_color, lw=lw, label='Most bound dark halo particle')
+        # Plot central position points
+        lw = 1
+        dark_color = 'lightskyblue'
+        ax0.axvline(x_minPE[0], c=dark_color, lw=lw, label='Most bound dark subhalo particle')
         ax0.axhline(x_minPE[1], c=dark_color, lw=lw)
         ax1.axvline(x_minPE[0], c=dark_color, lw=lw)
         ax1.axhline(x_minPE[1], c=dark_color, lw=lw)
         
-        light_color = 'skyblue'
-        ax0.axvline(x_minPE_hydro[0], c=light_color, lw=lw, label='Most bound hydro halo particle')
+        light_color = 'mediumslateblue'
+        ax0.axvline(x_minPE_hydro[0], c=light_color, lw=lw, label='Most bound hydro subhalo particle')
         ax0.axhline(x_minPE_hydro[1], c=light_color, lw=lw)
         ax1.axvline(x_minPE_hydro[0], c=light_color, lw=lw)
         ax1.axhline(x_minPE_hydro[1], c=light_color, lw=lw)
 
         # Plot R200
         r200 = halo.catalog_properties['r200m']
-        circle_r200 = plt.Circle((x_minPE[0], x_minPE[1]), r200, color='forestgreen', fill=False, label='R200')
+        circle_r200 = plt.Circle((x_minPE[0], x_minPE[1]), r200, color='silver', fill=False, label='R200', lw=1.5)
         ax0.add_patch(circle_r200)
 
-        circle_innerouter = plt.Circle((x_minPE[0], x_minPE[1]), 3/8*r200, color='limegreen', fill=False, label='Inner/outer radius')
+        circle_innerouter = plt.Circle((x_minPE[0], x_minPE[1]), 3/8*r200, color='silver', fill=False, label='Inner/outer radius', lw=1.5, ls=':')
         ax0.add_patch(circle_innerouter)
 
-        # Plot most bound
+        # Plot CoM
         ax0.scatter(com_dark[0], com_dark[1], marker='+', color=dark_color, s=200, lw=3, label='CoM of dark halo DM particles')
         ax1.scatter(com_hydro[0], com_hydro[1], marker='+', color=light_color, s=200, lw=3, label='CoM of hydro halo DM particles')
 
@@ -150,6 +156,16 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
         fig.add_subplot(ax0)
         fig.add_subplot(ax1)
         fig.align_ylabels(axarr)
+
+        # set limits
+        center = 0.5*(x_minPE + x_minPE_hydro)
+        radius_box = 1.5*r200
+        ax0.set_xlim(center[0]-radius_box, center[0]+radius_box)
+        ax1.set_xlim(center[0]-radius_box, center[0]+radius_box)
+        ax0.set_ylim(center[1]-radius_box, center[1]+radius_box)
+        ax1.set_ylim(center[1]-radius_box, center[1]+radius_box)
+        plt.setp(ax0.get_xticklabels(), visible=False)
+
 
     handles0, labels0 = ax0.get_legend_handles_labels()
     handles1, labels1 = ax1.get_legend_handles_labels()
@@ -160,12 +176,13 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
 
 def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred, 
                       text_results='', title=None, save_fn=None,
-                      y_label=r'log($m_\mathrm{stellar} \: [M_\odot]$)', 
+                      y_label_key='mstellar', 
                       x_lim=(7,12), y_lim=(7,12), colors_test=None,
                       colorbar_label=''):
     fig = plt.figure(figsize=(6,6))
     ax = plt.gca()
 
+    y_label = utils.label_dict[y_label_key]
     # main scatter plotting
     plt.scatter(y_train, y_train_pred, s=12, alpha=0.3, c='m', label='training')
     if colors_test is None:
@@ -198,12 +215,14 @@ def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred,
 
 def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred, 
                       text_results='', title=None, save_fn=None, overplot_function=None,
-                      x_scale='linear', y_scale='linear', y_label=r'log($m_\mathrm{stellar} \: [M_\odot]$)',
+                      x_scale='linear', y_scale='linear', y_label_key='mstellar',
                       x_lim=(10.5, 14), y_lim=(7, 12), colors_test=None,
                       colorbar_label='', mass_multiplier=1e10):
     fig = plt.figure(figsize=(8,6))
     ax = plt.gca()
     
+    y_label = utils.label_dict[y_label_key]
+
     # main scatter plotting
     plt.scatter(mass, y_true, s=12, alpha=0.3, c='r', label='true (test)')
     if colors_test is None:
@@ -239,7 +258,7 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
 
 def plot_fits(fitter, log_m_halo, test_error_type='percentile', 
               regularization_lambda=0.0, colors_test=None, colorbar_label='',
-              log_mass_shift=10, y_lim=(7,12), y_label=r'log($m_\mathrm{stellar} \: [M_\odot]$)',
+              log_mass_shift=10, y_lim=(7,12), y_label_key='mstellar',
               show_pred_vs_mass=False):
 
     # Extract arrays and plot
@@ -301,11 +320,11 @@ def plot_fits(fitter, log_m_halo, test_error_type='percentile',
     plot_pred_vs_true(y_true, y_pred, y_train_true, y_train_pred, 
                               text_results=text_results, 
                               colors_test=colors_test, colorbar_label=colorbar_label,
-                              x_lim=y_lim, y_lim=y_lim, y_label=y_label)
+                              x_lim=y_lim, y_lim=y_lim, y_label_key=y_label_key)
 
     log_m_halo_test += log_mass_shift
     log_m_halo_train += log_mass_shift
     plot_pred_vs_mass(log_m_halo_test, y_true, y_pred, log_m_halo_train, y_train_true, y_train_pred, 
                               text_results=text_results, 
                               colors_test=colors_test, colorbar_label=colorbar_label, 
-                              y_lim=y_lim, y_label=y_label)
+                              y_lim=y_lim, y_label_key=y_label_key)
