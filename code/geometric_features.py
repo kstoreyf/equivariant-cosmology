@@ -143,7 +143,7 @@ def vector_outer_product(v1, v2):
     return np.einsum('...j,...k->...jk',v1,v2)
 
 
-def geo_name(geometric_feature, modification=None, mode='readable'):
+def geo_name(geometric_feature, mode='readable'):
     assert mode in ['readable', 'multipole'], 'Name mode not recognized!'
 
     n_str = geometric_feature.n
@@ -160,11 +160,11 @@ def geo_name(geometric_feature, modification=None, mode='readable'):
                          (0,2): 'C^{vv}',
                          (1,0): 'x',
                          (1,1): 'C^{xv}',
-                         (2,0): 'C^{vv}'}
-        if modification=='symmetrized':
-            name = '\frac{1}{2} (C^{xv} + C^{vx})'  
-        elif modification=='antisymmetrized':          
-            name = '\frac{1}{2} (C^{xv} - C^{vx})'
+                         (2,0): 'C^{xx}'}
+        if geometric_feature.modification=='symmetrized':
+            name = '\\frac{1}{2} (C^{xv} + C^{vx})'  
+        elif geometric_feature.modification=='antisymmetrized':          
+            name = '\\frac{1}{2} (C^{xv} - C^{vx})'
         else:
             name = geo_name_dict[(geometric_feature.x_order, geometric_feature.v_order)]
         name += f'_{n_str}'

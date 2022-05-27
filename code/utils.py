@@ -1,8 +1,11 @@
 import numpy as np
 from scipy.optimize import curve_fit
 
-from geometric_features import GeometricFeature
+from geometric_features import GeometricFeature, geo_name
 
+
+label_dict = {'m200m': r'log($m_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
+              'mstellar': r'log($m_\mathrm{stellar} \: [h^{-1} \, M_\odot]$)'}
 
 
 def get_alt_sim_name(sim_name):
@@ -120,6 +123,35 @@ def rebin_geometric_features(geo_feature_arr, n_groups):
         geo_feature_arr_rebinned.append(geo_features_halo_rebinned)
 
     return geo_feature_arr_rebinned
+
+
+def transform_pseudotensors(geo_feature_arr):
+
+    geo_feature_arr = list(geo_feature_arr)
+    for i_halo, geo_features_halo in enumerate(geo_feature_arr):
+        gs_to_insert = []
+        idxs_to_insert = []
+        for i_feat, g in enumerate(geo_features_halo):
+
+            if not g.hermitian and g.modification is None:
+                g_value_symm = 0.5*(g.value + g.value.T)
+                g_value_antisymm =  0.5*(g.value - g.value.T)
+                g_symm = GeometricFeature(g_value_symm, m_order=g.m_order, x_order=g.x_order, v_order=g.v_order, 
+                                            n=g.n, hermitian=True, modification='symmetrized')
+                g_antisymm = GeometricFeature(g_value_antisymm, m_order=g.m_order, x_order=g.x_order, v_order=g.v_order, 
+                                                n=g.n, hermitian=False, modification='antisymmetrized')
+                # replace original with symmetric                
+                geo_feature_arr[i_halo][i_feat] = g_symm
+                # keep antsymmetric to insert right after symmetric, later
+                gs_to_insert.append(g_antisymm)
+                idxs_to_insert.append(i_feat+1)
+        
+        # inserting all at end to not mess up looping
+        # for now should only have one pseudotensor per halo (C^{xv}), but may not always be true
+        for idxs_to_insert, g_to_insert in zip(idxs_to_insert, gs_to_insert):
+            geo_feature_arr[i_halo] = np.insert(geo_feature_arr[i_halo], idxs_to_insert, g_to_insert)
+
+    return np.array(geo_feature_arr)
 
 
 # the rest is val
