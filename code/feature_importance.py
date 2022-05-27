@@ -1,4 +1,5 @@
 import numpy as np
+import time
 from pathlib import Path
 
 import utils
@@ -10,25 +11,35 @@ from scalar_features import ScalarFeaturizer
 
 def main():
 
+    # feature parameters
+    top_n = None
+    label_name = 'mstellar'
+    #feature_tag = f'_top{top_n}_{label_name}'
+    feature_tag = f'_{label_name}'
+
     # scalar parameters
     m_order_max = 2
     x_order_max = 4
     v_order_max = 4
     n_groups = [[0,1,2], [3,4,5,6,7], [8,9,10]]
-    scalar_tag = f'_3bins_rescaled_mord{m_order_max}_xord{x_order_max}_vord{v_order_max}'
-    geo_tag = '_xminPE_rall'
+    scalar_tag = f'_3bins_pseudo_rescaled_mord{m_order_max}_xord{x_order_max}_vord{v_order_max}'
+
+    # geo parameters
+    geo_tag = '_xminPEsub_rall'
 
     # sim / halo info
     base_dir = '/scratch/ksf293/equivariant-cosmology/data'
     snap_num_str = '099' # z = 0
     sim_name = 'TNG100-1'
     sim_name_dark = 'TNG100-1-Dark'
-    #sim_name = 'TNG50-4'
-    #sim_name_dark = 'TNG50-4-Dark'
+    # sim_name = 'TNG50-4'
+    # sim_name_dark = 'TNG50-4-Dark'
     halo_dir = f'../data/halos/halos_{sim_name}'
     halo_tag = '_nstarpartmin1_twin'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
     log_mass_shift = 10
+
+    start = time.time()
 
     # Load in sim reader 
     sim_reader = SimulationReader(base_dir, sim_name, sim_name_dark, snap_num_str)
@@ -36,6 +47,8 @@ def main():
     sim_reader.read_simulations()
     sim_reader.add_catalog_property_to_halos('mass_hydro_subhalo_star')
     sim_reader.add_catalog_property_to_halos('m200m')
+    sim_reader.add_catalog_property_to_halos('r200m')
+    sim_reader.add_catalog_property_to_halos('v200m')
 
     # get halo properties
     m_stellar = np.array([dark_halo.catalog_properties['mass_hydro_subhalo_star'] for dark_halo in sim_reader.dark_halo_arr])
@@ -51,16 +64,18 @@ def main():
     geo_featurizer = GeometricFeaturizer()
     geo_featurizer.load_features(fn_geo_features)
     geo_feature_arr_rebinned = utils.rebin_geometric_features(geo_featurizer.geo_feature_arr, n_groups)
+    geo_feature_arr_pseudo = utils.transform_pseudotensors(geo_feature_arr_rebinned)
 
     # scalar info
     scalar_dir = f'../data/scalar_features/scalar_features_{sim_name}'
     fn_scalar_features = f'{scalar_dir}/scalar_features{halo_tag}{geo_tag}{scalar_tag}.npy'
 
-    scalar_featurizer = ScalarFeaturizer(geo_feature_arr_rebinned)
-    scalar_featurizer.compute_MXV_from_features()
-    x_features_extra = np.vstack((scalar_featurizer.M_tot, 
-                                scalar_featurizer.X_rms,
-                                scalar_featurizer.V_rms)).T
+    scalar_featurizer = ScalarFeaturizer(geo_feature_arr_pseudo)
+    r_200m = np.array([dark_halo.catalog_properties['r200m'] for dark_halo in sim_reader.dark_halo_arr])
+    v_200m = np.array([dark_halo.catalog_properties['v200m'] for dark_halo in sim_reader.dark_halo_arr])
+    scalar_featurizer.rescale_geometric_features(m_200m, r_200m, v_200m)
+
+    x_features_extra = np.vstack((m_200m, r_200m, v_200m)).T
     x_features_extra = np.log10(x_features_extra)   
     scalar_featurizer.load_features(fn_scalar_features)
     features_all = scalar_featurizer.scalar_features
@@ -83,17 +98,18 @@ def main():
     # run and save!
     # pass validation set as test set for this
     results = get_importance_order_addonein(features_all, log_m_stellar, y_val_current_powerlaw_fit,
-                                idx_train, idx_val, top_n=50,
+                                idx_train, idx_val, top_n=top_n,
                                 uncertainties=uncertainties_genel2019, x_features_extra=x_features_extra)
 
     # save info
     feature_imp_dir = f'../data/feature_importance/feature_importance_{sim_name}'
     Path(feature_imp_dir).mkdir(parents=True, exist_ok=True)
-    feature_tag = '_top50'
     fn_feature_imp = f'{feature_imp_dir}/feature_importance{halo_tag}{geo_tag}{scalar_tag}{feature_tag}.npy'
     save_feature_importance(fn_feature_imp, results)
     print("Done and saved!")
 
+    end = time.time()
+    print("Time:", end-start, 'sec')
 
 def get_importance_order_addonein(features_all, log_m_stellar, y_val_current, idx_train, idx_val, uncertainties=None,
                                   x_features_extra=None, top_n=None):

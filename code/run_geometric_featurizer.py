@@ -1,5 +1,6 @@
 import numpy as np
 from pathlib import Path
+import time
 
 from read_halos import SimulationReader
 from geometric_features import GeometricFeaturizer
@@ -35,6 +36,8 @@ def run():
     fn_geo_features = f'{geo_dir}/geometric_features{halo_tag}{geo_tag}.npy'
 
     # Go!
+    start = time.time()
+
     sim_reader = SimulationReader(base_dir, sim_name, sim_name_dark, snap_num_str)
     sim_reader.read_simulations()
     #sim_reader.load_sim_dark_halos()
@@ -47,6 +50,8 @@ def run():
     geo_featurizer.save_features(fn_geo_features)
     print(f'Saved geometric features to {fn_geo_features}')
 
+    end = time.time()
+    print("Time:", end-start, 'sec')
 
 
 if __name__=='__main__':

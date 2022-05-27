@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 from read_halos import SimulationReader
@@ -30,6 +31,8 @@ def run():
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
 
     # Go!
+    start = time.time()
+
     sim_reader = SimulationReader(base_dir, sim_name, sim_name_dark, snap_num_str)
     sim_reader.read_simulations()
     sim_reader.match_twins()
@@ -41,6 +44,8 @@ def run():
     sim_reader.save_dark_halo_arr(fn_dark_halo_arr)
     print(f'Saved halos to {fn_dark_halo_arr}')
 
+    end = time.time()
+    print("Time:", end-start, 'sec')
 
 
 if __name__=='__main__':

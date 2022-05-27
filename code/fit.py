@@ -65,8 +65,6 @@ class Fitter:
         self.x_scalar_test = self.x_scalar_features[self.idx_test]
         self.y_scalar_train = self.y_scalar[self.idx_train]
         self.y_scalar_test = self.y_scalar[self.idx_test]
-        print('y_scalar_test:', np.min(self.y_scalar_test), np.max(self.y_scalar_test))
-
 
         # Split uncertainties, y_val_currents, extra features if exist
         self.uncertainties_train = self.uncertainties[self.idx_train]
@@ -92,7 +90,6 @@ class Fitter:
     def scale_y_values(self):
         self.y_scalar_train_scaled = self.scale_y(self.y_scalar_train)
         self.y_scalar_test_scaled = self.scale_y(self.y_scalar_test)
-        print('scale_y:', np.min(self.y_scalar_test), np.max(self.y_scalar_test))
         self.uncertainties_train_scaled = self.scale_uncertainties(self.uncertainties_train, self.y_scalar_train)
         self.y_val_current_train_scaled = self.scale_y(self.y_val_current_train)
         self.y_val_current_test_scaled = self.scale_y(self.y_val_current_test)
@@ -183,7 +180,6 @@ class LinearFitter(Fitter):
             self.x_features_extra_test_scaled = self.scale_x_features(self.x_features_extra_test)
         self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, self.y_val_current_test_scaled,
                                                     x_features_extra=self.x_features_extra_test_scaled)
-        print('predict_test:', np.min(self.y_scalar_test), np.max(self.y_scalar_test))
         self.y_scalar_pred = self.predict_from_A(self.A_test)
 
 
