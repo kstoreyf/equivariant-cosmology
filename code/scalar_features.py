@@ -4,7 +4,7 @@ import numpy as np
 from collections import defaultdict
 
 import utils
-from geometric_features import GeometricFeature
+from geometric_features import GeometricFeature, geo_name
 
 
 
@@ -31,36 +31,122 @@ class ScalarFeaturizer:
             scalar_arr_i = self.get_scalar_features(geo_features_halo, m_order_max,
                                                     x_order_max, v_order_max,
                                                     eigenvalues_not_trace=eigenvalues_not_trace)
+
             scalar_vals = np.array([s.value for s in scalar_arr_i])
             self.scalar_feature_arr.append(scalar_arr_i)
             self.scalar_features.append(scalar_vals)
+            # print("BREAKING for now")
+            # break
 
         self.scalar_feature_arr = np.array(self.scalar_feature_arr, dtype=object)
         self.scalar_features = np.array(self.scalar_features)
         self.scalar_features, self.scalar_feature_arr = self.sort_scalar_features(
                                                         self.scalar_features, self.scalar_feature_arr)
+        # for s in self.scalar_feature_arr[0]:
+        #     print(scalar_name(s, self.geo_feature_arr))
         self.n_features = self.scalar_features.shape[1]
 
 
     def get_scalar_features(self, geometric_features, m_order_max, x_order_max, v_order_max,
                             eigenvalues_not_trace=False):
+
+        assert m_order_max >= 1 and m_order_max <= 2, "m_order_max must be 1 or 2 (for now!)"
+
+        N_geo = len(geometric_features)
+
         scalar_features = []
-        num_terms = np.arange(1, m_order_max+1)
-        # Get all combinations of geometric features with m_order_max terms or fewer
-        idxs_geometric_features = np.arange(len(geometric_features))
-        geometric_features = np.array(geometric_features)
-        for nt in num_terms:
-            #geo_term_combos = list(itertools.combinations_with_replacement(geometric_features, nt))
-            idx_geo_term_combos = list(itertools.combinations_with_replacement(idxs_geometric_features, nt))
-            for idxs_geo_terms in idx_geo_term_combos:
-                idxs_geo_terms = list(idxs_geo_terms)
-                geo_terms = geometric_features[np.array(idxs_geo_terms)]
-                s_features = self.make_scalar_feature(geo_terms, idxs_geo_terms, m_order_max,
-                                        x_order_max, v_order_max,
-                                        eigenvalues_not_trace=eigenvalues_not_trace)
-                if s_features != -1:
-                    scalar_features.extend(s_features)
-        return scalar_features
+        scalar_features_single = []
+
+        for i_geo_term in range(N_geo):
+            g1 = geometric_features[i_geo_term]
+            if g1.x_order > x_order_max or g1.v_order > v_order_max:
+                continue
+            
+            ### Single term features
+
+            # Scalar: raw value
+            if g1.x_order + g1.v_order == 0:
+                value = g1.value
+                operations = ['']
+                scalar_features_single.append( ScalarFeature(value, [i_geo_term], 
+                                                             g1.m_order, g1.x_order, g1.v_order, [g1.n], operations) )
+
+            # Tensor: contraction OR eigenvalues
+            # Can only do these operations if g1 hermitian, bc need real eigenalues, and trace of 
+            # antisymmetric matrix is 0 (took difference)
+            elif g1.x_order + g1.v_order == 2 and g1.hermitian:
+                if eigenvalues_not_trace:
+                    eigenvalues = np.linalg.eigvalsh(g1.value) # returns in ascending order
+                    for i_e, eigenvalue in enumerate(eigenvalues):
+                        eig_num = 3 - i_e  # this makes lambda_1 = max, lambda_3 = min
+                        operations = [f'\lambda_{eig_num}']
+                        scalar_features_single.append( ScalarFeature(value, [i_geo_term], 
+                                                             g1.m_order, g1.x_order, g1.v_order, [g1.n], operations) )
+                else:
+                    value = np.einsum('jj', g1.value)
+                    operations = ['jj']
+                    scalar_features_single.append( ScalarFeature(value, [i_geo_term], 
+                                                             g1.m_order, g1.x_order, g1.v_order, [g1.n], operations) )
+                
+        if m_order_max >= 2:
+            ### Two-term features
+            # this includes self-pairs but not duplicate permutations
+            for i_geo_term in range(N_geo):
+                g1 = geometric_features[i_geo_term]
+                for j_geo_term in range(i_geo_term, N_geo):
+                    g2 = geometric_features[j_geo_term]
+                    value = None
+
+                    x_order = g1.x_order + g2.x_order
+                    v_order = g1.v_order + g2.v_order
+                    if x_order > x_order_max or v_order > v_order_max:
+                        continue
+
+                    # 2 vectors: inner product
+                    if g1.x_order + g1.v_order == 1 and g2.x_order + g2.v_order == 1:
+                        value = np.einsum('j,j', g1.value, g2.value)
+                        operations = ['j','j']
+
+                    # 2 tensors or 2 pseudotensors: full contraction
+                    elif g1.x_order + g1.v_order == 2 and g2.x_order + g2.v_order == 2:
+                        if g1.hermitian == g2.hermitian:
+                            if not g1.hermitian or not g2.hermitian:
+                                msg = 'Non-hermitian terms not antisymmetrized! Did you forget to transform_pseudotensors()?'
+                                assert g1.modification=='antisymmetrized' and g2.modification=='antisymmetrized', msg
+                            value = np.einsum('jk,jk', g1.value, g2.value)
+                            operations = ['jk','jk']
+                            
+                    # Get scalar feature properties and add to list
+                    # only add to list if we assigned it a value, aka it matched one of the criteria above
+                    if value is not None:
+                        m_order = g1.m_order + g2.m_order
+                        ns = [g1.n, g2.n]
+                        scalar_features.append( ScalarFeature(value, [i_geo_term, j_geo_term], 
+                                                            m_order, x_order, v_order, ns, operations) )
+
+        # Combine single-term features into two-term features
+        for i_s in range(len(scalar_features_single)):
+            s1 = scalar_features_single[i_s]
+            for j_s in range(i_s, len(scalar_features_single)):
+                s2 = scalar_features_single[j_s]
+
+                value = s1.value * s2.value
+                idxs_geo_terms = np.concatenate((s1.idxs_geo_terms, s2.idxs_geo_terms))
+                m_order = s1.m_order + s2.m_order
+                x_order = s1.x_order + s2.x_order
+                v_order = s1.v_order + s2.v_order
+                ns = np.concatenate((s1.ns, s2.ns))
+                
+                operations = np.concatenate((s1.operations, s2.operations))
+
+                scalar_features.append( ScalarFeature(value, idxs_geo_terms, 
+                                                        m_order, x_order, v_order, ns, operations) )
+
+        # Add in single-term features on their own
+        scalar_features.extend(scalar_features_single)
+
+        # order is handled in another function, so doesn't matter here
+        return scalar_features        
 
 
     def sort_scalar_features(self, scalar_features, scalar_feature_arr):
@@ -71,7 +157,7 @@ class ScalarFeaturizer:
         dtypes.extend([(n_col_name, int) for n_col_name in n_col_names])
         scalar_feature_table = np.empty(len(scalar_features_single), dtype=dtypes)
 
-        scalar_feature_table['name'] = [s.name for s in scalar_features_single]
+        scalar_feature_table['name'] = [scalar_name(s, self.geo_feature_arr) for s in scalar_features_single]
         scalar_feature_table['m_order'] = [s.m_order for s in scalar_features_single]
         scalar_feature_table['x_order'] = [s.x_order for s in scalar_features_single]
         scalar_feature_table['v_order'] = [s.v_order for s in scalar_features_single]
@@ -129,130 +215,6 @@ class ScalarFeaturizer:
                     geo_feat.value /= Rs[i_g]
                 for _ in range(geo_feat.v_order):
                     geo_feat.value /= Vs[i_g]
-
-
-    def make_scalar_feature(self, geo_terms, idxs_geo_terms, m_order_max, x_order_max, v_order_max, 
-                            eigenvalues_not_trace=False):
-
-        # should these orders be degree?
-        x_order_tot = np.sum([g.x_order for g in geo_terms])
-        v_order_tot = np.sum([g.v_order for g in geo_terms])
-        xv_order_tot = x_order_tot + v_order_tot
-        xv_orders_allowed = [0, 2, 4] # allowing two-tensor terms, but not odd-order!
-        # i think if the first case is satisfied the others will be too, but keeping to be safe
-        if xv_order_tot not in xv_orders_allowed or x_order_tot > x_order_max or v_order_tot > v_order_max:
-            return -1
-                
-        subcombo_table = []
-
-        # construct symmetric and antisymmetric tensors
-        geo_terms_xv_antisymm = []
-        geo_vals_xv_antisymm = []
-        for i_g, g in enumerate(geo_terms):
-            if not g.hermitian:
-                # g = x(outer)v, so g^T = v(outer)x
-                xv_symm = 0.5*(g.value + g.value.T)
-                xv_antisymm =  0.5*(g.value - g.value.T)
-                geo_vals_xv_antisymm.append(xv_antisymm)
-                geo_terms_xv_antisymm.append(g)
-                # replace g value with its symmetric value
-                geo_symm = GeometricFeature(xv_symm, m_order=g.m_order, x_order=g.x_order, v_order=g.v_order, n=g.n, hermitian=True)
-                geo_terms[i_g] = geo_symm
-                
-        # for antisymmetric tensors, only thing we can do is multiply them with each other to recover the symmetry
-        if len(geo_terms_xv_antisymm)==2:
-            name = f'[{geo_terms_xv_antisymm[0].name}^A]_{{jk}} \, [{geo_terms_xv_antisymm[1].name}^A]_{{jk}}'
-            value = np.einsum('jk,jk', *geo_vals_xv_antisymm)
-            subcombo_table.append([name, value, geo_terms_xv_antisymm])
-                    
-        # multi t terms
-        # two-vector terms
-        geo_terms_vec = [g for g in geo_terms if g.x_order+g.v_order==1]
-        assert len(geo_terms_vec) <= 2, "not going above 3 terms so shouldnt have more than 2 vector terms for scalars!"
-        # t10n t10n', t01n t01n', t10n t01n'
-        if len(geo_terms_vec)==2:
-            # vector & vector: take inner product
-            geo_vals_vec = [g.value for g in geo_terms_vec]
-            name = f'[{geo_terms_vec[0].name}]_j \, [{geo_terms_vec[1].name}]_j'
-            value = np.einsum('j,j', *geo_vals_vec)
-            subcombo_table.append([name, value, geo_terms_vec])
-
-        # two tensor terms
-        # shouldn't be any non-hermitian left in here, but making sure!
-        geo_terms_tensor = [g for g in geo_terms if g.x_order+g.v_order==2 and g.hermitian] 
-        assert len(geo_terms_tensor) <= 2, "not going above 4th order so shouldnt have more than 2 tensor terms!"
-        if len(geo_terms_tensor)==2:
-            geo_vals_tensor = [g.value for g in geo_terms_tensor]
-            # tensor and tensor: do contraction
-            # not adding to geo_vals_from_tensors bc those get multiplied in everywhere 
-            # (only single-tensor contraction or eigenvalues)
-            # (but shouldnt matter when limiting to two terms)
-            name = f'[{geo_terms_tensor[0].name}]_{{jk}} \, [{geo_terms_tensor[1].name}]_{{jk}}'
-            value = np.einsum('jk,jk', *geo_vals_tensor)
-            subcombo_table.append([name, value, geo_terms_tensor])
-
-        # single t terms
-        for g in geo_terms:
-            xv_order = g.x_order + g.v_order
-            if xv_order==0:
-                # t00n
-                name = g.name
-                subcombo_table.append([name, g.value, [g]])
-            elif xv_order==2:
-                # t20n, t02n, t11n
-                # if g is hermitian, include trace OR eigenvalues
-                if g.hermitian:
-                    if eigenvalues_not_trace:
-                        # eigenvalues
-                        eigenvalues = np.linalg.eigvalsh(g.value) # returns in ascending order
-                        for i, eigenvalue in enumerate(eigenvalues):
-                            eig_num = 3 - i  # this makes lambda_1 = max, lambda_3 = min
-                            name = f'\lambda_{eig_num}({g.name})'
-                            subcombo_table.append([name, eigenvalue, [g]])
-                    else:
-                        # trace
-                        name = f'[{g.name}]_{{jj}}'
-                        value = np.einsum('jj', g.value)
-                        subcombo_table.append([name, value, [g]])
-
-        subcombo_table = np.array(subcombo_table, dtype=object)
-        n_geo_terms = len(geo_terms)
-        geo_terms_names = [g.name for g in geo_terms]
-        geo_term_names_set = set(geo_terms_names)
-
-        # will need this info to make scalar feature
-        m_order = np.sum([g.m_order for g in geo_terms])
-        x_order = np.sum([g.x_order for g in geo_terms])
-        v_order = np.sum([g.v_order for g in geo_terms])
-        ns = np.array([g.n for g in geo_terms])
-
-        s_features = {}
-        #+1 to include m_order_max; this is max possible number of terms in subcombos
-        num_subcombos = np.arange(1, m_order_max+1) 
-        # Get all combinations of geometric features with m_order_max terms or fewer
-        for nsc in num_subcombos:
-            idx_subcombos = np.arange(len(subcombo_table))
-            idx_lists_combos = list(itertools.combinations(idx_subcombos, nsc)) # no replacement!
-
-            for idx_list in idx_lists_combos:
-                subcombo = subcombo_table[idx_list,:]
-                subcombo = np.atleast_2d(subcombo)
-                subcombo_geo_terms = subcombo[:,2]
-                subcombo_geo_terms_flat = [g for g_subcombo in subcombo_geo_terms for g in g_subcombo]
-
-                # # Only if each original geo_term appears in subcombo exactly once does it make a valid term
-                if len(subcombo_geo_terms_flat)==n_geo_terms:
-                    subcombo_geo_term_names = [g.name for g in subcombo_geo_terms_flat]
-                    if set(subcombo_geo_term_names)==geo_term_names_set: 
-                        subcombo_vals = subcombo[:,1]
-                        value = np.product(subcombo_vals)
-                        i_order = np.argsort(subcombo[:,0])
-                        name = ' \, '.join(subcombo[:,0][i_order])
-                        if name not in s_features:
-                            s_features[name] = ScalarFeature(value, idxs_geo_terms, 
-                                                    m_order, x_order, v_order, ns, name)
-
-        return s_features.values()
     
 
     def save_features(self, fn_scalar_features):
@@ -272,7 +234,7 @@ class ScalarFeaturizer:
 class ScalarFeature:
 
     def __init__(self, value, idxs_geo_terms, m_order, x_order, v_order, ns, 
-                operations, modification):
+                operations, modification=None):
         self.value = value
         self.idxs_geo_terms = idxs_geo_terms
         self.m_order = m_order
@@ -282,21 +244,21 @@ class ScalarFeature:
         self.operations = operations
 
 
-def scalar_name(scalar_feature, geo_feature_arr):
+def scalar_name(scalar_feature, geo_feature_arr, mode='readable'):
     name_parts = []
     for i, idx_geo_term in enumerate(scalar_feature.idxs_geo_terms):
         # the 0 just gets the first halo, should all be same features
         g = geo_feature_arr[0][idx_geo_term] 
-        g_name = geometric_features.geo_name(g)
+        g_name = geo_name(g, mode=mode)
         if scalar_feature.operations[i]=='':
             name_parts.append(f'{g_name}')
         elif scalar_feature.operations[i]=='j':
-            name_parts.append(f'[{g_name}]_{j}')
+            name_parts.append(f'[{g_name}]_{{j}}')
         elif scalar_feature.operations[i]=='jk':
-            name_parts.append(f'[{g_name}]_{jk}')
+            name_parts.append(f'[{g_name}]_{{jk}}')
         elif scalar_feature.operations[i]=='jj':
-            name_parts.append(f'[{g_name}]_{jk}')
-        elif 'lambda' in scalar_feature.operations[i]::
+            name_parts.append(f'[{g_name}]_{{jk}}')
+        elif 'lambda' in scalar_feature.operations[i]:
             name_parts.append(f'{scalar_feature.operations[i]}({g_name})')
         
     name = ' \, '.join(name_parts)
