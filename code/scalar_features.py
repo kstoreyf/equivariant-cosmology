@@ -77,7 +77,7 @@ class ScalarFeaturizer:
             elif g1.x_order + g1.v_order == 2 and g1.hermitian:
                 if eigenvalues_not_trace:
                     eigenvalues = np.linalg.eigvalsh(g1.value) # returns in ascending order
-                    for i_e, eigenvalue in enumerate(eigenvalues):
+                    for i_e, value in enumerate(eigenvalues):
                         eig_num = 3 - i_e  # this makes lambda_1 = max, lambda_3 = min
                         operations = [f'\lambda_{eig_num}']
                         scalar_features_single.append( ScalarFeature(value, [i_geo_term], 
@@ -259,7 +259,7 @@ def scalar_name(scalar_feature, geo_feature_arr, mode='readable'):
         elif scalar_feature.operations[i]=='jj':
             name_parts.append(f'[{g_name}]_{{jk}}')
         elif 'lambda' in scalar_feature.operations[i]:
-            name_parts.append(f'{scalar_feature.operations[i]}({g_name})')
+            name_parts.append(f'{scalar_feature.operations[i]}\\left({g_name}\\right)')
         
     name = ' \, '.join(name_parts)
     return '$'+name+'$'
