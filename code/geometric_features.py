@@ -162,10 +162,9 @@ def geo_name(geometric_feature, mode='readable'):
                          (1,1): 'C^{xv}',
                          (2,0): 'C^{xx}'}
         if geometric_feature.modification=='symmetrized':
-            name = '\\frac{1}{2} (C^{xv} + C^{vx})'  
+            name = f'\\frac{{1}}{{2}} (C^{{xv}}_{n_str} + C^{{vx}}_{n_str})'  
         elif geometric_feature.modification=='antisymmetrized':          
-            name = '\\frac{1}{2} (C^{xv} - C^{vx})'
+            name = f'\\frac{{1}}{{2}} (C^{{xv}}_{n_str} - C^{{vx}}_{n_str})'
         else:
-            name = geo_name_dict[(geometric_feature.x_order, geometric_feature.v_order)]
-        name += f'_{n_str}'
+            name = geo_name_dict[(geometric_feature.x_order, geometric_feature.v_order)] + f'_{n_str}'
     return name

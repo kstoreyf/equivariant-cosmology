@@ -14,8 +14,10 @@ def main():
     # feature parameters
     top_n = None
     label_name = 'mstellar'
-    #feature_tag = f'_top{top_n}_{label_name}'
-    feature_tag = f'_{label_name}'
+    if top_n is not None:
+        feature_tag = f'_top{top_n}_{label_name}'
+    else:
+        feature_tag = f'_{label_name}'
 
     # scalar parameters
     m_order_max = 2
