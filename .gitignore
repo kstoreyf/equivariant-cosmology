@@ -3,6 +3,7 @@ plots/
 data/
 logs/
 profiling/
+configs/
 
 # other
 *.swp

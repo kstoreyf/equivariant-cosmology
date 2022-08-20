@@ -68,7 +68,8 @@ class DarkHalo:
 class SimulationReader:
 
     # TODO: replace snap_num_str with proper zfill (i think? check works)
-    def __init__(self, base_dir, sim_name, sim_name_dark, snap_num_str):
+    def __init__(self, base_dir, sim_name, sim_name_dark, snap_num_str,
+                 mass_multiplier=1e10):
         self.sim_name = sim_name
         self.sim_name_dark = sim_name_dark
         self.tng_path_hydro = f'{base_dir}/{self.sim_name}'
@@ -78,6 +79,7 @@ class SimulationReader:
         self.snap_num_str = snap_num_str
         self.snap_num = int(self.snap_num_str)
         self.halo_arr = []
+        self.mass_multiplier = mass_multiplier
 
         with h5py.File(f'{self.base_path_hydro}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5','r') as f:
             header = dict( f['Header'].attrs.items() )
@@ -87,6 +89,7 @@ class SimulationReader:
 
     def load_sim_dark_halos(self):
         self.halos_dark = il.groupcat.loadHalos(self.base_path_dark,self.snap_num)
+
 
     def read_simulations(self, subhalo_fields_to_load=None):
 
@@ -140,8 +143,8 @@ class SimulationReader:
 
 
     # TODO: clean up
-    def select_halos(self, num_star_particles_min, halo_mass_min, 
-                     halo_mass_max, halo_mass_difference_factor, subsample_frac,
+    def select_halos(self, num_star_particles_min, halo_logmass_min, 
+                     halo_logmass_max, halo_mass_difference_factor, subsample_frac,
                      subhalo_mode='most_massive', seed=42):
 
         subhalo_mode_options = ['most_massive_subhalo', 'twin_subhalo']
@@ -157,10 +160,14 @@ class SimulationReader:
         idxs_largestsubs_dark_all = self.halos_dark['GroupFirstSub'][mask_has_subhalos]
 
         # TODO: should be passing in mass multiplier? or getting from elsewhere?
-        if halo_mass_min is not None:
-            halo_mass_min /= 1e10 # because masses in catalog have units of 10^10 M_sun/h
-        if halo_mass_max is not None:
-            halo_mass_max /= 1e10 # because masses in catalog have units of 10^10 M_sun/h
+        
+        halo_mass_min, halo_mass_max = None, None
+        if halo_logmass_min is not None:
+            halo_mass_min = 10**halo_logmass_min
+            halo_mass_min /= self.mass_multiplier # because masses in catalog have units of 10^10 M_sun/h
+        if halo_logmass_max is not None:
+            halo_mass_max = 10**halo_logmass_max
+            halo_mass_max /= self.mass_multiplier # because masses in catalog have units of 10^10 M_sun/h
 
         # TODO: could I reformulate this starting from the subhalo_dark_to_full_dict,
         # and then get each subhalo's parent and its twin's parent??
@@ -233,12 +240,11 @@ class SimulationReader:
                 import astropy
                 import astropy.constants as const
                 import astropy.units as u
-                mass_multiplier = 1e10
                 G = const.G.to('(kpc * km**2)/(Msun * s**2)')
                 # m200m really in Msun/h and r200m in ckpc/h; the h's cancel out, and the c is comoving meaning
                 # we need a factor of the scale factor, but here at z=0 just 1. if go to diff z need to 
                 # make sure to include!
-                v_200m = np.sqrt(G * (mass_multiplier*halo.catalog_properties['m200m']*u.Msun) / (halo.catalog_properties['r200m']*u.kpc))
+                v_200m = np.sqrt(G * (self.mass_multiplier*halo.catalog_properties['m200m']*u.Msun) / (halo.catalog_properties['r200m']*u.kpc))
                 halo.set_catalog_property(property_name, v_200m.value)
             elif property_name=='x_minPE':
                 halo.set_catalog_property(property_name, self.subhalos_dark['SubhaloPos'][halo.idx_subhalo_dark])
