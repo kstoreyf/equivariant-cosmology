@@ -15,7 +15,7 @@ def run():
     # sim_name_dark = 'TNG50-4-Dark'
 
     # halo params 
-    num_star_particles_min = 10
+    num_star_particles_min = 50
     halo_mass_min = 10**10.8
     halo_mass_min_str = '1e10.8'
     halo_mass_max = None

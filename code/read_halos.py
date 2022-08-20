@@ -92,13 +92,16 @@ class SimulationReader:
 
         if subhalo_fields_to_load is None:
             subhalo_fields_to_load = ['SubhaloLenType', 'SubhaloGrNr', 'SubhaloMassType', 'SubhaloMass',
-                                      'SubhaloHalfmassRadType', 'SubhaloSFR', 'SubhaloPos']
-            #subhalo_fields_to_load = ['SubhaloMass','SubhaloPos','SubhaloMassType', 'SubhaloLenType', 'SubhaloHalfmassRad', 'SubhaloGrNr']
+                                      'SubhaloHalfmassRadType', 'SubhaloSFR', 'SubhaloPos', 'SubhaloFlag',
+                                      'SubhaloVelDisp']
+        #subhalo_fields_to_load_dark = ['SubhaloFlag', 'SubhaloPos']
 
-        self.subhalos_hydro = il.groupcat.loadSubhalos(self.base_path_hydro,self.snap_num,fields=subhalo_fields_to_load)
+        self.subhalos_hydro = il.groupcat.loadSubhalos(self.base_path_hydro,self.snap_num,
+                                                       fields=subhalo_fields_to_load)
         self.halos_hydro = il.groupcat.loadHalos(self.base_path_hydro,self.snap_num)
 
-        self.subhalos_dark = il.groupcat.loadSubhalos(self.base_path_dark,self.snap_num)#,fields=subhalo_fields_to_load)
+        self.subhalos_dark = il.groupcat.loadSubhalos(self.base_path_dark,self.snap_num)
+                                                      #fields=subhalo_fields_to_load_dark)
         self.load_sim_dark_halos() # separate out bc will need these on own
 
         self.idxs_halos_hydro_all = np.arange(self.halos_hydro['count'])
@@ -247,6 +250,13 @@ class SimulationReader:
                 halo.set_catalog_property(property_name, self.subhalos_hydro['SubhaloSFR'][halo.idx_subhalo_hydro])
             elif property_name=='radius_hydro_subhalo_star':
                 halo.set_catalog_property(property_name, self.subhalos_hydro['SubhaloHalfmassRadType'][:,self.ipart_star][halo.idx_subhalo_hydro])
+            elif property_name=='subhalo_hydro_flag':
+                halo.set_catalog_property(property_name, self.subhalos_hydro['SubhaloFlag'][halo.idx_subhalo_hydro])
+            elif property_name=='mass_hydro_subhalo_gas':
+                self.ipart_gas = il.snapshot.partTypeNum('gas') # 0
+                halo.set_catalog_property(property_name, self.subhalos_hydro['SubhaloMassType'][:,self.ipart_gas][halo.idx_subhalo_hydro])
+            elif property_name=='velocity_dispersion':
+                halo.set_catalog_property(property_name, self.subhalos_hydro['SubhaloVelDisp'][halo.idx_subhalo_hydro])
             else:
                 raise ValueError(f"Property name {property_name} not recognized!")
 

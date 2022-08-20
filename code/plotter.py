@@ -5,6 +5,7 @@
 # * Description :
 # **************************************************
 
+import matplotlib
 import numpy as np
 from matplotlib import pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -16,12 +17,6 @@ if 'jupyter' not in socket.gethostname():
 import illustris_python as il
 import utils
 
-
-tng_path_hydro = '/scratch/ksf293/gnn-cosmology/data/TNG50-4'
-tng_path_dark = '/scratch/ksf293/gnn-cosmology/data/TNG50-4-Dark'
-base_path_hydro = '/scratch/ksf293/gnn-cosmology/data/TNG50-4/output'
-base_path_dark = '/scratch/ksf293/gnn-cosmology/data/TNG50-4-Dark/output'
-snap_num = 99
 
 
 def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_num,
@@ -174,15 +169,14 @@ def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_nu
     plt.legend(handles, labels, fontsize=18, loc=(1.2, 3))
 
 
-def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred, 
+def plot_pred_vs_true(y_label_name, y_true, y_pred, y_train, y_train_pred, 
                       text_results='', title=None, save_fn=None,
-                      y_label_key='mstellar', 
                       x_lim=(7,12), y_lim=(7,12), colors_test=None,
                       colorbar_label=''):
     fig = plt.figure(figsize=(6,6))
     ax = plt.gca()
 
-    y_label = utils.label_dict[y_label_key]
+    y_label = utils.label_dict[y_label_name]
     # main scatter plotting
     plt.scatter(y_train, y_train_pred, s=12, alpha=0.3, c='m', label='training')
     if colors_test is None:
@@ -213,22 +207,59 @@ def plot_pred_vs_true(y_true, y_pred, y_train, y_train_pred,
         plt.savefig(save_fn, bbox_inches='tight')
 
 
-def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred, 
+def plot_pred_vs_true_hist(y_label_name, y_true, y_pred, y_train, y_train_pred, 
+                      text_results='', title=None, save_fn=None,
+                      x_lim=(7,12), y_lim=(7,12), colors_test=None,
+                      colorbar_label=''):
+    fig = plt.figure(figsize=(6,6))
+    ax = plt.gca()
+
+    y_label = utils.label_dict[y_label_name]
+    # main scatter plotting
+    #plt.scatter(y_train, y_train_pred, s=12, alpha=0.3, c='m', label='training')
+    if colors_test is None:
+        plt.hist2d(y_true, y_pred, c='k', label='testing')
+    else:
+        plt.hist2d(y_true, y_pred, c=colors_test, label='testing')
+        plt.colorbar(label=colorbar_label)
+
+    true_line = np.linspace(*x_lim)
+    plt.plot(true_line, true_line, color='grey', zorder=0)
+
+    # labels & adjustments
+    plt.xlabel(y_label + ', true')
+    plt.ylabel(y_label + ', predicted')
+
+    ax.set_aspect('equal')
+    
+    plt.xlim(x_lim)
+    plt.ylim(y_lim)
+
+    #plt.text(0.5, 0.3, text_results, 
+    #         transform=ax.transAxes, verticalalignment='top', fontsize=12)
+    #plt.title(title)
+    plt.legend(loc='upper left', fontsize=12)
+
+    # save
+    if save_fn is not None:
+        plt.savefig(save_fn, bbox_inches='tight')
+
+
+def plot_pred_vs_property(x_label_name, y_label_name, x_property, y_true, y_pred,
                       text_results='', title=None, save_fn=None, overplot_function=None,
-                      x_scale='linear', y_scale='linear', y_label_key='mstellar',
+                      x_scale='linear', y_scale='linear',
                       x_lim=(10.5, 14), y_lim=(7, 12), colors_test=None,
                       colorbar_label='', mass_multiplier=1e10):
     fig = plt.figure(figsize=(8,6))
     ax = plt.gca()
     
-    y_label = utils.label_dict[y_label_key]
 
     # main scatter plotting
-    plt.scatter(mass, y_true, s=12, alpha=0.3, c='r', label='true (test)')
+    plt.scatter(x_property, y_true, s=12, alpha=0.3, c='r', label='true (test)')
     if colors_test is None:
-        plt.scatter(mass, y_pred, s=12, alpha=0.2, c='k', label='predicted (test)')
+        plt.scatter(x_property, y_pred, s=12, alpha=0.2, c='k', label='predicted (test)')
     else:
-        plt.scatter(mass, y_pred, s=12, alpha=0.2, c=colors_test, label='predicted (test)')
+        plt.scatter(x_property, y_pred, s=12, alpha=0.2, c=colors_test, label='predicted (test)')
         plt.colorbar(label=colorbar_label)
 
     # overplot power law
@@ -238,7 +269,10 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
         plt.plot(masses, y_powerlaw, color='forestgreen', label='input broken power law')
     
     # labels & adjustments
-    plt.xlabel(r'log($M_\mathrm{halo,DM} \: [M_\odot]$)')
+    x_label = utils.label_dict[x_label_name]
+    y_label = utils.label_dict[y_label_name]
+
+    plt.xlabel(x_label)
     plt.ylabel(y_label)
     plt.xscale(x_scale)
     plt.yscale(y_scale)
@@ -256,9 +290,9 @@ def plot_pred_vs_mass(mass, y_true, y_pred, mass_train, y_train, y_train_pred,
         plt.savefig(save_fn, bbox_inches='tight')
 
 
-def plot_fits(fitter, log_m_halo, test_error_type='percentile', 
+def plot_fits(x_label_name, y_label_name, fitter, log_m_halo, test_error_type='percentile', 
               regularization_lambda=0.0, colors_test=None, colorbar_label='',
-              log_mass_shift=10, y_lim=(7,12), y_label_key='mstellar',
+              log_mass_shift=10, x_lim=(10.5, 14), y_lim=(7,12),
               show_pred_vs_mass=False):
 
     # Extract arrays and plot
@@ -311,20 +345,59 @@ def plot_fits(fitter, log_m_halo, test_error_type='percentile',
                        f'\t \t' fr'($n_\mathrm{{train}}$: {fitter.n_train})' '\n' \
                        fr'$N > 5\sigma$: {n_outliers}'
 
-    
-    y_true += log_mass_shift
-    y_pred += log_mass_shift
-    y_train_true += log_mass_shift
-    y_train_pred += log_mass_shift
-    
-    plot_pred_vs_true(y_true, y_pred, y_train_true, y_train_pred, 
+    if y_label_name=='m_stellar':
+        y_true += log_mass_shift
+        y_pred += log_mass_shift
+        y_train_true += log_mass_shift
+        y_train_pred += log_mass_shift
+
+    if 'm_' in x_label_name:
+        log_m_halo_test += log_mass_shift
+        log_m_halo_train += log_mass_shift
+
+    plot_pred_vs_true(y_label_name, y_true, y_pred, y_train_true, y_train_pred, 
                               text_results=text_results, 
                               colors_test=colors_test, colorbar_label=colorbar_label,
-                              x_lim=y_lim, y_lim=y_lim, y_label_key=y_label_key)
+                              x_lim=y_lim, y_lim=y_lim)
 
-    log_m_halo_test += log_mass_shift
-    log_m_halo_train += log_mass_shift
-    plot_pred_vs_mass(log_m_halo_test, y_true, y_pred, log_m_halo_train, y_train_true, y_train_pred, 
+
+    plot_pred_vs_property(x_label_name, y_label_name, log_m_halo_test, y_true, y_pred,
                               text_results=text_results, 
                               colors_test=colors_test, colorbar_label=colorbar_label, 
-                              y_lim=y_lim, y_label_key=y_label_key)
+                              x_lim=x_lim, y_lim=y_lim)
+
+
+def plot_pred_vs_true_hist(y_label_name, y_true, y_pred,
+                      text_results='',
+                      x_lim=(7,12), y_lim=(7,12)):
+    fig = plt.figure(figsize=(8,8))
+    ax = plt.gca()
+
+    y_label = utils.label_dict[y_label_name]
+
+    #ticks = np.arange(5, 25, 5)
+    bins = np.linspace(y_lim[0], y_lim[1], 100)
+
+    inferno_r = matplotlib.cm.inferno_r
+    inferno_shifted = utils.shiftedColorMap(inferno_r, start=0.1, stop=1.0)
+    plt.hist2d(y_true, y_pred, bins=bins, cmap=inferno_shifted, cmin=1)
+    cbar = plt.colorbar(label='number of test objects')
+    #cbar.ax.set_yticklabels(ticks)
+    
+    true_line = np.linspace(*x_lim)
+    plt.plot(true_line, true_line, color='grey', zorder=0)
+
+    # labels & adjustments
+    plt.xlabel(y_label + ', true')
+    plt.ylabel(y_label + ', predicted')
+
+    ax.set_aspect('equal')
+    
+    plt.xlim(x_lim)
+    plt.ylim(y_lim)
+
+    plt.text(0.1, 0.9, text_results, 
+             transform=ax.transAxes, verticalalignment='top', fontsize=22)
+
+
+

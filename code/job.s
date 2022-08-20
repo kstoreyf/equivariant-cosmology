@@ -1,8 +1,8 @@
 #!/bin/bash
-##SBATCH --job-name=halo_selector_tng100_nstarmin10_twin_and_geo_feat
+##SBATCH --job-name=halo_selector_tng100_nstarmin50_twin_and_geo_feat
 ##SBATCH --job-name=geo_featurizer_tng100_nstarmin1_twin_xminPEsub_rall
-##SBATCH --job-name=scalar_featurizer_tng100_nstarmin1_twin_pseudo_rall_mord2_xord4_vord4
-#SBATCH --job-name=feature_importance_tng100_mstellar
+#SBATCH --job-name=scalar_featurizer_tng100_nstarmin50_twin_pseudo_rall_mord2_xord4_vord4
+##SBATCH --job-name=feature_importance_tng100_nstarmin10_mstellar
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=24
@@ -19,8 +19,8 @@ exec --overlay $overlay_ext3:ro \
 cd /home/ksf293/equivariant-cosmology/code; \
 #python run_halo_selector.py;
 #python run_geometric_featurizer.py;
-#python run_scalar_featurizer.py;
-python feature_importance.py;
+python run_scalar_featurizer.py;
+#python feature_importance.py;
 "
 
 

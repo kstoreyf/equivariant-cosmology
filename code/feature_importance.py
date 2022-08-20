@@ -12,7 +12,7 @@ from scalar_features import ScalarFeaturizer
 def main():
 
     # feature parameters
-    top_n = None
+    top_n = 10
     label_name = 'mstellar'
     if top_n is not None:
         feature_tag = f'_top{top_n}_{label_name}'
@@ -37,7 +37,7 @@ def main():
     # sim_name = 'TNG50-4'
     # sim_name_dark = 'TNG50-4-Dark'
     halo_dir = f'../data/halos/halos_{sim_name}'
-    halo_tag = '_nstarpartmin1_twin'
+    halo_tag = '_nstarpartmin10_twin'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
     log_mass_shift = 10
 
@@ -91,7 +91,7 @@ def main():
     idx_train, idx_val, idx_test = utils.split_train_val_test(random_ints, frac_train=frac_train, frac_test=frac_test)
 
     # Uncertainties, powerlaw
-    uncertainties_genel2019 = utils.get_uncertainties_genel2019(log_m_stellar+log_mass_shift, sim_name=sim_name)
+    uncertainties_genel2019 = utils.get_uncertainties_genel2019(label_name, log_m_stellar+log_mass_shift, sim_name)
     y_val_current_powerlaw_fit_train, params_best_fit = utils.fit_broken_power_law(
                                                        log_m_200m[idx_train], log_m_stellar[idx_train], 
                                                        uncertainties=uncertainties_genel2019[idx_train])
@@ -113,7 +113,7 @@ def main():
     end = time.time()
     print("Time:", end-start, 'sec')
 
-def get_importance_order_addonein(features_all, log_m_stellar, y_val_current, idx_train, idx_val, uncertainties=None,
+def get_importance_order_addonein(features_all, y_vals_labels, y_val_current, idx_train, idx_val, uncertainties=None,
                                   x_features_extra=None, top_n=None):
 
     N_feat = features_all.shape[1]
@@ -137,7 +137,7 @@ def get_importance_order_addonein(features_all, log_m_stellar, y_val_current, id
             idxs_to_use = np.append(np.array(idxs_ordered_best, dtype=int), idx)
             features = features_all[:,idxs_to_use]
             
-            fitter = LinearFitter(features, log_m_stellar, 
+            fitter = LinearFitter(features, y_vals_labels, 
                                 y_val_current, uncertainties=uncertainties,
                                 x_features_extra=x_features_extra)
             fitter.split_train_test(idx_train, idx_val)

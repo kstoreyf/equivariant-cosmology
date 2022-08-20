@@ -132,8 +132,10 @@ class LinearFitter(Fitter):
 
         if rms_x:
             x_fitscales = np.sqrt(np.mean(self.A_train**2, axis=0))
+            # avoid divide by zero
+            x_fitscales[x_fitscales==0] = 1
         else:
-            x_fitscales = np.ones(self.x_scalar_train_scaled.shape[1])
+            x_fitscales = np.ones(self.A_train.shape[1])
 
         # "scaled" denotes pre-done x-scalings to data, e.g. log
         # "fitscaled" denotes scaling just for the fit, and then quickly scaled out of the best-fit vector

@@ -1,11 +1,21 @@
+import matplotlib
 import numpy as np
+from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
 
 from geometric_features import GeometricFeature, geo_name
 
 
-label_dict = {'m200m': r'log($m_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
-              'mstellar': r'log($m_\mathrm{stellar} \: [h^{-1} \, M_\odot]$)'}
+label_dict = {'m_200m': r'log($M_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
+              'm_stellar': r'log($m_\mathrm{stellar} \: [h^{-1} \, M_\odot]$)',
+              'r_200m': r'log($R_\mathrm{halo} \: [h^{-1} \, \mathrm{kpc}]$)',
+              'r_stellar': r'log($r_\mathrm{stellar} \: [h^{-1} \, \mathrm{kpc}]$)',
+              'ssfr': r'log(sSFR $\: [\mathrm{yr}^{-1}]$)',
+              'sfr': r'log(SFR $\: [M_\odot \, \mathrm{yr}^{-1}]$)',
+              'a_form': r'$a_\mathrm{form}$',
+              'c_200c': r'$log(c_\mathrm{200c})$',
+              'M_acc': r'$M_\mathrm{acc,dyn}$',
+              }
 
 
 def get_alt_sim_name(sim_name):
@@ -17,20 +27,54 @@ def get_alt_sim_name(sim_name):
     return sim_name_dict[sim_name]
 
 
-def get_uncertainties_genel2019(log_m_stellar, sim_name):
+def get_uncertainties_genel2019(gal_property, log_m_stellar, sim_name):
+    # From Genel+2019, Figure 8
+    # tng50-4: closest to epsilon=4 (blue)
+    # tng100-1: closest to epsilon=1 (yellow)
+    gal_properties = ['m_stellar', 'r_stellar', 'sfr']
+    assert gal_property in gal_properties, f'Property {gal_property} not in gal_properties={gal_properties}'
+
     logmstellar_bins = np.linspace(8.5, 11, 6)
     logmstellar_bins = np.array([5] + list(logmstellar_bins) + [13])
     err_msg = 'Passed log_m_stellar has values outside of bin edges!'
     assert np.min(log_m_stellar) > np.min(logmstellar_bins) and np.max(log_m_stellar) < np.max(logmstellar_bins), err_msg
-    # added estimates on either end (low: double, high: extend)
-    stdev_dict = {'TNG50-4': np.array([0.56, 0.28, 0.23, 0.12, 0.05, 0.04, 0.04]), # epsilon=4, similar to tng50-4
-                'TNG100-1': np.array([0.16, 0.08, 0.06, 0.04, 0.03, 0.04, 0.04]), # epsilon=1, similar to tng100-1
-                }
 
+    # added estimates on either end (low: double, high: extend)
+    stdev_dict_mstellar = {'TNG50-4': np.array([0.56, 0.28, 0.23, 0.12, 0.05, 0.04, 0.04]), 
+                           'TNG100-1': np.array([0.16, 0.08, 0.06, 0.04, 0.03, 0.04, 0.04]), 
+                          }
+    stdev_dict_rstellar = {'TNG50-4': np.array([0.42, 0.21, 0.14, 0.09, 0.07, 0.06, 0.06]), 
+                           'TNG100-1': np.array([0.14, 0.07, 0.08, 0.08, 0.09, 0.08, 0.08]),
+                           }
+
+    stdev_dict_sfr = {'TNG50-4': np.array([0.72, 0.36, 0.34, 0.28, 0.30, 0.45, 0.45]), 
+                      'TNG100-1': np.array([0.44, 0.22, 0.21, 0.22, 0.34, 0.62, 0.62]),
+                    }
+
+    gal_property_to_stdev_dict = {'m_stellar': stdev_dict_mstellar,
+                                  'r_stellar': stdev_dict_rstellar,
+                                  'sfr': stdev_dict_sfr, 
+                                  }
+
+    stdev_dict = gal_property_to_stdev_dict[gal_property]
     idxs_mbins = np.digitize(log_m_stellar, logmstellar_bins)
     uncertainties_genel2019 = stdev_dict[sim_name][idxs_mbins-1]
 
     return uncertainties_genel2019
+
+
+def get_uncertainties_poisson_sfr(sfr, sfr_zero):
+    # compute shot noise uncertainty
+    N_over_zero = sfr/sfr_zero
+    uncertainties_poisson = 1/np.sqrt(N_over_zero)
+    # this is in natural log space, so convert to log10 space
+    # sig_ln = sig_x/x
+    # sig_log10 = 1/ln(10) sig_x/x
+    # divide: sig_ln/sig_log10 = ln(10)
+    # so sig_log10 = sig_ln / ln(10)
+    uncertainties_poisson_log10 = uncertainties_poisson / np.log(10)
+    return uncertainties_poisson_log10
+
 
 # maybe a better way to do this, but just logging for now to be consistent
 def broken_power_law(log_m200, N=1, log_m1=12, beta=1, gamma=1):
@@ -49,6 +93,22 @@ def fit_broken_power_law(log_m200, log_m_stellar, uncertainties, initial_guess=N
     y_val_current_powerlaw_fit = broken_power_law(log_m200, *params_best_fit)
     if return_initial_guess:
         return y_val_current_powerlaw_fit, params_best_fit, params_initial_guess
+    return y_val_current_powerlaw_fit, params_best_fit
+
+
+def power_law(log_r_200m, A, c):
+    return log_r_200m * A + c
+
+def power_law_fixedslope(log_r_200m, c):
+    A = 1.4
+    return log_r_200m * A + c
+
+def fit_function(function, x, y, uncertainties, params_initial_guess):
+
+    params_best_fit, _ = curve_fit(function, x, y, sigma=uncertainties, 
+                                  p0=params_initial_guess)
+    y_val_current_powerlaw_fit = function(x, *params_best_fit)
+
     return y_val_current_powerlaw_fit, params_best_fit
 
 
@@ -166,3 +226,55 @@ def split_train_val_test(random_ints, frac_train=0.70, frac_test=0.15):
     idx_val = np.where((random_ints >= int_train) & (random_ints < int_test))[0]
 
     return idx_train, idx_val, idx_test
+
+
+def shiftedColorMap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
+    '''
+    Function to offset the "center" of a colormap. Useful for
+    data with a negative min and positive max and you want the
+    middle of the colormap's dynamic range to be at zero.
+
+    Input
+    -----
+      cmap : The matplotlib colormap to be altered
+      start : Offset from lowest point in the colormap's range.
+          Defaults to 0.0 (no lower offset). Should be between
+          0.0 and `midpoint`.
+      midpoint : The new center of the colormap. Defaults to 
+          0.5 (no shift). Should be between 0.0 and 1.0. In
+          general, this should be  1 - vmax / (vmax + abs(vmin))
+          For example if your data range from -15.0 to +5.0 and
+          you want the center of the colormap at 0.0, `midpoint`
+          should be set to  1 - 5/(5 + 15)) or 0.75
+      stop : Offset from highest point in the colormap's range.
+          Defaults to 1.0 (no upper offset). Should be between
+          `midpoint` and 1.0.
+    '''
+    cdict = {
+        'red': [],
+        'green': [],
+        'blue': [],
+        'alpha': []
+    }
+
+    # regular index to compute the colors
+    reg_index = np.linspace(start, stop, 257)
+
+    # shifted index to match the data
+    shift_index = np.hstack([
+        np.linspace(0.0, midpoint, 128, endpoint=False), 
+        np.linspace(midpoint, 1.0, 129, endpoint=True)
+    ])
+
+    for ri, si in zip(reg_index, shift_index):
+        r, g, b, a = cmap(ri)
+
+        cdict['red'].append((si, r, r))
+        cdict['green'].append((si, g, g))
+        cdict['blue'].append((si, b, b))
+        cdict['alpha'].append((si, a, a))
+
+    newcmap = matplotlib.colors.LinearSegmentedColormap(name, cdict)
+    plt.register_cmap(cmap=newcmap)
+
+    return newcmap

@@ -26,7 +26,7 @@ def run():
     # sim_name = 'TNG50-4'
     # sim_name_dark = 'TNG50-4-Dark'
     halo_dir = f'../data/halos/halos_{sim_name}'
-    halo_tag = '_nstarpartmin10_twin'
+    halo_tag = '_nstarpartmin50_twin'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
 
     # save info
