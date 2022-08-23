@@ -13,10 +13,9 @@ def halo_config():
     # sim info
     base_dir = '/scratch/ksf293/equivariant-cosmology/data'
     snap_num_str = '099' # z = 0
-    # sim_name = 'TNG100-1'
-    # sim_name_dark = 'TNG100-1-Dark'
-    sim_name = 'TNG50-4'
-    sim_name_dark = 'TNG50-4-Dark'
+    sim_name = 'TNG100-1'
+    #sim_name = 'TNG50-4'
+    sim_name_dark = f'{sim_name}-Dark'
 
     # halo params 
     num_star_particles_min = 50
@@ -50,6 +49,7 @@ def halo_config():
 
     with open(fn_halo_config, 'w') as file:
         documents = yaml.dump(dicts, file, sort_keys=False)
+    print(f"Generated halo config file {fn_halo_config}")
 
 
 

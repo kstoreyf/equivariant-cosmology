@@ -5,6 +5,7 @@ import sys
 
 sys.path.insert(1, '/home/ksf293/external')
 import illustris_python as il
+import illustris_sam as ilsam 
 
 
 class DarkHalo:
@@ -70,6 +71,7 @@ class SimulationReader:
     # TODO: replace snap_num_str with proper zfill (i think? check works)
     def __init__(self, base_dir, sim_name, sim_name_dark, snap_num_str,
                  mass_multiplier=1e10):
+        self.base_dir = base_dir
         self.sim_name = sim_name
         self.sim_name_dark = sim_name_dark
         self.tng_path_hydro = f'{base_dir}/{self.sim_name}'
@@ -228,7 +230,18 @@ class SimulationReader:
             dark_halo_arr[i].set_random_int(random_ints[i])
 
 
+    # TODO: clean up
     def add_catalog_property_to_halos(self, property_name):
+        if property_name=='sfr_hydro_subhalo_10':
+            with h5py.File(f'{self.base_path_hydro}/postprocessing/star_formation_rates.hdf5', 'r') as f: 
+                idxs_subhalo_hydro = f['Snapshot_{self.snap_num}']['SubfindID']
+                # TODO: double check what shy uses
+                sfrs_10 = f['SFR_MsunPerYrs_in_all_10Myrs']
+                idx_subhalo_to_sfr10 = dict(zip(idxs_subhalo_hydro, sfrs))
+                for halo in self.dark_halo_arr:
+                    halo.set_catalog_property(property_name, idx_subhalo_to_sfr10[halo.idx_subhalo_hydro])
+            return
+
         for halo in self.dark_halo_arr:
             if property_name=='r200m':
                 halo.set_catalog_property(property_name, self.halos_dark['Group_R_Mean200'][halo.idx_halo_dark])
@@ -265,7 +278,7 @@ class SimulationReader:
                 halo.set_catalog_property(property_name, self.subhalos_hydro['SubhaloVelDisp'][halo.idx_subhalo_hydro])
             else:
                 raise ValueError(f"Property name {property_name} not recognized!")
-
+        return
 
     def save_dark_halo_arr(self, fn_dark_halo_arr):
         np.save(fn_dark_halo_arr, self.dark_halo_arr)
@@ -296,3 +309,63 @@ class SimulationReader:
             # if want a completely direct comparison, will have to build this in to halo selection
         
         return idxs_nan_structure_catalog
+
+
+    def add_MAH_to_halos_SAM(self):
+        self.base_path_sam = f'{self.base_dir}/{self.sim_name_dark}_SCSAM'
+
+        def genFullSubvolumes(n=5):
+            subvolume_list = []
+            for i in range(n):
+                for j in range(n):
+                    for k in range(n):
+                        subvolume_list.append([i, j, k])
+            return subvolume_list
+        
+        subvolume_list = genFullSubvolumes()
+
+        # 'HalopropIndex' ? 'HalopropFoFIndex_DM' ?? (included in former)
+        fields = ['HalopropIndex_Snapshot', 'HalopropRootHaloID']
+        matches = True #??
+        halos_sam = ilsam.groupcat.load_snapshot_halos(self.base_path_sam, self.snap_num, subvolume_list, fields, matches)
+        halo_idx_to_root_idx_dict = dict(zip(halos_sam['HalopropIndex_Snapshot'], halos_sam['HalopropRootHaloID']))
+
+        print(len(self.dark_halo_arr))
+        for halo in self.dark_halo_arr:
+            # should be haloprop or galprop??
+            root_idx = halo_idx_to_root_idx_dict[halo.idx_halo_dark]
+            print(halo.idx_halo_dark, root_idx)
+
+            mtree = ilsam.merger.load_tree_haloprop(self.base_path_sam, root_idx, 
+                                fields=['HalopropRedshift', 'HalopropMvir'], most_massive=True,
+                                matches=True)
+            scale_factors = 1/(1+mtree[root_idx]['HalopropRedshift'])
+            property_name = 'MAH'
+            halo.set_catalog_property(property_name, [scale_factors, mtree[root_idx]['HalopropMvir']])
+                        
+
+    def add_MAH_to_halos_sublink():
+
+        # via https://www.tng-project.org/data/forum/topic/369/snapshots-and-redshifts/
+        fn_snap_to_redshift = f'../tables/snapnums_to_redshifts_{self.sim_name}.hdf5'
+        if os.path.exists(fn_snap_to_redshift):
+            snap_to_redshift_dict = np.load(snap_to_redshift_dict)
+        else:
+            max_num_snapshots = 99 #magic
+            snap_to_redshift_dict = {}
+            for i_snap in range(max_num_snapshots):
+                h = il.groupcat.load_header(self.base_path_dark,i_snap)
+                snap_to_redshift_dict[i_snap] = h['Redshift']
+            np.save(fn_snap_to_redshift, snap_to_redshift_dict)
+
+        for halo in self.dark_halo_arr:
+            mtree = il.sublink.loadTree(self.base_path_dark, self.snap_num, halo.idx_subhalo_dark,
+                                        fields=fields,onlyMPB=True)
+
+            redshifts = [snap_to_redshift_dict[i_snap] for i_snap in mtree['SnapNum']]
+            scale_factors = 1/(1+redshifts)
+            
+            property_name = 'MAH'                            
+            # this is just the subhalo mass - do i want to sum over the subhalos in the
+            # fof group to get the halo mass accretion history?
+            halo.set_catalog_property(property_name, [scale_factors, mtree['SubhaloMass']])
