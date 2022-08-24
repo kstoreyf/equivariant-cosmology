@@ -12,6 +12,8 @@ label_dict = {'m_200m': r'log($M_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
               'r_stellar': r'log($r_\mathrm{stellar} \: [h^{-1} \, \mathrm{kpc}]$)',
               'ssfr': r'log(sSFR $\: [\mathrm{yr}^{-1}]$)',
               'sfr': r'log(SFR $\: [M_\odot \, \mathrm{yr}^{-1}]$)',
+              'ssfr1': r'log(sSFR$_\mathrm{1\,Gyr}$ $\: [\mathrm{yr}^{-1}]$)',
+              'sfr1': r'log(SFR$_\mathrm{1\,Gyr}$ $\: [M_\odot \, \mathrm{yr}^{-1}]$)',
               'a_form': r'$a_\mathrm{form}$',
               'c_200c': r'$log(c_\mathrm{200c})$',
               'M_acc': r'$M_\mathrm{acc,dyn}$',
@@ -31,7 +33,7 @@ def get_uncertainties_genel2019(gal_property, log_m_stellar, sim_name):
     # From Genel+2019, Figure 8
     # tng50-4: closest to epsilon=4 (blue)
     # tng100-1: closest to epsilon=1 (yellow)
-    gal_properties = ['m_stellar', 'r_stellar', 'sfr']
+    gal_properties = ['m_stellar', 'r_stellar', 'sfr', 'sfr1']
     assert gal_property in gal_properties, f'Property {gal_property} not in gal_properties={gal_properties}'
 
     logmstellar_bins = np.linspace(8.5, 11, 6)
@@ -51,9 +53,14 @@ def get_uncertainties_genel2019(gal_property, log_m_stellar, sim_name):
                       'TNG100-1': np.array([0.44, 0.22, 0.21, 0.22, 0.34, 0.62, 0.62]),
                     }
 
+    stdev_dict_sfr1 = {'TNG50-4': np.array([0.82, 0.41, 0.28, 0.25, 0.25, 0.4, 0.4]), 
+                      'TNG100-1': np.array([0.34, 0.17, 0.15, 0.16, 0.25, 0.5, 0.5]),
+                    }
+
     gal_property_to_stdev_dict = {'m_stellar': stdev_dict_mstellar,
                                   'r_stellar': stdev_dict_rstellar,
                                   'sfr': stdev_dict_sfr, 
+                                  'sfr1': stdev_dict_sfr, 
                                   }
 
     stdev_dict = gal_property_to_stdev_dict[gal_property]

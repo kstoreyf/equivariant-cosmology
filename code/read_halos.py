@@ -232,14 +232,13 @@ class SimulationReader:
 
     # TODO: clean up
     def add_catalog_property_to_halos(self, property_name):
-        if property_name=='sfr_hydro_subhalo_10':
-            with h5py.File(f'{self.base_path_hydro}/postprocessing/star_formation_rates.hdf5', 'r') as f: 
-                idxs_subhalo_hydro = f['Snapshot_{self.snap_num}']['SubfindID']
-                # TODO: double check what shy uses
-                sfrs_10 = f['SFR_MsunPerYrs_in_all_10Myrs']
-                idx_subhalo_to_sfr10 = dict(zip(idxs_subhalo_hydro, sfrs))
+        if property_name=='sfr_hydro_subhalo_1Gyr':
+            with h5py.File(f'{self.base_dir}/{self.sim_name}/postprocessing/star_formation_rates.hdf5', 'r') as f: 
+                idxs_subhalo_hydro = f[f'Snapshot_{self.snap_num}']['SubfindID']
+                sfrs1 = f[f'Snapshot_{self.snap_num}']['SFR_MsunPerYrs_in_all_1000Myrs']
+                idx_subhalo_to_sfr1 = dict(zip(idxs_subhalo_hydro, sfrs1))
                 for halo in self.dark_halo_arr:
-                    halo.set_catalog_property(property_name, idx_subhalo_to_sfr10[halo.idx_subhalo_hydro])
+                    halo.set_catalog_property(property_name, idx_subhalo_to_sfr1[halo.idx_subhalo_hydro])
             return
 
         for halo in self.dark_halo_arr:
@@ -330,11 +329,10 @@ class SimulationReader:
         halos_sam = ilsam.groupcat.load_snapshot_halos(self.base_path_sam, self.snap_num, subvolume_list, fields, matches)
         halo_idx_to_root_idx_dict = dict(zip(halos_sam['HalopropIndex_Snapshot'], halos_sam['HalopropRootHaloID']))
 
-        print(len(self.dark_halo_arr))
         for halo in self.dark_halo_arr:
             # should be haloprop or galprop??
             root_idx = halo_idx_to_root_idx_dict[halo.idx_halo_dark]
-            print(halo.idx_halo_dark, root_idx)
+            #print(halo.idx_halo_dark, root_idx)
 
             mtree = ilsam.merger.load_tree_haloprop(self.base_path_sam, root_idx, 
                                 fields=['HalopropRedshift', 'HalopropMvir'], most_massive=True,
@@ -344,28 +342,35 @@ class SimulationReader:
             halo.set_catalog_property(property_name, [scale_factors, mtree[root_idx]['HalopropMvir']])
                         
 
-    def add_MAH_to_halos_sublink():
+    def add_MAH_to_halos_sublink(self):
 
         # via https://www.tng-project.org/data/forum/topic/369/snapshots-and-redshifts/
-        fn_snap_to_redshift = f'../tables/snapnums_to_redshifts_{self.sim_name}.hdf5'
-        if os.path.exists(fn_snap_to_redshift):
-            snap_to_redshift_dict = np.load(snap_to_redshift_dict)
+        fn_snaps_redshifts = f'../tables/snapnums_redshifts.dat'
+        if os.path.exists(fn_snaps_redshifts):
+            snap_num_list, redshift_list = np.loadtxt(fn_snaps_redshifts, usecols=(0,1), unpack=True)
+            snap_to_redshift_dict = dict(zip(snap_num_list, redshift_list))
         else:
-            max_num_snapshots = 99 #magic
-            snap_to_redshift_dict = {}
-            for i_snap in range(max_num_snapshots):
-                h = il.groupcat.load_header(self.base_path_dark,i_snap)
-                snap_to_redshift_dict[i_snap] = h['Redshift']
-            np.save(fn_snap_to_redshift, snap_to_redshift_dict)
+            raise ValueError(f"Snap num redshift file {fn_snaps_redshifts} doesn't exist!")
 
+        fields = ['SubhaloMass','SubfindID','SnapNum']
+        count = 0
         for halo in self.dark_halo_arr:
             mtree = il.sublink.loadTree(self.base_path_dark, self.snap_num, halo.idx_subhalo_dark,
-                                        fields=fields,onlyMPB=True)
+                                        fields=fields, onlyMPB=True)
 
-            redshifts = [snap_to_redshift_dict[i_snap] for i_snap in mtree['SnapNum']]
+            redshifts = np.array([snap_to_redshift_dict[i_snap] for i_snap in mtree['SnapNum']])
             scale_factors = 1/(1+redshifts)
             
             property_name = 'MAH'                            
             # this is just the subhalo mass - do i want to sum over the subhalos in the
             # fof group to get the halo mass accretion history?
+            if count % 1000 == 0:
+                print(count)
+                print(halo.idx_halo_dark, halo.idx_subhalo_dark)
+                #print(scale_factors)
+                #print(mtree['SubhaloMass'])
             halo.set_catalog_property(property_name, [scale_factors, mtree['SubhaloMass']])
+            count += 1
+
+
+
