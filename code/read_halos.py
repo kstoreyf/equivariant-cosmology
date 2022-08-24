@@ -310,27 +310,50 @@ class SimulationReader:
         return idxs_nan_structure_catalog
 
 
-    def add_MAH_to_halos_SAM(self):
-        self.base_path_sam = f'{self.base_dir}/{self.sim_name_dark}_SCSAM'
-
-        def genFullSubvolumes(n=5):
-            subvolume_list = []
-            for i in range(n):
-                for j in range(n):
-                    for k in range(n):
-                        subvolume_list.append([i, j, k])
-            return subvolume_list
+    def gen_subvolumes_SAM(self, n=5):
+        subvolume_list = []
+        for i in range(n):
+            for j in range(n):
+                for k in range(n):
+                    subvolume_list.append([i, j, k])
+        return subvolume_list
         
-        subvolume_list = genFullSubvolumes()
 
-        # 'HalopropIndex' ? 'HalopropFoFIndex_DM' ?? (included in former)
-        fields = ['HalopropIndex_Snapshot', 'HalopropRootHaloID']
+    def get_Mvir_SAM(self):
+        self.base_path_sam = f'{self.base_dir}/{self.sim_name_dark}_SCSAM'
+        subvolume_list = self.gen_subvolumes_SAM()
+
+        fields = ['HalopropIndex', 'HalopropMvir']
         matches = True #??
         halos_sam = ilsam.groupcat.load_snapshot_halos(self.base_path_sam, self.snap_num, subvolume_list, fields, matches)
-        halo_idx_to_root_idx_dict = dict(zip(halos_sam['HalopropIndex_Snapshot'], halos_sam['HalopropRootHaloID']))
+        halo_idx_to_Mvir_dict = dict(zip(halos_sam['HalopropFoFIndex_DM'], halos_sam['HalopropMvir']))
+        mvirs = [halo_idx_to_Mvir_dict[halo.idx_halo_dark] if halo.idx_halo_dark in halo_idx_to_Mvir_dict else -1 for halo in self.dark_halo_arr ]
+        return mvirs
+
+
+    def add_MAH_to_halos_SAM(self):
+        self.base_path_sam = f'{self.base_dir}/{self.sim_name_dark}_SCSAM'
+        subvolume_list = self.gen_subvolumes_SAM()
+
+        # should be HalopropFoFIndex_DM
+        # 'HalopropIndex' ? 'HalopropFoFIndex_DM' ?? (included in former)
+        fields = ['HalopropIndex', 'HalopropRootHaloID']
+        #fields = ['HalopropIndex_Snapshot', 'HalopropRootHaloID']
+        matches = True #??
+        halos_sam = ilsam.groupcat.load_snapshot_halos(self.base_path_sam, self.snap_num, subvolume_list, fields, matches)
+        halo_idx_to_root_idx_dict = dict(zip(halos_sam['HalopropFoFIndex_DM'], halos_sam['HalopropRootHaloID']))
+        
+        # halo_idxs = np.array([halo.idx_halo_dark for halo in self.dark_halo_arr])
+        # in1d = np.in1d(halo_idxs, halos_sam['HalopropFoFIndex_DM'])
+        # print(len(halo_idxs))
+        # print(len(halo_idxs[in1d]))
 
         for halo in self.dark_halo_arr:
             # should be haloprop or galprop??
+            if halo.idx_halo_dark not in halo_idx_to_root_idx_dict: 
+                halo.set_catalog_property('MAH', np.nan)
+                continue
+
             root_idx = halo_idx_to_root_idx_dict[halo.idx_halo_dark]
             #print(halo.idx_halo_dark, root_idx)
 
@@ -338,8 +361,7 @@ class SimulationReader:
                                 fields=['HalopropRedshift', 'HalopropMvir'], most_massive=True,
                                 matches=True)
             scale_factors = 1/(1+mtree[root_idx]['HalopropRedshift'])
-            property_name = 'MAH'
-            halo.set_catalog_property(property_name, [scale_factors, mtree[root_idx]['HalopropMvir']])
+            halo.set_catalog_property('MAH', [scale_factors, mtree[root_idx]['HalopropMvir']])
                         
 
     def add_MAH_to_halos_sublink(self):

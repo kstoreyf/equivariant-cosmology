@@ -17,6 +17,7 @@ label_dict = {'m_200m': r'log($M_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
               'a_form': r'$a_\mathrm{form}$',
               'c_200c': r'$log(c_\mathrm{200c})$',
               'M_acc': r'$M_\mathrm{acc,dyn}$',
+              'm_vir': r'$M_\mathrm{vir}$'
               }
 
 

@@ -345,7 +345,7 @@ def plot_fits(x_label_name, y_label_name, fitter, log_m_halo, test_error_type='p
                        f'\t \t' fr'($n_\mathrm{{train}}$: {fitter.n_train})' '\n' \
                        fr'$N > 5\sigma$: {n_outliers}'
 
-    if y_label_name=='m_stellar':
+    if 'm_' in y_label_name:
         y_true += log_mass_shift
         y_pred += log_mass_shift
         y_train_true += log_mass_shift
