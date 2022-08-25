@@ -190,7 +190,7 @@ class ScalarFeaturizer:
         # rms is sqrt(mean(x^2)), and tr(g_20n/M_tot) = sum(x^2) (this einsum is the trace)
         for i_g, geo_features_halo in enumerate(self.geo_feature_arr):
             x_tensors = np.array([g.value for g in geo_feature_arr_onebin[i_g] if g.x_order==2 and g.v_order==0])
-            assert len(x_tensors)==1, "Should be exactly one second order tensor for each x and v!"
+            assert len(x_tensors)==1, "Should be exactly one second order tensor for x!"
             x_tensor_traces[i_g] = np.einsum('jj', x_tensors[0])
         self.X_rms = np.sqrt( x_tensor_traces / self.M_tot )
 
@@ -200,7 +200,7 @@ class ScalarFeaturizer:
         # rms is sqrt(mean(v^2)), and tr(g_02n/M_tot) = sum(v^2) (this einsum is the trace)
         for i_g, geo_features_halo in enumerate(self.geo_feature_arr):
             v_tensors = np.array([g.value for g in geo_feature_arr_onebin[i_g] if g.x_order==0 and g.v_order==2])
-            assert len(v_tensors)==1, "Should be exactly one second order tensor for each x and v!"
+            assert len(v_tensors)==1, "Should be exactly one second order tensor for v!"
             v_tensor_traces[i_g] = np.einsum('jj', v_tensors[0])
         self.V_rms = np.sqrt( v_tensor_traces / self.M_tot )
 

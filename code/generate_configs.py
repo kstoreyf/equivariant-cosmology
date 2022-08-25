@@ -1,20 +1,21 @@
+import numpy as np
 import yaml
-
-from pathlib import Path
 
 
 config_dir = '../configs'
 
 def main():
-    halo_config()
+    #halo_config()
+    #geo_config()
+    scalar_config()
 
 def halo_config():
     
     # sim info
     base_dir = '/scratch/ksf293/equivariant-cosmology/data'
     snap_num_str = '099' # z = 0
-    sim_name = 'TNG100-1'
-    #sim_name = 'TNG50-4'
+    #sim_name = 'TNG100-1'
+    sim_name = 'TNG50-4'
     sim_name_dark = f'{sim_name}-Dark'
 
     # halo params 
@@ -24,6 +25,13 @@ def halo_config():
     halo_mass_difference_factor = 3.0
     subsample_frac = None
     subhalo_mode = 'twin_subhalo'
+    if sim_name=='TNG100-1':
+        must_have_SAM_match = True
+        must_have_halo_structure_info = True
+    else:
+        must_have_SAM_match = False
+        must_have_halo_structure_info = False        
+    seed = 42
 
     # save info
     halo_dir = f'../data/halos/halos_{sim_name}'
@@ -32,25 +40,130 @@ def halo_config():
 
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
-    sim_dict = {'base_dir': base_dir,
+    sim_config_dict = {'base_dir': base_dir,
                 'snap_num_str': snap_num_str,
                 'sim_name': sim_name,
                 'sim_name_dark': sim_name_dark,
                 }
-    halo_config_dict = {'num_star_particles_min': num_star_particles_min,
+    halo_config_dict = {'halo_tag': halo_tag,
+                        'fn_dark_halo_arr': fn_dark_halo_arr,
+                        'num_star_particles_min': num_star_particles_min,
                         'halo_logmass_min': halo_logmass_min, 
                         'halo_logmass_max': halo_logmass_max, 
                         'halo_mass_difference_factor': halo_mass_difference_factor,
                         'subsample_frac': subsample_frac, 
                         'subhalo_mode': subhalo_mode,
-                        'fn_dark_halo_arr': fn_dark_halo_arr,
+                        'must_have_SAM_match': must_have_SAM_match, 
+                        'must_have_halo_structure_info': must_have_halo_structure_info,
+                        'seed': seed
                         }
-    dicts = {'sim': sim_dict, 'halo': halo_config_dict}
+    dicts = {'sim': sim_config_dict, 'halo': halo_config_dict}
 
     with open(fn_halo_config, 'w') as file:
-        documents = yaml.dump(dicts, file, sort_keys=False)
+        documents = yaml.safe_dump(dicts, file, sort_keys=False)
     print(f"Generated halo config file {fn_halo_config}")
 
+
+def geo_config():
+
+    #sim_name = 'TNG100-1'
+    sim_name = 'TNG50-4'
+
+    # halo info
+    halo_tag = ''
+    fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
+
+    # geo feature params
+    # bins
+    n_rbins = 8
+    r_edges = np.linspace(0, 1, n_rbins+1) # in units of r200
+    r_edges_outsider200 = np.array([2, 3, 10])
+    r_edges = np.concatenate((r_edges, r_edges_outsider200))
+    print(list(r_edges))
+    r_units = 'r200m'
+    # other
+    x_order_max = 2
+    v_order_max = 2
+    center_halo = 'x_minPE'
+
+    # save info
+    geo_dir = f'../data/geometric_features/geometric_features_{sim_name}'
+    geo_tag = ''
+    fn_geo_features = f'{geo_dir}/geometric_features{halo_tag}{geo_tag}.npy'
+
+    geo_config_dict = {'geo_tag': geo_tag,
+                'fn_geo_features': fn_geo_features,
+                'r_edges': r_edges.tolist(),
+                'r_units': r_units,
+                'x_order_max': x_order_max,
+                'v_order_max': v_order_max,
+                'center_halo': center_halo,
+                }
+
+    halo_config_dict = {'halo_tag': halo_tag,
+                        'fn_halo_config': fn_halo_config,
+                        }
+
+    fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
+    dicts = {'halo': halo_config_dict, 'geo': geo_config_dict, }
+
+    with open(fn_geo_config, 'w') as file:
+        documents = yaml.dump(dicts, file, sort_keys=False, default_flow_style=False)
+    print(f"Generated geo config file {fn_geo_config}")
+   
+
+
+def scalar_config():
+
+    #sim_name = 'TNG100-1'
+    sim_name = 'TNG50-4'
+
+    # halo info
+    halo_tag = ''
+    fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
+
+    # geo info
+    geo_tag = ''
+    fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
+
+    # save info
+    scalar_dir = f'../data/scalar_features/scalar_features_{sim_name}'
+    scalar_tag = ''
+    fn_scalar_features = f'{scalar_dir}/scalar_features{halo_tag}{geo_tag}{scalar_tag}.npy'
+
+    # scalar parameters
+    m_order_max = 2
+    x_order_max = 4
+    v_order_max = 4
+    n_groups_rebin = [[0,1,2], [3,4,5,6,7], [8,9,10]]
+    eigenvalues_not_trace = True
+    rescale_geometric_features = True
+
+    geo_config_dict = {'geo_tag': geo_tag,
+                       'fn_geo_config': fn_geo_config,
+                      }
+
+    halo_config_dict = {'halo_tag': halo_tag,
+                        'fn_halo_config': fn_halo_config,
+                        }
+
+    scalar_config_dict = {'scalar_tag': scalar_tag,
+                          'fn_scalar_features': fn_scalar_features,
+                          'm_order_max': m_order_max,
+                          'x_order_max': x_order_max,
+                          'v_order_max': v_order_max,
+                          'n_groups_rebin': n_groups_rebin,
+                          'eigenvalues_not_trace': eigenvalues_not_trace,
+                          'rescale_geometric_features': rescale_geometric_features,
+                          }
+
+    fn_scalar_config = f'{config_dir}/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
+    dicts = {'halo': halo_config_dict, 'geo': geo_config_dict, 'scalar': scalar_config_dict}
+
+    with open(fn_scalar_config, 'w') as file:
+        documents = yaml.dump(dicts, file, sort_keys=False, default_flow_style=False)
+    print(f"Generated scalar config file {fn_scalar_config}")
+   
 
 
 if __name__=='__main__':

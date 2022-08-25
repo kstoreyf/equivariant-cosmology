@@ -6,10 +6,9 @@ import itertools
 class GeometricFeaturizer:
 
     def featurize(self, sim_reader, r_edges, x_order_max, v_order_max, 
-                 center_halo='x_minPE', r_units='r200m'):
-        # TODO: should be saving r_edges! now im just remembering...
-        # and other metadata!!
-
+                  center_halo='x_minPE', r_units='r200m'):
+        
+        r_edges = np.array(r_edges)
         self.sim_reader = sim_reader
         self.geo_feature_arr = []
 
