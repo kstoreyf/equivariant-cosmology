@@ -28,10 +28,10 @@ class GeometricFeaturizer:
             if r_units is not None:
                 r_edges_scaled = r_edges * dark_halo.catalog_properties[r_units]
             self.geo_feature_arr.append(self.get_geometric_features(x_halo, v_halo, 
-                                r_edges_scaled, l_arr, p_arr))
+                                r_edges_scaled, l_arr, p_arr, self.sim_reader.m_dmpart_dark))
 
 
-    def get_geometric_features(self, delta_x_data_halo, delta_v_data_halo, r_edges, l_arr, p_arr, n_dim=3):
+    def get_geometric_features(self, delta_x_data_halo, delta_v_data_halo, r_edges, l_arr, p_arr, m_dm, n_dim=3):
 
         # input checks
         N, n_dim_from_data = delta_x_data_halo.shape
@@ -43,7 +43,6 @@ class GeometricFeaturizer:
         n_arr = np.arange(n_rbins)
 
         # get mass info
-        m_dm = self.sim_reader.m_dmpart
         m_total = N*m_dm
         
         # vectorized for all particles N

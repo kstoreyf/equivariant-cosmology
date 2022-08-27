@@ -5,17 +5,20 @@ import yaml
 config_dir = '../configs'
 
 def main():
-    #halo_config()
-    #geo_config()
-    scalar_config()
+    
+    sim_name = 'TNG100-1'
+    #sim_name = 'TNG50-4'
 
-def halo_config():
+    #halo_config(sim_name)
+    #geo_config(sim_name)
+    scalar_config(sim_name)
+
+
+def halo_config(sim_name):
     
     # sim info
     base_dir = '/scratch/ksf293/equivariant-cosmology/data'
     snap_num_str = '099' # z = 0
-    #sim_name = 'TNG100-1'
-    sim_name = 'TNG50-4'
     sim_name_dark = f'{sim_name}-Dark'
 
     # halo params 
@@ -64,10 +67,7 @@ def halo_config():
     print(f"Generated halo config file {fn_halo_config}")
 
 
-def geo_config():
-
-    #sim_name = 'TNG100-1'
-    sim_name = 'TNG50-4'
+def geo_config(sim_name):
 
     # halo info
     halo_tag = ''
@@ -89,7 +89,8 @@ def geo_config():
     # save info
     geo_dir = f'../data/geometric_features/geometric_features_{sim_name}'
     geo_tag = ''
-    fn_geo_features = f'{geo_dir}/geometric_features{halo_tag}{geo_tag}.npy'
+    fn_geo_features = f'{geo_dir}/geometric_features_{sim_name}{halo_tag}{geo_tag}.npy'
+    fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
 
     geo_config_dict = {'geo_tag': geo_tag,
                 'fn_geo_features': fn_geo_features,
@@ -104,7 +105,6 @@ def geo_config():
                         'fn_halo_config': fn_halo_config,
                         }
 
-    fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
     dicts = {'halo': halo_config_dict, 'geo': geo_config_dict, }
 
     with open(fn_geo_config, 'w') as file:
@@ -113,10 +113,7 @@ def geo_config():
    
 
 
-def scalar_config():
-
-    #sim_name = 'TNG100-1'
-    sim_name = 'TNG50-4'
+def scalar_config(sim_name):
 
     # halo info
     halo_tag = ''
@@ -129,7 +126,8 @@ def scalar_config():
     # save info
     scalar_dir = f'../data/scalar_features/scalar_features_{sim_name}'
     scalar_tag = ''
-    fn_scalar_features = f'{scalar_dir}/scalar_features{halo_tag}{geo_tag}{scalar_tag}.npy'
+    fn_scalar_features = f'{scalar_dir}/scalar_features{sim_name}{halo_tag}{geo_tag}{scalar_tag}.npy'
+    fn_scalar_config = f'{config_dir}/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
 
     # scalar parameters
     m_order_max = 2
@@ -137,7 +135,8 @@ def scalar_config():
     v_order_max = 4
     n_groups_rebin = [[0,1,2], [3,4,5,6,7], [8,9,10]]
     eigenvalues_not_trace = True
-    rescale_geometric_features = True
+    mrv_names_for_rescaling = ['m200m', 'r200m', 'v200m']
+    transform_pseudotensors = True
 
     geo_config_dict = {'geo_tag': geo_tag,
                        'fn_geo_config': fn_geo_config,
@@ -154,10 +153,10 @@ def scalar_config():
                           'v_order_max': v_order_max,
                           'n_groups_rebin': n_groups_rebin,
                           'eigenvalues_not_trace': eigenvalues_not_trace,
-                          'rescale_geometric_features': rescale_geometric_features,
+                          'mrv_names_for_rescaling': mrv_names_for_rescaling,
+                          'transform_pseudotensors': transform_pseudotensors
                           }
 
-    fn_scalar_config = f'{config_dir}/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
     dicts = {'halo': halo_config_dict, 'geo': geo_config_dict, 'scalar': scalar_config_dict}
 
     with open(fn_scalar_config, 'w') as file:

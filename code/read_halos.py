@@ -27,15 +27,14 @@ class DarkHalo:
 
     def load_positions_and_velocities(self, shift=True, center='x_com'):
         halo_dark_dm = il.snapshot.loadHalo(self.base_path,self.snap_num,self.idx_halo_dark,'dm')
-        x_data_halo = halo_dark_dm['Coordinates']
+        x_data_halo = halo_dark_dm['Coordinates'] #c kpc/h
         v_data_halo = halo_dark_dm['Velocities']
 
         if shift:
-            center_options = ['x_com','x_minPE']
+            center_options = ['x_com','x_minPE','x_grouppos']
             assert center in center_options, f"Center choice must be one of {center_options}!"
                  
-            if center=='x_minPE':
-                assert 'x_minPE' in self.catalog_properties, "Must first add 'x_minPE' to catalog property dict!"
+            assert center in self.catalog_properties, f"Must first add center mode {center} to catalog property dict!"
             x_data_halo = self.shift_x(x_data_halo, center)
             v_data_halo = self.shift_v(v_data_halo)
 
@@ -43,13 +42,7 @@ class DarkHalo:
 
     # for now, masses of all particles are assumed to be same
     def shift_x(self, x_arr, center):
-        if center=='x_com':
-            # Add particle position to make sure CoM falls within halo
-            particle0_pos = x_arr[0]
-            x_arr_shifted_byparticle = self.shift_points_torus(x_arr, particle0_pos)
-            x_shift = np.mean(x_arr_shifted_byparticle, axis=0) + particle0_pos
-        elif center=='x_minPE':
-            x_shift = self.catalog_properties['x_minPE']
+        x_shift = self.catalog_properties[center]
         # Subtract off shift for each halo, wrapping around torus
         x_arr_shifted = self.shift_points_torus(x_arr, x_shift)
         return x_arr_shifted
@@ -64,6 +57,45 @@ class DarkHalo:
 
     def set_catalog_property(self, property_name, value):
         self.catalog_properties[property_name] = value
+
+    # don't actually use! was for checks
+    def compute_mrv_200m(self, density_mean, m_dmpart_dark, mass_multiplier, center='x_com'):
+        number_density_mean = density_mean / m_dmpart_dark
+        factor = 200
+
+        x_data_halo, v_data_halo = self.load_positions_and_velocities(shift=True, center=center)
+
+        dists_from_center = np.linalg.norm(x_data_halo, axis=1)
+        x_rms = np.sqrt(np.mean(dists_from_center**2))
+
+        x_bin_edges = np.linspace(0.5*x_rms, 10*x_rms, 500)
+        for i in range(len(x_bin_edges)):
+            n_part_inside_edge = np.sum(dists_from_center < x_bin_edges[i])
+            vol = 4/3*np.pi*(x_bin_edges[i]**3)
+            number_density = n_part_inside_edge / vol 
+            if number_density < 200*number_density_mean:
+                self.catalog_properties['r200m'] = x_bin_edges[i]
+                self.catalog_properties['m200m'] = n_part_inside_edge * m_dmpart_dark
+                break
+
+        import astropy
+        import astropy.constants as const
+        import astropy.units as u
+        G = const.G.to('(kpc * km**2)/(Msun * s**2)')
+        # m200m really in Msun/h and r200m in ckpc/h; the h's cancel out, and the c is comoving meaning
+        # we need a factor of the scale factor, but here at z=0 just 1. if go to diff z need to 
+        # make sure to include!
+        self.catalog_properties['v200m'] = np.sqrt(G * (mass_multiplier*self.catalog_properties['m200m']*u.Msun) / (self.catalog_properties['r200m']*u.kpc)).value
+
+
+    def compute_MXV_rms(self, center, m_dmpart_dark):
+        x_data_halo, v_data_halo = self.load_positions_and_velocities(shift=True, center=center)
+        dists_from_center = np.linalg.norm(x_data_halo, axis=1)
+        self.X_rms = np.sqrt(np.mean(dists_from_center**2))
+        n_part_in_X_rms = np.sum(dists_from_center < self.X_rms)
+        self.M_rms = n_part_in_X_rms*m_dmpart_dark
+        v_norms = np.linalg.norm(v_data_halo, axis=1)
+        self.V_rms = np.sqrt(np.mean(v_norms**2))
 
 
 class SimulationReader:
@@ -83,11 +115,15 @@ class SimulationReader:
         self.halo_arr = []
         self.mass_multiplier = mass_multiplier
 
-        with h5py.File(f'{self.base_path_hydro}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5','r') as f:
+        with h5py.File(f'{self.base_path_dark}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5','r') as f:
             header = dict( f['Header'].attrs.items() )
-            self.m_dmpart = header['MassTable'][1] # this times 10^10 msun/h
+            self.m_dmpart_dark = header['MassTable'][1] # this times 10^10 msun/h
             self.box_size = header['BoxSize'] # c kpc/h
 
+        with h5py.File(f'{self.base_path_hydro}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5','r') as f:
+            header = dict( f['Header'].attrs.items() )
+            self.m_dmpart_hydro = header['MassTable'][1] # this times 10^10 msun/h
+            # box size same in dark and hydro
 
     def load_sim_dark_halos(self):
         self.halos_dark = il.groupcat.loadHalos(self.base_path_dark,self.snap_num)
@@ -264,7 +300,12 @@ class SimulationReader:
                     halo.set_catalog_property(property_name, idx_subhalo_to_sfr1[halo.idx_subhalo_hydro])
             return
 
+
+
         for halo in self.dark_halo_arr:
+            # if property_name=='m200m' or         
+            #     halo.compute_mrv_200m(mean_density_header, sim_reader.m_dmpart_dark, sim_reader.mass_multiplier, center=center_halo)
+
             if property_name=='r200m':
                 property_value = self.halos_dark['Group_R_Mean200'][halo.idx_halo_dark]
             elif property_name=='mass_hydro_subhalo_star':
@@ -282,11 +323,14 @@ class SimulationReader:
                 v_200m = np.sqrt(G * (self.mass_multiplier*halo.catalog_properties['m200m']*u.Msun) / (halo.catalog_properties['r200m']*u.kpc))
                 property_value = v_200m.value
             elif property_name=='x_minPE':
+                # this should generally be the same as x_grouppos, bc most bound particle definition (double check)
                 property_value = self.subhalos_dark['SubhaloPos'][halo.idx_subhalo_dark]
             elif property_name=='x_minPE_hydro':
                 property_value = self.subhalos_hydro['SubhaloPos'][halo.idx_subhalo_hydro]
             elif property_name=='x_com':
                 property_value = self.halos_dark['GroupCM'][halo.idx_halo_dark]
+            elif property_name=='x_grouppos':
+                property_value = self.halos_dark['GroupPos'][halo.idx_halo_dark]
             elif property_name=='sfr_hydro_subhalo_star':
                 property_value = self.subhalos_hydro['SubhaloSFR'][halo.idx_subhalo_hydro]
             elif property_name=='radius_hydro_subhalo_star':
@@ -424,4 +468,34 @@ class SimulationReader:
             count += 1
 
 
+    def get_mean_density_from_mr200m(self):
+        center = 'x_grouppos'
+        factor = 200
+        mean_densities = []
+        for halo in self.dark_halo_arr:
+            m_200m = halo.catalog_properties['m200m']
+            vol = 4/3*np.pi*(halo.catalog_properties['r200m']**3)
+            density_in_r200m = m_200m/vol
+            mean_dens = density_in_r200m / factor
+            mean_densities.append(mean_dens) # mean of the calculated mean densities for all halos
+        return np.mean(mean_densities)
 
+
+    def get_mean_density_from_header(self):
+        print(f'{self.base_path_dark}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5')
+        # This seems to give wrong value for TNG100-1?? Says Npart = 1200**3, should be 1820**3! 
+        # TNG50-4 seems right tho
+        # with h5py.File(f'{self.base_path_dark}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5','r') as f:
+        #     header = dict( f['Header'].attrs.items() )
+        #     n_part_dm_dark = header['NumPart_Total'][1] 
+        #     print(header['NumPart_Total'])
+        if self.sim_name=='TNG100-1':
+            n_part_dm_dark = 1820**3
+        elif self.sim_name=='TNG50-4':
+            n_part_dm_dark = 270**3
+        else:
+            raise ValueError('Sim not recognized!')
+        number_density_mean = n_part_dm_dark/(self.box_size**3)
+        print(n_part_dm_dark, n_part_dm_dark**(1/3), self.box_size, number_density_mean)
+        mean_density = number_density_mean*self.m_dmpart_dark
+        return mean_density

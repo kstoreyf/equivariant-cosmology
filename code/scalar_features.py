@@ -10,11 +10,25 @@ from geometric_features import GeometricFeature, geo_name
 
 class ScalarFeaturizer:
 
-    def __init__(self, geo_feature_arr=None):
+    def __init__(self, geo_feature_arr=None, n_groups_rebin=None,
+                 transform_pseudotensors=False, mrv_for_rescaling=None):
+
         self.geo_feature_arr_orig = geo_feature_arr
-        # must use deepcopy because our array has bpjects! np.copy doesn't work
-        self.geo_feature_arr = copy.deepcopy(geo_feature_arr)
+        # must use deepcopy because our array has opjects! np.copy doesn't work
+        geo_feature_arr = copy.deepcopy(geo_feature_arr)
+
+        if n_groups_rebin is not None:
+            geo_feature_arr = utils.rebin_geometric_features(
+                                    geo_feature_arr, n_groups_rebin)
+        if transform_pseudotensors:
+            geo_feature_arr = utils.transform_pseudotensors(geo_feature_arr)
+            
+        if mrv_for_rescaling is not None:
+            geo_feature_arr = utils.rescale_geometric_features(geo_feature_arr, *mrv_for_rescaling)
+    
+        self.geo_feature_arr = geo_feature_arr
         self.N_halos = len(self.geo_feature_arr)
+
 
 
     def featurize(self, m_order_max, 
@@ -207,7 +221,6 @@ class ScalarFeaturizer:
 
     # does rescaling in-place in self.geo_feature_arr!
     def rescale_geometric_features(self, Ms, Rs, Vs):
-        
         for i_g, geo_features_halo in enumerate(self.geo_feature_arr):
             for geo_feat in geo_features_halo:
                 geo_feat.value /= Ms[i_g] # all geometric features have single m term

@@ -50,19 +50,26 @@ def run():
     geo_featurizer = GeometricFeaturizer()
     geo_featurizer.load_features(gp['fn_geo_features'])
 
-    geo_feature_arr_rebinned = utils.rebin_geometric_features(
-                                     geo_featurizer.geo_feature_arr, scp['n_groups_rebin'])
-    geo_feature_arr_rebinned_pseudo = utils.transform_pseudotensors(geo_feature_arr_rebinned)
+    # geo_feature_arr_rebinned = utils.rebin_geometric_features(
+    #                                  geo_featurizer.geo_feature_arr, scp['n_groups_rebin'])
+    # if scp['transform_pseudotensors']:
+    #     geo_feature_arr_rebinned = utils.transform_pseudotensors(geo_feature_arr_rebinned)
 
-    scalar_featurizer = ScalarFeaturizer(geo_feature_arr_rebinned_pseudo)
-    #scalar_featurizer.compute_MXV_from_features()
-    if scp['rescale_geometric_features']:
-        m_200m = np.array([dark_halo.catalog_properties['m200m'] for dark_halo in sim_reader.dark_halo_arr])
-        r_200m = np.array([dark_halo.catalog_properties['r200m'] for dark_halo in sim_reader.dark_halo_arr])
-        v_200m = np.array([dark_halo.catalog_properties['v200m'] for dark_halo in sim_reader.dark_halo_arr])
-        scalar_featurizer.rescale_geometric_features(m_200m, r_200m, v_200m)
+    # scalar_featurizer = ScalarFeaturizer(geo_feature_arr_rebinned)
+    # if scp['rescale_geometric_features']:
+    #     m_200m = np.array([dark_halo.catalog_properties['m200m'] for dark_halo in sim_reader.dark_halo_arr])
+    #     r_200m = np.array([dark_halo.catalog_properties['r200m'] for dark_halo in sim_reader.dark_halo_arr])
+    #     v_200m = np.array([dark_halo.catalog_properties['v200m'] for dark_halo in sim_reader.dark_halo_arr])
+    #     scalar_featurizer.rescale_geometric_features(m_200m, r_200m, v_200m)
 
     start = time.time()
+
+    mrv_for_rescaling = utils.get_mrv_for_rescaling(sim_reader, scp['mrv_names_for_rescaling'])
+    scalar_featurizer = ScalarFeaturizer(geo_featurizer.geo_feature_arr,
+                            n_groups_rebin=scp['n_groups_rebin'], 
+                            transform_pseudotensors=scp['transform_pseudotensors'], 
+                            mrv_for_rescaling=mrv_for_rescaling)
+
     scalar_featurizer.featurize(scp['m_order_max'], x_order_max=scp['x_order_max'], 
                                 v_order_max=scp['v_order_max'],
                                 eigenvalues_not_trace=scp['eigenvalues_not_trace'])

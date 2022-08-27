@@ -153,6 +153,7 @@ def compute_error(fitter, test_error_type='percentile'):
 
 # n_groups should be lists of the "n" to include in each group
 def rebin_geometric_features(geo_feature_arr, n_groups):
+    print("Rebinning geometric features")
     # TODO: implement check that bins listed in n_groups matches bins in the geo_feature_arr
     n_vals = [g.n for g in geo_feature_arr[0]] # 0 because just check first halo, features should be same
     n_groups_flat = [n for group in n_groups for n in group]
@@ -193,8 +194,36 @@ def rebin_geometric_features(geo_feature_arr, n_groups):
     return geo_feature_arr_rebinned
 
 
-def transform_pseudotensors(geo_feature_arr):
+def get_mrv_for_rescaling(sim_reader, mrv_names):
+    mrv_for_rescaling = []
+    for mrv_name in mrv_names:
+        if mrv_name is None:
+            mrv_for_rescaling.append(np.ones(len(sim_reader.dark_halo_arr)))
+        else:
+            sim_reader.add_catalog_property_to_halos(mrv_name)
+            mrv_for_rescaling.append( [halo.catalog_properties[mrv_name] for halo in sim_reader.dark_halo_arr] )
+    return np.array(mrv_for_rescaling)
 
+
+# TODO: check that this works not in place!
+def rescale_geometric_features(geo_feature_arr, Ms, Rs, Vs):
+    print("Rescaling geometric features")
+    N_geo_arrs = len(geo_feature_arr)
+    assert len(Ms)==N_geo_arrs, "Length of Ms doesn't match geo feature arr!"
+    assert len(Rs)==N_geo_arrs, "Length of Rs doesn't match geo feature arr!"
+    assert len(Vs)==N_geo_arrs, "Length of Vs doesn't match geo feature arr!"
+    for i_g, geo_features_halo in enumerate(geo_feature_arr):
+        for geo_feat in geo_features_halo:
+            geo_feat.value /= Ms[i_g] # all geometric features have single m term
+            for _ in range(geo_feat.x_order):
+                geo_feat.value /= Rs[i_g]
+            for _ in range(geo_feat.v_order):
+                geo_feat.value /= Vs[i_g]
+    return geo_feature_arr
+
+
+def transform_pseudotensors(geo_feature_arr):
+    print("Transforming pseudotensors")
     geo_feature_arr = list(geo_feature_arr)
     for i_halo, geo_features_halo in enumerate(geo_feature_arr):
         gs_to_insert = []

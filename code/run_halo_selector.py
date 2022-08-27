@@ -37,6 +37,7 @@ def run():
                             must_have_SAM_match=hp['must_have_SAM_match'],
                             must_have_halo_structure_info=hp['must_have_halo_structure_info'], 
                             seed=hp['seed'])
+    # add halo mrv's 
     sim_reader.save_dark_halo_arr(fn_dark_halo_arr)
     print(f'Saved halos to {fn_dark_halo_arr}')
 
