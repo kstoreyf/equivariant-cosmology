@@ -28,7 +28,7 @@ class NeuralNet(torch.nn.Module):
         torch.nn.init.zeros_(self.lin3.bias)
         torch.nn.init.xavier_uniform_(self.linfinal.weight)
         torch.nn.init.zeros_(self.linfinal.bias)
-
+        self.double()
 
     def forward(self, x):
         x = self.lin1(x)
@@ -41,12 +41,24 @@ class NeuralNet(torch.nn.Module):
         return output
 
 
+def save_nn(nn, fn_nn):
+    torch.save(nn.state_dict(), fn_nn)
+
+
+def load():
+    model = NeuralNet(*args, **kwargs)
+    model.load_state_dict(torch.load(PATH))
+    model.eval()
+
+
 class NNFitter(Fitter):
 
     def __init__(self, x_scalar_features, y_scalar, 
-                 y_val_current, x_features_extra=None):
+                 y_val_current, x_features_extra=None, 
+                 uncertainties=None):
         super().__init__(x_scalar_features, y_scalar, 
-                 y_val_current, x_features_extra=x_features_extra)
+                 y_val_current, x_features_extra=x_features_extra,
+                 uncertainties=uncertainties)
 
 
     def set_up_data(self, log_x=False, log_y=False):
@@ -58,17 +70,19 @@ class NNFitter(Fitter):
             self.x_features_extra_train_scaled = None
         else:
             self.x_features_extra_train_scaled = self.scale_x_features(self.x_features_extra_train)
-        A_train = self.construct_feature_matrix(self.x_scalar_train_scaled, self.y_val_current_train_scaled,
+        A_train = self.construct_feature_matrix(self.x_scalar_train_scaled, 
+                                        self.y_val_current_train_scaled,
                                         x_features_extra=self.x_features_extra_train_scaled,
                                         training_mode=True)
 
         #self.scaler = StandardScaler()
-        self.scaler = MinMaxScaler()
+        self.scaler = MinMaxScaler() # TODO revisit !! 
         self.scaler.fit(A_train)
         A_train_scaled = self.scaler.transform(A_train)
-
-        dataset_train = DataSet(A_train_scaled, self.y_scalar_train_scaled)
-        self.data_loader_train = iter(DataLoader(dataset_train, batch_size=32, shuffle=True))
+        self.dataset_train = DataSet(A_train_scaled, self.y_scalar_train_scaled, 
+                                y_var=self.uncertainties_train_scaled**2)
+        print("SHUFFLE FALSE")
+        #self.data_loader_train = iter(DataLoader(self.dataset_train, batch_size=32, shuffle=False))
 
 
     def construct_feature_matrix(self, x_features, y_current, x_features_extra=None, training_mode=False):
@@ -86,7 +100,9 @@ class NNFitter(Fitter):
 
     def train(self, max_epochs=500, learning_rate=0.01):
 
-        self.criterion = torch.nn.MSELoss()
+        #self.criterion = torch.nn.MSELoss()
+        self.criterion = torch.nn.GaussianNLLLoss()
+
         optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
 
         # Training loop
@@ -95,10 +111,17 @@ class NNFitter(Fitter):
         for epoch in range(max_epochs):
             optimizer.zero_grad()
             # Forward pass
-            x, y = self.data_loader_train.next()
-            y_pred = self.model(x.float())
+            # TODO: this y_var won't work if we don't pass unc to dataloader
+            #x, y = self.data_loader_train.next() 
+            x, y, y_var = self.data_loader_train.next() 
+            if epoch==0:
+                print(x[0][0], y[0])
+                #print(x[0], y[0])
+            y_pred = self.model(x.double())
             # Compute Loss
-            loss = self.criterion(y_pred.squeeze(), y)
+            #loss = self.criterion(y_pred.squeeze(), y)
+            loss = self.criterion(y_pred.squeeze(), y, y_var)
+
             self.loss.append(loss.item())
             #print('Epoch {}: train loss: {}'.format(epoch, loss.item()))
             # Backward pass
@@ -119,29 +142,43 @@ class NNFitter(Fitter):
 
 
     def predict_test(self):
+        print('xtest', self.x_scalar_test[0][0])
         self.x_scalar_test_scaled = self.scale_x_features(self.x_scalar_test)
         if self.x_features_extra_test is None:
             self.x_features_extra_test_scaled = None
         else:
             self.x_features_extra_test_scaled = self.scale_x_features(self.x_features_extra_test)
-        self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, self.y_val_current_test_scaled,
+        self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, 
+                                                    self.y_val_current_test_scaled,
                                                     x_features_extra=self.x_features_extra_test_scaled)
 
         A_test_scaled = self.scaler.transform(self.A_test)
         self.model.eval()
         with torch.no_grad():
-            y_scalar_pred = self.model(torch.from_numpy(A_test_scaled).float())
+            #y_scalar_pred = self.model(torch.from_numpy(A_test_scaled).float())
+            y_scalar_pred = self.model(torch.from_numpy(A_test_scaled).double())
             self.y_scalar_pred = y_scalar_pred.squeeze().numpy()
+        print('ypred', self.y_scalar_pred[0])
 
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    numpy.random.seed(worker_seed)
+    random.seed(worker_seed)
+    print('worker seed', worker_seed)
 
 
 class DataSet(Dataset):
 
-    def __init__(self, X, Y, randomize=True):
+    def __init__(self, X, Y, y_var=None, randomize=True):
         self.X = np.array(X)
         self.Y = np.array(Y)
+        self.y_var = y_var
         if len(self.X) != len(self.Y):
             raise Exception("The length of X does not match the length of Y")
+        if y_var is not None:
+            self.y_var = np.array(self.y_var)
+            if len(self.X) != len(self.y_var):
+                raise Exception("The length of X does not match the length of y_var")
 
     def __len__(self):
         return len(self.X)
@@ -149,24 +186,8 @@ class DataSet(Dataset):
     def __getitem__(self, index):
         _x = self.X[index]
         _y = self.Y[index]
+        if self.y_var is not None:
+            _y_var = self.y_var[index]
+            return _x, _y, _y_var
         return _x, _y
-
-
-# n_train = 3
-# input_size = 5
-# hidden_size = 16
-# target_size = 1
-
-# x_train = torch.randn((n_train, input_size))
-# y_train = torch.randn((n_train, target_size)) 
-
-
-# Check test loss before model training
-# model.eval()
-# y_pred = model(x_train)
-# print(y_pred)
-# print(y_pred.squeeze())
-# print(y_train)
-# loss_before_train = criterion(y_pred.squeeze(), y_train)
-# print('Test loss before training' , loss_before_train.item())
 

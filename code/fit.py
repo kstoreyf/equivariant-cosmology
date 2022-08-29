@@ -20,8 +20,10 @@ class Fitter:
             self.x_features_extra = np.array(self.x_features_extra)
             assert self.x_features_extra.shape[0]==self.N_halos, "Must have same number of halos for x scalar features and extra features!"
 
+        # TODO: not sure this makes sense as default?? either make required, or 
+        # should probs keep checking if none
         if uncertainties is None:
-            uncertainties = np.ones(self.N_halos)
+            uncertainties = np.zeros(self.N_halos)
         self.uncertainties = np.array(uncertainties)
         assert self.uncertainties.shape[0]==self.N_halos, "Must have same number of halos for x features and uncertainties!"
 
