@@ -252,8 +252,10 @@ def transform_pseudotensors(geo_feature_arr):
 
 
 # the rest is val
-def split_train_val_test(random_ints, frac_train=0.70, frac_test=0.15):
+def split_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15):
 
+    tol = 1e-6
+    assert abs((frac_train+frac_val+frac_test) - 1.0) < tol, "Fractions must add to 1!" 
     N_halos = len(random_ints)
     int_train = int(frac_train*N_halos)
     int_test = int((1-frac_test)*N_halos)

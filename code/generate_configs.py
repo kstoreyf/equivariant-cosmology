@@ -6,8 +6,8 @@ config_dir = '../configs'
 
 def main():
     
-    sim_name = 'TNG100-1'
-    #sim_name = 'TNG50-4'
+    #sim_name = 'TNG100-1'
+    sim_name = 'TNG50-4'
 
     #halo_config(sim_name)
     #geo_config(sim_name)

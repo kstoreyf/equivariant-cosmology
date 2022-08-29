@@ -176,7 +176,7 @@ def plot_pred_vs_true(y_label_name, y_true, y_pred, y_train, y_train_pred,
     fig = plt.figure(figsize=(6,6))
     ax = plt.gca()
 
-    y_label = utils.label_dict[y_label_name]
+    y_label = utils.label_dict[y_label_name] if y_label_name in utils.label_dict else y_label_name
     # main scatter plotting
     plt.scatter(y_train, y_train_pred, s=12, alpha=0.3, c='m', label='training')
     if colors_test is None:
@@ -189,6 +189,7 @@ def plot_pred_vs_true(y_label_name, y_true, y_pred, y_train, y_train_pred,
     plt.plot(true_line, true_line, color='grey', zorder=0)
 
     # labels & adjustments
+    print(y_label)
     plt.xlabel(y_label + ', true')
     plt.ylabel(y_label + ', predicted')
 
@@ -214,7 +215,7 @@ def plot_pred_vs_true_hist(y_label_name, y_true, y_pred, y_train, y_train_pred,
     fig = plt.figure(figsize=(6,6))
     ax = plt.gca()
 
-    y_label = utils.label_dict[y_label_name]
+    y_label = utils.label_dict[y_label_name] if y_label_name in utils.label_dict else y_label_name
     # main scatter plotting
     #plt.scatter(y_train, y_train_pred, s=12, alpha=0.3, c='m', label='training')
     if colors_test is None:
@@ -270,7 +271,7 @@ def plot_pred_vs_property(x_label_name, y_label_name, x_property, y_true, y_pred
     
     # labels & adjustments
     x_label = utils.label_dict[x_label_name]
-    y_label = utils.label_dict[y_label_name]
+    y_label = utils.label_dict[y_label_name] if y_label_name in utils.label_dict else y_label_name
 
     plt.xlabel(x_label)
     plt.ylabel(y_label)
@@ -373,7 +374,7 @@ def plot_pred_vs_true_hist(y_label_name, y_true, y_pred,
     fig = plt.figure(figsize=(8,8))
     ax = plt.gca()
 
-    y_label = utils.label_dict[y_label_name]
+    y_label = utils.label_dict[y_label_name] if y_label_name in utils.label_dict else y_label_name
 
     #ticks = np.arange(5, 25, 5)
     bins = np.linspace(y_lim[0], y_lim[1], 100)
