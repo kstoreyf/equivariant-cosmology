@@ -56,7 +56,7 @@ class NNFitter(Fitter):
 
 
     def set_up_data(self, log_x=False, log_y=False):
-
+        print("NNFitter: Setting up data")
         self.log_x, self.log_y = log_x, log_y
         self.scale_y_values()
         self.x_scalar_train_scaled = self.scale_x_features(self.x_scalar_train)
@@ -65,9 +65,11 @@ class NNFitter(Fitter):
         else:
             self.x_features_extra_train_scaled = self.scale_x_features(self.x_features_extra_train)
         A_train = self.construct_feature_matrix(self.x_scalar_train_scaled, 
-                                        self.y_val_current_train_scaled,
+                                        y_current=self.y_val_current_train_scaled,
                                         x_features_extra=self.x_features_extra_train_scaled,
-                                        training_mode=True)
+                                        training_mode=True, 
+                                        include_ones_feature=False
+                                        )
 
         #self.scaler = StandardScaler(with_mean=True, with_std=False)
         self.scaler = MinMaxScaler() # TODO revisit !! 
@@ -79,17 +81,17 @@ class NNFitter(Fitter):
         #self.data_loader_train = iter(DataLoader(self.dataset_train, batch_size=32, shuffle=False))
 
 
-    def construct_feature_matrix(self, x_features, y_current, x_features_extra=None, training_mode=False):
-        y_current = np.atleast_2d(y_current).T
-        if x_features_extra is None:
-            A = np.concatenate((y_current, x_features), axis=1)
-        else:
-            A = np.concatenate((y_current, x_features_extra, x_features), axis=1)           
-        if training_mode:
-            n_extra = x_features_extra.shape[1] if x_features_extra is not None else 0
-            self.n_extra_features = 1 + n_extra # 2 for y_current
-            self.n_A_features = self.n_x_features + self.n_extra_features
-        return A
+    # def construct_feature_matrix(self, x_features, y_current, x_features_extra=None, training_mode=False):
+    #     y_current = np.atleast_2d(y_current).T
+    #     if x_features_extra is None:
+    #         A = np.concatenate((y_current, x_features), axis=1)
+    #     else:
+    #         A = np.concatenate((y_current, x_features_extra, x_features), axis=1)           
+    #     if training_mode:
+    #         n_extra = x_features_extra.shape[1] if x_features_extra is not None else 0
+    #         self.n_extra_features = 1 + n_extra # 2 for y_current
+    #         self.n_A_features = self.n_x_features + self.n_extra_features
+    #     return A
 
 
     def train_one_epoch(self, epoch_index):
@@ -159,7 +161,8 @@ class NNFitter(Fitter):
 
         x_scaled = self.scale_x_features(x)
         y_current_scaled = self.scale_y(y_current)
-        A = self.construct_feature_matrix(x_scaled, y_current_scaled, x_features_extra=x_extra)
+        A = self.construct_feature_matrix(x_scaled, y_current=y_current_scaled, x_features_extra=x_extra,
+                                          include_ones_feature=False)
 
         A_scaled = self.scaler.transform(A)
         self.model.eval()
@@ -176,8 +179,9 @@ class NNFitter(Fitter):
         else:
             self.x_features_extra_test_scaled = self.scale_x_features(self.x_features_extra_test)
         self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, 
-                                                    self.y_val_current_test_scaled,
-                                                    x_features_extra=self.x_features_extra_test_scaled)
+                                                    y_current=self.y_val_current_test_scaled,
+                                                    x_features_extra=self.x_features_extra_test_scaled,
+                                                    include_ones_feature=False)
 
         A_test_scaled = self.scaler.transform(self.A_test)
         self.model.eval()

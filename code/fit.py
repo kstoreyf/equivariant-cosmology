@@ -3,34 +3,37 @@ import numpy as np
 
 class Fitter:
 
-    def __init__(self, x_scalar_features=None, y_scalar=None, 
-                 y_val_current=None, x_features_extra=None, uncertainties=None,
+    def __init__(self, x_features=None, y=None, 
+                 y_current=None, x_features_extra=None, uncertainties=None,
                  train_mode=True, predict_mode=False):
 
         if train_mode:
-            msg = "Must pass x_scalar_features, y_scalar, y_val_current in train mode!"
-            assert x_scalar_features is not None and y_scalar is not None and y_val_current is not None, msg
+            msg = "Must pass x_features and y in train mode!"
+            assert x_features is not None and y is not None, msg
 
-            self.x_scalar_features = np.array(x_scalar_features)
-            self.y_scalar = np.array(y_scalar)
-            # y_val_current is our current best-guess for the y value, 
+            self.x_features = np.array(x_features)
+            self.y = np.array(y)
+            # y_current is our current best-guess for the y value, 
             # e.g. from a broken power law model of the stellar-to-halo mass relation
-            self.y_val_current = np.array(y_val_current)
             self.x_features_extra = x_features_extra
+            self.y_current = y_current 
 
-            self.N_halos = x_scalar_features.shape[0]
-            assert self.y_scalar.shape[0]==self.N_halos, "Must have same number of halos for x features and y labels!"
-            assert self.y_val_current.shape[0]==self.N_halos, "Must have same number of halos for x features and y val current!"
-            if self.x_features_extra is not None:
+            self.N_halos = x_features.shape[0]
+            assert self.y.shape[0]==self.N_halos, "Must have same number of halos for x features and y labels!"
+            
+            if y_current is not None:
+                self.y_current = np.array(y_current)
+                assert self.y_current.shape[0]==self.N_halos, "Must have same number of halos for x features and y val current!"
+            
+            if x_features_extra is not None:
                 self.x_features_extra = np.array(self.x_features_extra)
                 assert self.x_features_extra.shape[0]==self.N_halos, "Must have same number of halos for x scalar features and extra features!"
 
             # TODO: not sure this makes sense as default?? either make required, or 
             # should probs keep checking if none
-            if uncertainties is None:
-                uncertainties = np.zeros(self.N_halos)
-            self.uncertainties = np.array(uncertainties)
-            assert self.uncertainties.shape[0]==self.N_halos, "Must have same number of halos for x features and uncertainties!"
+            if uncertainties is not None:
+                self.uncertainties = np.array(uncertainties)
+                assert self.uncertainties.shape[0]==self.N_halos, "Must have same number of halos for x features and uncertainties!"
 
 
     def scale_x_features(self, x_input):
@@ -68,16 +71,20 @@ class Fitter:
         self.idx_test = idx_test
 
         # Split train and test arrays
-        self.x_scalar_train = self.x_scalar_features[self.idx_train]
-        self.x_scalar_test = self.x_scalar_features[self.idx_test]
-        self.y_scalar_train = self.y_scalar[self.idx_train]
-        self.y_scalar_test = self.y_scalar[self.idx_test]
+        self.x_scalar_train = self.x_features[self.idx_train]
+        self.x_scalar_test = self.x_features[self.idx_test]
+        self.y_train = self.y[self.idx_train]
+        self.y_test = self.y[self.idx_test]
 
-        # Split uncertainties, y_val_currents, extra features if exist
-        self.uncertainties_train = self.uncertainties[self.idx_train]
-        self.uncertainties_test = self.uncertainties[self.idx_test]
-        self.y_val_current_train = self.y_val_current[self.idx_train]
-        self.y_val_current_test = self.y_val_current[self.idx_test]
+        # Split uncertainties, y_currents, extra features if exist
+        if self.uncertainties is not None:
+            self.uncertainties_train = self.uncertainties[self.idx_train]
+            self.uncertainties_test = self.uncertainties[self.idx_test]
+
+        if self.y_current is not None:
+            self.y_current_train = self.y_current[self.idx_train]
+            self.y_current_test = self.y_current[self.idx_test]
+
         if self.x_features_extra is None:
             self.x_features_extra_train = None
             self.x_features_extra_test = None
@@ -88,40 +95,45 @@ class Fitter:
         # Set number values
         self.n_train = len(self.x_scalar_train)
         self.n_test = len(self.x_scalar_test)
-        self.n_x_features = self.x_scalar_features.shape[1]
+        self.n_x_features = self.x_features.shape[1]
 
         if self.n_x_features > self.n_train/2:
             print('WARNING!!! Number of features ({self.n_features}) greater than half the number of training samples ({self.n_train})')
 
 
     def scale_y_values(self):
-        self.y_scalar_train_scaled = self.scale_y(self.y_scalar_train)
-        self.y_scalar_test_scaled = self.scale_y(self.y_scalar_test)
-        self.uncertainties_train_scaled = self.scale_uncertainties(self.uncertainties_train, self.y_scalar_train)
-        self.y_val_current_train_scaled = self.scale_y(self.y_val_current_train)
-        self.y_val_current_test_scaled = self.scale_y(self.y_val_current_test)
+        self.y_train_scaled = self.scale_y(self.y_train)
+        self.y_test_scaled = self.scale_y(self.y_test)
+        self.uncertainties_train_scaled = self.scale_uncertainties(self.uncertainties_train, self.y_train)
+        self.y_current_train_scaled = self.scale_y(self.y_current_train)
+        self.y_current_test_scaled = self.scale_y(self.y_current_test)
 
 
-    def construct_feature_matrix(self, x_features, y_current, x_features_extra=None, training_mode=False):
-        ones_feature = np.ones((x_features.shape[0], 1))
-        y_current = np.atleast_2d(y_current).T
-        if x_features_extra is None:
-            A = np.concatenate((ones_feature, y_current, x_features), axis=1)
-        else:
-            A = np.concatenate((ones_feature, y_current, x_features_extra, x_features), axis=1)           
+    def construct_feature_matrix(self, x_features, y_current=None, 
+                                 x_features_extra=None, include_ones_feature=True, training_mode=False):
+                                 
+        print("hi!")
+        A = np.empty((x_features.shape[0], 0))
+        if include_ones_feature:
+            ones_feature = np.ones((x_features.shape[0], 1))
+            A = np.hstack((A, ones_feature))
+        if y_current is not None:
+            y_current = np.atleast_2d(y_current).T
+            A = np.hstack((A, y_current))
+        if x_features_extra is not None:
+            A = np.hstack((A, x_features_extra))
+        A = np.hstack((A, x_features))   
         if training_mode:
-            n_extra = x_features_extra.shape[1] if x_features_extra is not None else 0
-            self.n_extra_features = 2 + n_extra # 2 for ones and y_current
-            self.n_A_features = self.n_x_features + self.n_extra_features
+            # TODO: do i need this?
+            self.n_A_features = A.shape[1]
+            self.n_extra_features = self.n_A_features - self.n_x_features
         return A
 
 
 class LinearFitter(Fitter):
 
-    def __init__(self, x_scalar_features, y_scalar, 
-                 y_val_current, x_features_extra=None, uncertainties=None):
-        super().__init__(x_scalar_features, y_scalar, 
-                 y_val_current, x_features_extra=x_features_extra, uncertainties=uncertainties)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 
     def scale_and_fit(self, rms_x=False, log_x=False, log_y=False, check_cond_of_A=False, 
@@ -133,7 +145,7 @@ class LinearFitter(Fitter):
             self.x_features_extra_train_scaled = None
         else:
             self.x_features_extra_train_scaled = self.scale_x_features(self.x_features_extra_train)
-        self.A_train = self.construct_feature_matrix(self.x_scalar_train_scaled, self.y_val_current_train_scaled,
+        self.A_train = self.construct_feature_matrix(self.x_scalar_train_scaled, self.y_current_train_scaled,
                                                      x_features_extra=self.x_features_extra_train_scaled,
                                                      training_mode=True)
 
@@ -154,7 +166,7 @@ class LinearFitter(Fitter):
             print('x_vals condition number:',  np.max(s)/np.min(s))
         inverse_variances = 1/self.uncertainties_train_scaled**2
         self.AtCinvA = self.A_train_fitscaled.T @ (inverse_variances[:,None] * self.A_train_fitscaled)
-        self.AtCinvY = self.A_train_fitscaled.T @ (inverse_variances * self.y_scalar_train_scaled)
+        self.AtCinvY = self.A_train_fitscaled.T @ (inverse_variances * self.y_train_scaled)
     
         # Regularize (if regularization_lambda=0, no regularization)
         lhs = self.AtCinvA + regularization_lambda * np.sum(inverse_variances) * np.identity(self.AtCinvA.shape[0])
@@ -175,8 +187,8 @@ class LinearFitter(Fitter):
         self.theta = self.theta_fitscaled / x_fitscales
 
         # This chi^2 is in units of the data as given, so does not include the mass_multiplier
-        self.y_scalar_train_pred = self.predict_from_A(self.A_train)
-        self.chi2 = np.sum((self.y_scalar_train - self.y_scalar_train_pred)**2 * inverse_variances)
+        self.y_train_pred = self.predict_from_A(self.A_train)
+        self.chi2 = np.sum((self.y_train - self.y_train_pred)**2 * inverse_variances)
 
         assert len(self.theta) == self.A_train.shape[1], 'Number of coefficients from theta vector should equal number of features!'
 
@@ -187,9 +199,9 @@ class LinearFitter(Fitter):
             self.x_features_extra_test_scaled = None
         else:
             self.x_features_extra_test_scaled = self.scale_x_features(self.x_features_extra_test)
-        self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, self.y_val_current_test_scaled,
+        self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, self.y_current_test_scaled,
                                                     x_features_extra=self.x_features_extra_test_scaled)
-        self.y_scalar_pred = self.predict_from_A(self.A_test)
+        self.y_pred = self.predict_from_A(self.A_test)
 
 
     def predict(self, x, y_current, x_extra=None):

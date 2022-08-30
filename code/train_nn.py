@@ -25,8 +25,8 @@ def main():
     y_target_name = 'mass_hydro_subhalo_star'
     y_label_name = 'm_stellar'
 
-    sim_name = 'TNG100-1'
-    #sim_name = 'TNG50-4'
+    #sim_name = 'TNG100-1'
+    sim_name = 'TNG50-4'
     halo_tag = ''
     geo_tag = ''
     scalar_tag = ''
@@ -88,8 +88,9 @@ def main():
     log_m_stellar = np.log10(m_stellar)
     uncertainties = utils.get_uncertainties_genel2019(y_label_name, log_m_stellar+log_mass_shift, sim_name=sim_name)
 
+    print("here!")
     nnfitter = NNFitter(scalar_featurizer.scalar_features, y_label_vals,
-                        y_val_current, x_features_extra=x_features_extra,
+                        y_val_current=y_val_current, x_features_extra=x_features_extra,
                         uncertainties=uncertainties)
 
     random_ints = np.array([dark_halo.random_int for dark_halo in sim_reader.dark_halo_arr])
@@ -110,7 +111,7 @@ def main():
                                           batch_size=32, shuffle=True,
                                           worker_init_fn=seed_worker,
                                           generator=g, num_workers=0)
-        train(nnfitter, hidden_size=128, max_epochs=70, learning_rate=lr,
+        train(nnfitter, hidden_size=128, max_epochs=10, learning_rate=lr,
              fn_model=fn_model)
 
         #nnfitter.save_model(fn_model)
