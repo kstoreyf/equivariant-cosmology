@@ -3,29 +3,34 @@ import numpy as np
 
 class Fitter:
 
-    def __init__(self, x_scalar_features, y_scalar, 
-                 y_val_current, x_features_extra=None, uncertainties=None):
+    def __init__(self, x_scalar_features=None, y_scalar=None, 
+                 y_val_current=None, x_features_extra=None, uncertainties=None,
+                 train_mode=True, predict_mode=False):
 
-        self.x_scalar_features = np.array(x_scalar_features)
-        self.y_scalar = np.array(y_scalar)
-        # y_val_current is our current best-guess for the y value, 
-        # e.g. from a broken power law model of the stellar-to-halo mass relation
-        self.y_val_current = np.array(y_val_current)
-        self.x_features_extra = x_features_extra
+        if train_mode:
+            msg = "Must pass x_scalar_features, y_scalar, y_val_current in train mode!"
+            assert x_scalar_features is not None and y_scalar is not None and y_val_current is not None, msg
 
-        self.N_halos = x_scalar_features.shape[0]
-        assert self.y_scalar.shape[0]==self.N_halos, "Must have same number of halos for x features and y labels!"
-        assert self.y_val_current.shape[0]==self.N_halos, "Must have same number of halos for x features and y val current!"
-        if self.x_features_extra is not None:
-            self.x_features_extra = np.array(self.x_features_extra)
-            assert self.x_features_extra.shape[0]==self.N_halos, "Must have same number of halos for x scalar features and extra features!"
+            self.x_scalar_features = np.array(x_scalar_features)
+            self.y_scalar = np.array(y_scalar)
+            # y_val_current is our current best-guess for the y value, 
+            # e.g. from a broken power law model of the stellar-to-halo mass relation
+            self.y_val_current = np.array(y_val_current)
+            self.x_features_extra = x_features_extra
 
-        # TODO: not sure this makes sense as default?? either make required, or 
-        # should probs keep checking if none
-        if uncertainties is None:
-            uncertainties = np.zeros(self.N_halos)
-        self.uncertainties = np.array(uncertainties)
-        assert self.uncertainties.shape[0]==self.N_halos, "Must have same number of halos for x features and uncertainties!"
+            self.N_halos = x_scalar_features.shape[0]
+            assert self.y_scalar.shape[0]==self.N_halos, "Must have same number of halos for x features and y labels!"
+            assert self.y_val_current.shape[0]==self.N_halos, "Must have same number of halos for x features and y val current!"
+            if self.x_features_extra is not None:
+                self.x_features_extra = np.array(self.x_features_extra)
+                assert self.x_features_extra.shape[0]==self.N_halos, "Must have same number of halos for x scalar features and extra features!"
+
+            # TODO: not sure this makes sense as default?? either make required, or 
+            # should probs keep checking if none
+            if uncertainties is None:
+                uncertainties = np.zeros(self.N_halos)
+            self.uncertainties = np.array(uncertainties)
+            assert self.uncertainties.shape[0]==self.N_halos, "Must have same number of halos for x features and uncertainties!"
 
 
     def scale_x_features(self, x_input):

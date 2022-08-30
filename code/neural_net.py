@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, QuantileTransformer
 
 from fit import Fitter
 
@@ -41,24 +41,18 @@ class NeuralNet(torch.nn.Module):
         return output
 
 
-def save_nn(nn, fn_nn):
-    torch.save(nn.state_dict(), fn_nn)
-
-
-def load():
-    model = NeuralNet(*args, **kwargs)
-    model.load_state_dict(torch.load(PATH))
-    model.eval()
 
 
 class NNFitter(Fitter):
 
-    def __init__(self, x_scalar_features, y_scalar, 
-                 y_val_current, x_features_extra=None, 
-                 uncertainties=None):
-        super().__init__(x_scalar_features, y_scalar, 
-                 y_val_current, x_features_extra=x_features_extra,
-                 uncertainties=uncertainties)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    # def __init__(self, x_scalar_features=None, y_scalar=None, 
+    #              y_val_current=None, x_features_extra=None, 
+    #              uncertainties=None):
+    #     super().__init__(x_scalar_features=x_scalar_features, y_scalar=y_scalar, 
+    #              y_val_current=y_val_current, x_features_extra=x_features_extra,
+    #              uncertainties=uncertainties)
 
 
     def set_up_data(self, log_x=False, log_y=False):
@@ -75,13 +69,13 @@ class NNFitter(Fitter):
                                         x_features_extra=self.x_features_extra_train_scaled,
                                         training_mode=True)
 
-        #self.scaler = StandardScaler()
+        #self.scaler = StandardScaler(with_mean=True, with_std=False)
         self.scaler = MinMaxScaler() # TODO revisit !! 
+        #self.scaler = QuantileTransformer(n_quantiles=10)
         self.scaler.fit(A_train)
         A_train_scaled = self.scaler.transform(A_train)
         self.dataset_train = DataSet(A_train_scaled, self.y_scalar_train_scaled, 
                                 y_var=self.uncertainties_train_scaled**2)
-        print("SHUFFLE FALSE")
         #self.data_loader_train = iter(DataLoader(self.dataset_train, batch_size=32, shuffle=False))
 
 
@@ -98,38 +92,71 @@ class NNFitter(Fitter):
         return A
 
 
-    def train(self, max_epochs=500, learning_rate=0.01):
+    def train_one_epoch(self, epoch_index):
+        running_loss = 0.
+        last_loss = 0.
+        for i, data in enumerate(self.data_loader_train):
+            x, y, y_var = data
 
+            # Zero your gradients for every batch!
+            self.optimizer.zero_grad()
+
+            # Make predictions for this batch
+            y_pred = self.model(x.double())
+
+            # Compute the loss and its gradients
+            loss = self.criterion(y_pred.squeeze(), y, y_var)
+            loss.backward()
+
+            # Adjust learning weights
+            self.optimizer.step()
+
+            # Gather data and report
+            running_loss += loss.item()
+            # if i % 1000 == 999 or i==len(self.data_loader_train)-1:
+            #     last_loss = running_loss / 1000 # loss per batch
+            #     print('  batch {} loss: {}'.format(i + 1, last_loss))
+            #     #tb_x = epoch_index * len(training_loader) + i + 1
+            #     #tb_writer.add_scalar('Loss/train', last_loss, tb_x)
+            #     running_loss = 0.
+        last_loss = running_loss / len(self.data_loader_train)
+        print("Training epoch", epoch_index, 'loss', last_loss)
+        return last_loss
+
+
+
+    def train(self, max_epochs=100, learning_rate=0.0001, fn_model=None, save_at_min_loss=True):
+        
         #self.criterion = torch.nn.MSELoss()
         self.criterion = torch.nn.GaussianNLLLoss()
-
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
 
         # Training loop
         self.loss = []
         self.model.train()
-        for epoch in range(max_epochs):
-            optimizer.zero_grad()
-            # Forward pass
-            # TODO: this y_var won't work if we don't pass unc to dataloader
-            #x, y = self.data_loader_train.next() 
-            x, y, y_var = self.data_loader_train.next() 
-            if epoch==0:
-                print(x[0][0], y[0])
-                #print(x[0], y[0])
-            y_pred = self.model(x.double())
-            # Compute Loss
-            #loss = self.criterion(y_pred.squeeze(), y)
-            loss = self.criterion(y_pred.squeeze(), y, y_var)
-
-            self.loss.append(loss.item())
-            #print('Epoch {}: train loss: {}'.format(epoch, loss.item()))
-            # Backward pass
-            loss.backward()
-            optimizer.step()
+        loss_min = np.inf
+        epoch_best = None
+        state_dict_best = None
+        for epoch_index in range(max_epochs):
+            last_loss = self.train_one_epoch(epoch_index)
+            #print(last_loss, loss_min)
+            if save_at_min_loss and fn_model is not None and last_loss < loss_min:
+                #print(last_loss, loss_min)
+                state_dict_best = self.model.state_dict()
+                #print(state_dict_best)
+                epoch_best = epoch_index
+                loss_min = last_loss
+            self.loss.append(last_loss)
+        
+        print('Epoch best:', epoch_best)
+        # revert to state dict for model with lowest loss
+        if save_at_min_loss:
+            self.model.load_state_dict(state_dict_best)
+        self.save_model(fn_model, epoch=epoch_best)
 
 
     def predict(self, x, y_current, x_extra=None):
+
         x_scaled = self.scale_x_features(x)
         y_current_scaled = self.scale_y(y_current)
         A = self.construct_feature_matrix(x_scaled, y_current_scaled, x_features_extra=x_extra)
@@ -137,7 +164,7 @@ class NNFitter(Fitter):
         A_scaled = self.scaler.transform(A)
         self.model.eval()
         with torch.no_grad():
-            y_pred = self.model(torch.from_numpy(A_scaled).float())
+            y_pred = self.model(torch.from_numpy(A_scaled).double())
         return y_pred.squeeze().numpy()
 
 
@@ -159,6 +186,37 @@ class NNFitter(Fitter):
             y_scalar_pred = self.model(torch.from_numpy(A_test_scaled).double())
             self.y_scalar_pred = y_scalar_pred.squeeze().numpy()
         print('ypred', self.y_scalar_pred[0])
+
+
+    def save_model(self, fn_model, epoch=None):
+        if epoch is None:
+            epoch = len(self.loss)
+        save_dict = {
+                    'input_size': self.model.input_size,
+                    'hidden_size': self.model.hidden_size,
+                    'model_state_dict': self.model.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'scaler': self.scaler,
+                    'log_x': self.log_x,
+                    'log_y': self.log_y,
+                    'loss': self.loss,
+                    'epoch': self.loss
+                    }
+        torch.save(save_dict, fn_model)
+
+
+    def load_model(self, fn_model):
+        #fn_nn = fn_nn_config['fn_nn']
+        model_checkpoint = torch.load(fn_model)
+        self.model = NeuralNet(model_checkpoint['input_size'], hidden_size=model_checkpoint['hidden_size'])
+        self.model.load_state_dict(model_checkpoint['model_state_dict'])
+        self.model.eval()
+        self.log_x, self.log_y = model_checkpoint['log_x'], model_checkpoint['log_y']
+        self.scaler = model_checkpoint['scaler']
+        self.loss = model_checkpoint['loss']
+        self.epoch = model_checkpoint['epoch']
+
+
 
 def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32

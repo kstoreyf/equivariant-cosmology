@@ -11,7 +11,8 @@ def main():
 
     #halo_config(sim_name)
     #geo_config(sim_name)
-    scalar_config(sim_name)
+    #scalar_config(sim_name)
+    fit_config(sim_name)
 
 
 def halo_config(sim_name):
@@ -158,6 +159,35 @@ def scalar_config(sim_name):
                           }
 
     dicts = {'halo': halo_config_dict, 'geo': geo_config_dict, 'scalar': scalar_config_dict}
+
+    with open(fn_scalar_config, 'w') as file:
+        documents = yaml.dump(dicts, file, sort_keys=False, default_flow_style=False)
+    print(f"Generated scalar config file {fn_scalar_config}")
+   
+
+def fit_config(sim_name):
+
+    # # halo info
+    # halo_tag = ''
+    # fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
+
+    # # geo info
+    # geo_tag = ''
+    # fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
+
+    # scalar info
+    scalar_tag = ''
+    fn_scalar_config = f'{config_dir}/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
+
+    # fit parameters
+    fitter_name = 'NNFitter'
+    #input_size = 
+
+    scalar_config_dict = {'scalar_tag': scalar_tag,
+                          'fn_scalar_config': fn_scalar_config,
+                          }
+
+    dicts = {'scalar': scalar_config_dict, 'fit': fit_config_dict}
 
     with open(fn_scalar_config, 'w') as file:
         documents = yaml.dump(dicts, file, sort_keys=False, default_flow_style=False)

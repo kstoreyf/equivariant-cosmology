@@ -25,11 +25,14 @@ def main():
     y_target_name = 'mass_hydro_subhalo_star'
     y_label_name = 'm_stellar'
 
-    #sim_name = 'TNG100-1'
-    sim_name = 'TNG50-4'
+    sim_name = 'TNG100-1'
+    #sim_name = 'TNG50-4'
     halo_tag = ''
     geo_tag = ''
     scalar_tag = ''
+
+    fit_tag = '_nntest'
+    fn_model = f'../models/models_{sim_name}/model_{sim_name}{halo_tag}{geo_tag}{scalar_tag}{fit_tag}.pt'
 
     log_mass_shift = 10
 
@@ -77,6 +80,8 @@ def main():
     sim_reader.add_catalog_property_to_halos(y_target_name)
     y_label_vals = np.array([halo.catalog_properties[y_target_name] for halo in sim_reader.dark_halo_arr])
     y_val_current = np.ones(len(y_label_vals))
+    if y_label_name=='m_stellar':
+        y_label_vals = np.log10(y_label_vals)
 
     sim_reader.add_catalog_property_to_halos('mass_hydro_subhalo_star')
     m_stellar = np.array([halo.catalog_properties[y_target_name] for halo in sim_reader.dark_halo_arr])
@@ -95,31 +100,37 @@ def main():
 
     nnfitter.set_up_data()
 
-    lrs = [0.0001, 0.0001, 0.0001]
+    #lrs = [0.0001, 0.0001, 0.0001]
+    lrs = [0.00005]
     for lr in lrs:
         seed_torch(42)
         g = torch.Generator()
         g.manual_seed(0)
-        nnfitter.data_loader_train = iter(DataLoader(nnfitter.dataset_train, 
+        nnfitter.data_loader_train = DataLoader(nnfitter.dataset_train, 
                                           batch_size=32, shuffle=True,
                                           worker_init_fn=seed_worker,
-                                          generator=g, num_workers=0))
-        train(nnfitter, hidden_size=128, max_epochs=10, learning_rate=lr)
+                                          generator=g, num_workers=0)
+        train(nnfitter, hidden_size=128, max_epochs=70, learning_rate=lr,
+             fn_model=fn_model)
+
+        #nnfitter.save_model(fn_model)
 
 
-def train(nnfitter, hidden_size=128, max_epochs=250, learning_rate=0.00005):
+def train(nnfitter, hidden_size=128, max_epochs=250, learning_rate=0.00005,
+          fn_model=None):
     print("training:")
     print(hidden_size, max_epochs, learning_rate)
 
     input_size = nnfitter.n_A_features
     hidden_size = hidden_size
     nnfitter.model = NeuralNet(input_size, hidden_size=hidden_size)
-    nnfitter.train(max_epochs=max_epochs, learning_rate=learning_rate)
+    nnfitter.train(max_epochs=max_epochs, learning_rate=learning_rate,
+                   fn_model=fn_model)
 
     nnfitter.predict_test()
 
-    error_nn, _ = utils.compute_error(nnfitter, test_error_type='percentile')
-    print(error_nn)
+    #error_nn, _ = utils.compute_error(nnfitter, test_error_type='percentile')
+    #print(error_nn)
 
 
 if __name__=='__main__':

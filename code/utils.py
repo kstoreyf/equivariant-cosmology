@@ -124,9 +124,7 @@ def shift_points_torus(points, shift, box_size):
     return (points - shift + 0.5*box_size) % box_size - 0.5*box_size
 
 
-def compute_error(fitter, test_error_type='percentile'):
-    y_true = fitter.y_scalar_test
-    y_pred = fitter.y_scalar_pred
+def compute_error(y_true, y_pred, test_error_type='percentile'):
 
     if test_error_type=='msfe':
         frac_err = (y_pred - y_true)/y_true
