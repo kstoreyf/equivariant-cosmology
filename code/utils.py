@@ -20,6 +20,7 @@ label_dict = {'m_200m': r'log($M_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
               'm_vir': r'$M_\mathrm{vir}$'
               }
 
+sfr_zero = 1e-3
 
 def get_alt_sim_name(sim_name):
     sim_name_dict = {'TNG100-1': 'L75n1820TNG',
@@ -203,7 +204,6 @@ def get_mrv_for_rescaling(sim_reader, mrv_names):
     return np.array(mrv_for_rescaling)
 
 
-# TODO: check that this works not in place!
 def rescale_geometric_features(geo_feature_arr, Ms, Rs, Vs):
     print("Rescaling geometric features")
     N_geo_arrs = len(geo_feature_arr)
@@ -249,7 +249,6 @@ def transform_pseudotensors(geo_feature_arr):
     return np.array(geo_feature_arr)
 
 
-# the rest is val
 def split_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15):
 
     tol = 1e-6
@@ -315,3 +314,70 @@ def shiftedColorMap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
     plt.register_cmap(cmap=newcmap)
 
     return newcmap
+
+
+# little h via https://www.tng-project.org/data/downloads/TNG100-1/
+def log_sfr_to_log_ssfr(log_sfr_arr, m_stellar_arr, mass_multiplier=1e10):
+    h = 0.6774  
+    m_stellar_Msun_arr = (m_stellar_arr*mass_multiplier)/h
+    return log_sfr_arr - np.log10(m_stellar_Msun_arr)
+
+
+def log_ssfr_to_log_sfr(log_ssfr_arr, m_stellar_arr, mass_multiplier=1e10):
+    h = 0.6774  
+    m_stellar_Msun_arr = (m_stellar_arr*mass_multiplier)/h
+    return log_ssfr_arr + np.log10(m_stellar_Msun_arr)
+
+
+# because we're working in log errors, the multiplicative factor of M/h is a constant that 
+# just drops out with the derivative; so the uncertainties are the same! i think ?!
+def uncertainty_log_sfr_to_uncertainty_log_ssfr(uncertainty_log_sfr_arr):
+    return uncertainty_log_sfr_arr
+
+
+label_to_target_name = {'m_stellar': 'mass_hydro_subhalo_star',
+                        'ssfr1': 'sfr_hydro_subhalo_1Gyr'}
+
+def get_y_vals(y_label_name, sim_reader, mass_multiplier=1e10):
+    y_target_name = label_to_target_name[y_label_name]
+    sim_reader.add_catalog_property_to_halos(y_target_name)
+    y_vals = np.array([halo.catalog_properties[y_target_name] for halo in sim_reader.dark_halo_arr])
+
+    if y_label_name=='m_stellar':
+        return np.log10(y_vals)
+
+    if y_label_name=='ssfr1':
+        sim_reader.add_catalog_property_to_halos('mass_hydro_subhalo_star')
+        m_stellar = np.array([halo.catalog_properties['mass_hydro_subhalo_star'] for halo in sim_reader.dark_halo_arr])
+        sfr = y_vals
+        idx_zerosfr = np.where(sfr==0)[0]
+        sfr[idx_zerosfr] = sfr_zero
+        log_sfr = np.log10(sfr)
+        log_ssfr = log_sfr_to_log_ssfr(log_sfr, m_stellar, mass_multiplier=mass_multiplier)
+        return log_ssfr
+
+
+def get_y_uncertainties(y_label_name, sim_reader=None, y_vals=None, log_mass_shift=10):
+    
+    ssfr_name_to_sfr_name = {'ssfr': 'sfr', 'ssfr1': 'sfr1'}
+    if y_label_name=='ssfr' or y_label_name=='ssfr1':
+        assert sim_reader is not None and y_vals is not None, "Must pass sim_reader and y_vals!"
+        sfr_label_name_genel2019 = ssfr_name_to_sfr_name[y_label_name]
+        sim_reader.add_catalog_property_to_halos('mass_hydro_subhalo_star')
+        m_stellar = np.array([halo.catalog_properties['mass_hydro_subhalo_star'] for halo in sim_reader.dark_halo_arr])
+        uncertainties_genel2019_sfr = get_uncertainties_genel2019(sfr_label_name_genel2019, np.log10(m_stellar)+log_mass_shift,
+                                                              sim_name=sim_reader.sim_name)
+        # y_vals is ssfr in this case
+        sfr = 10**log_ssfr_to_log_sfr(y_vals, m_stellar)
+        uncertainties_poisson_sfr = get_uncertainties_poisson_sfr(sfr, sfr_zero)
+        uncertainties_genel2019_poisson_sfr = np.sqrt(uncertainties_genel2019_sfr**2 + uncertainties_poisson_sfr**2)
+        uncertainties_genel2019_poisson_ssfr = uncertainty_log_sfr_to_uncertainty_log_ssfr(uncertainties_genel2019_poisson_sfr) 
+        return uncertainties_genel2019_poisson_ssfr
+            
+    elif y_label_name=='m_stellar':
+        assert sim_reader is not None, "Must pass sim_reader!"
+        sim_reader.add_catalog_property_to_halos('mass_hydro_subhalo_star')
+        m_stellar = np.array([halo.catalog_properties['mass_hydro_subhalo_star'] for halo in sim_reader.dark_halo_arr])
+        y_uncertainties = get_uncertainties_genel2019(y_label_name, np.log10(m_stellar)+log_mass_shift,
+                                                              sim_name=sim_reader.sim_name)
+        return y_uncertainties                                             

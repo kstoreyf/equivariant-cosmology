@@ -45,54 +45,31 @@ class NeuralNet(torch.nn.Module):
 
 class NNFitter(Fitter):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-    # def __init__(self, x_scalar_features=None, y_scalar=None, 
-    #              y_val_current=None, x_features_extra=None, 
-    #              uncertainties=None):
-    #     super().__init__(x_scalar_features=x_scalar_features, y_scalar=y_scalar, 
-    #              y_val_current=y_val_current, x_features_extra=x_features_extra,
-    #              uncertainties=uncertainties)
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
 
-
-    def set_up_data(self, log_x=False, log_y=False):
-        print("NNFitter: Setting up data")
-        self.log_x, self.log_y = log_x, log_y
-        self.scale_y_values()
-        self.x_scalar_train_scaled = self.scale_x_features(self.x_scalar_train)
-        if self.x_features_extra is None:
-            self.x_features_extra_train_scaled = None
-        else:
-            self.x_features_extra_train_scaled = self.scale_x_features(self.x_features_extra_train)
-        A_train = self.construct_feature_matrix(self.x_scalar_train_scaled, 
-                                        y_current=self.y_val_current_train_scaled,
-                                        x_features_extra=self.x_features_extra_train_scaled,
-                                        training_mode=True, 
+    def set_up_training_data(self):
+        self.A_train = self.construct_feature_matrix(self.x_train, 
+                                        y_current=self.y_current_train,
+                                        x_extra=self.x_extra_train,
                                         include_ones_feature=False
                                         )
 
         #self.scaler = StandardScaler(with_mean=True, with_std=False)
         self.scaler = MinMaxScaler() # TODO revisit !! 
         #self.scaler = QuantileTransformer(n_quantiles=10)
-        self.scaler.fit(A_train)
-        A_train_scaled = self.scaler.transform(A_train)
-        self.dataset_train = DataSet(A_train_scaled, self.y_scalar_train_scaled, 
-                                y_var=self.uncertainties_train_scaled**2)
-        #self.data_loader_train = iter(DataLoader(self.dataset_train, batch_size=32, shuffle=False))
+        self.scaler.fit(self.A_train)
+        A_train_scaled = self.scaler.transform(self.A_train)
 
-
-    # def construct_feature_matrix(self, x_features, y_current, x_features_extra=None, training_mode=False):
-    #     y_current = np.atleast_2d(y_current).T
-    #     if x_features_extra is None:
-    #         A = np.concatenate((y_current, x_features), axis=1)
-    #     else:
-    #         A = np.concatenate((y_current, x_features_extra, x_features), axis=1)           
-    #     if training_mode:
-    #         n_extra = x_features_extra.shape[1] if x_features_extra is not None else 0
-    #         self.n_extra_features = 1 + n_extra # 2 for y_current
-    #         self.n_A_features = self.n_x_features + self.n_extra_features
-    #     return A
-
+        self.dataset_train = DataSet(A_train_scaled, self.y_train, 
+                                y_var=self.y_uncertainties_train**2)
+        # g = torch.Generator()
+        # g.manual_seed(0)
+        self.data_loader_train = DataLoader(self.dataset_train, 
+                                          batch_size=32, shuffle=True,
+                                          worker_init_fn=seed_worker,
+                                          #generator=g, 
+                                          num_workers=0)
 
     def train_one_epoch(self, epoch_index):
         running_loss = 0.
@@ -115,12 +92,7 @@ class NNFitter(Fitter):
 
             # Gather data and report
             running_loss += loss.item()
-            # if i % 1000 == 999 or i==len(self.data_loader_train)-1:
-            #     last_loss = running_loss / 1000 # loss per batch
-            #     print('  batch {} loss: {}'.format(i + 1, last_loss))
-            #     #tb_x = epoch_index * len(training_loader) + i + 1
-            #     #tb_writer.add_scalar('Loss/train', last_loss, tb_x)
-            #     running_loss = 0.
+
         last_loss = running_loss / len(self.data_loader_train)
         print("Training epoch", epoch_index, 'loss', last_loss)
         return last_loss
@@ -157,11 +129,9 @@ class NNFitter(Fitter):
         self.save_model(fn_model, epoch=epoch_best)
 
 
-    def predict(self, x, y_current, x_extra=None):
+    def predict(self, x, y_current=None, x_extra=None):
 
-        x_scaled = self.scale_x_features(x)
-        y_current_scaled = self.scale_y(y_current)
-        A = self.construct_feature_matrix(x_scaled, y_current=y_current_scaled, x_features_extra=x_extra,
+        A = self.construct_feature_matrix(x, y_current=y_current, x_extra=x_extra,
                                           include_ones_feature=False)
 
         A_scaled = self.scaler.transform(A)
@@ -169,27 +139,6 @@ class NNFitter(Fitter):
         with torch.no_grad():
             y_pred = self.model(torch.from_numpy(A_scaled).double())
         return y_pred.squeeze().numpy()
-
-
-    def predict_test(self):
-        print('xtest', self.x_scalar_test[0][0])
-        self.x_scalar_test_scaled = self.scale_x_features(self.x_scalar_test)
-        if self.x_features_extra_test is None:
-            self.x_features_extra_test_scaled = None
-        else:
-            self.x_features_extra_test_scaled = self.scale_x_features(self.x_features_extra_test)
-        self.A_test = self.construct_feature_matrix(self.x_scalar_test_scaled, 
-                                                    y_current=self.y_val_current_test_scaled,
-                                                    x_features_extra=self.x_features_extra_test_scaled,
-                                                    include_ones_feature=False)
-
-        A_test_scaled = self.scaler.transform(self.A_test)
-        self.model.eval()
-        with torch.no_grad():
-            #y_scalar_pred = self.model(torch.from_numpy(A_test_scaled).float())
-            y_scalar_pred = self.model(torch.from_numpy(A_test_scaled).double())
-            self.y_scalar_pred = y_scalar_pred.squeeze().numpy()
-        print('ypred', self.y_scalar_pred[0])
 
 
     def save_model(self, fn_model, epoch=None):
@@ -201,8 +150,8 @@ class NNFitter(Fitter):
                     'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
                     'scaler': self.scaler,
-                    'log_x': self.log_x,
-                    'log_y': self.log_y,
+                    # 'log_x': self.log_x,
+                    # 'log_y': self.log_y,
                     'loss': self.loss,
                     'epoch': self.loss
                     }
@@ -215,7 +164,7 @@ class NNFitter(Fitter):
         self.model = NeuralNet(model_checkpoint['input_size'], hidden_size=model_checkpoint['hidden_size'])
         self.model.load_state_dict(model_checkpoint['model_state_dict'])
         self.model.eval()
-        self.log_x, self.log_y = model_checkpoint['log_x'], model_checkpoint['log_y']
+        #self.log_x, self.log_y = model_checkpoint['log_x'], model_checkpoint['log_y']
         self.scaler = model_checkpoint['scaler']
         self.loss = model_checkpoint['loss']
         self.epoch = model_checkpoint['epoch']
