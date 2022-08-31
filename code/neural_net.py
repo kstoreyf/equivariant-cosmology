@@ -8,17 +8,18 @@ from fit import Fitter
 
 class NeuralNet(torch.nn.Module):
 
-    def __init__(self, input_size, hidden_size=32):
+    def __init__(self, input_size, hidden_size=32, output_size=1):
         super(NeuralNet, self).__init__()
         self.input_size = input_size
         self.hidden_size  = hidden_size
+        self.output_size = output_size
         self.lin1 = torch.nn.Linear(self.input_size, self.hidden_size)
         self.act1 = torch.nn.SELU()
         self.lin2 = torch.nn.Linear(self.hidden_size, self.hidden_size)
         self.act2 = torch.nn.SELU()
         self.lin3 = torch.nn.Linear(self.hidden_size, self.hidden_size)
         self.act3 = torch.nn.SELU()
-        self.linfinal = torch.nn.Linear(self.hidden_size, 1)
+        self.linfinal = torch.nn.Linear(self.hidden_size, output_size)
 
         torch.nn.init.xavier_uniform_(self.lin1.weight)
         torch.nn.init.zeros_(self.lin1.bias)
@@ -147,11 +148,10 @@ class NNFitter(Fitter):
         save_dict = {
                     'input_size': self.model.input_size,
                     'hidden_size': self.model.hidden_size,
+                    'output_size': self.model.output_size,
                     'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
                     'scaler': self.scaler,
-                    # 'log_x': self.log_x,
-                    # 'log_y': self.log_y,
                     'loss': self.loss,
                     'epoch': self.loss
                     }
@@ -159,12 +159,13 @@ class NNFitter(Fitter):
 
 
     def load_model(self, fn_model):
-        #fn_nn = fn_nn_config['fn_nn']
+        print("hi!")
         model_checkpoint = torch.load(fn_model)
-        self.model = NeuralNet(model_checkpoint['input_size'], hidden_size=model_checkpoint['hidden_size'])
+        print(model_checkpoint['output_size'])
+        self.model = NeuralNet(model_checkpoint['input_size'], hidden_size=model_checkpoint['hidden_size'],
+                               output_size=model_checkpoint['output_size'])
         self.model.load_state_dict(model_checkpoint['model_state_dict'])
         self.model.eval()
-        #self.log_x, self.log_y = model_checkpoint['log_x'], model_checkpoint['log_y']
         self.scaler = model_checkpoint['scaler']
         self.loss = model_checkpoint['loss']
         self.epoch = model_checkpoint['epoch']

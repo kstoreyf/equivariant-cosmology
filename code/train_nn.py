@@ -23,7 +23,10 @@ def seed_torch(seed=1029):
 def main():
 
     #y_label_name = 'm_stellar'
-    y_label_name = 'ssfr1'
+    #y_label_name = 'ssfr1'
+    #y_label_name = 'r_stellar'
+    #y_label_name = 'a_mfrac_0.75'
+    y_label_name = 'a_mfrac_n32'
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
@@ -32,8 +35,8 @@ def main():
     scalar_tag = ''
 
     # fit
-    max_epochs = 100
-    fit_tag = f'_{y_label_name}_nn'
+    max_epochs = 150
+    fit_tag = f'_{y_label_name}_nn_test'
     fn_model = f'../models/models_{sim_name}/model_{sim_name}{halo_tag}{geo_tag}{scalar_tag}{fit_tag}.pt'
 
     # load configs
@@ -74,8 +77,15 @@ def main():
     print('loaded')
 
     # get y vals
-    y = utils.get_y_vals(y_label_name, sim_reader)
+    y = utils.get_y_vals(y_label_name, sim_reader, halo_tag=halo_tag)
+
+    # print("FIX ME")
+    # print(y.shape)
+    # y = np.vstack((y, 2*y)).T
+    # print(y.shape)
+    
     y_uncertainties = utils.get_y_uncertainties(y_label_name, sim_reader=sim_reader, y_vals=y)
+    print(y_uncertainties.shape)
 
     # Split data into train and test, only work with training data after this
     frac_train, frac_val, frac_test = 0.7, 0.15, 0.15
@@ -96,7 +106,7 @@ def main():
     nnfitter.set_up_training_data()
     
     #lrs = [0.0001, 0.0001, 0.0001]
-    lrs = [0.00005]
+    lrs = [0.0001]
     for lr in lrs:
         seed_torch(42)
         # g = torch.Generator()
@@ -116,8 +126,10 @@ def train(nnfitter, hidden_size=128, max_epochs=250, learning_rate=0.00005,
     print(hidden_size, max_epochs, learning_rate)
 
     input_size = nnfitter.A_train.shape[1]
+    output_size = nnfitter.y_train.shape[-1]
+    print(output_size)
     hidden_size = hidden_size
-    nnfitter.model = NeuralNet(input_size, hidden_size=hidden_size)
+    nnfitter.model = NeuralNet(input_size, hidden_size=hidden_size, output_size=output_size)
     nnfitter.train(max_epochs=max_epochs, learning_rate=learning_rate,
                    fn_model=fn_model)
 

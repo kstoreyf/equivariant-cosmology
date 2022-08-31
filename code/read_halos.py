@@ -7,6 +7,8 @@ sys.path.insert(1, '/home/ksf293/external')
 import illustris_python as il
 import illustris_sam as ilsam 
 
+import utils
+
 
 class DarkHalo:
 
@@ -96,6 +98,26 @@ class DarkHalo:
         self.M_rms = n_part_in_X_rms*m_dmpart_dark
         v_norms = np.linalg.norm(v_data_halo, axis=1)
         self.V_rms = np.sqrt(np.mean(v_norms**2))
+
+
+    def get_a_mfrac(self, mfrac):
+        if 'MAH' not in self.catalog_properties or len(self.catalog_properties['MAH'][0])==0:
+            return 1.0 #?? 
+        if 1.0 not in self.catalog_properties['MAH'][0]:
+            return 1.0 # something wrong but it seems to happen
+        a_vals = self.catalog_properties['MAH'][0]
+        m_vals = self.catalog_properties['MAH'][1]
+        i_a1 = np.where(a_vals==1.0)[0][0] #there should be exactly 1, but if not, eh take first
+        m_a1 = m_vals[i_a1]
+        a_mfrac_interp = utils.y_interpolated(m_vals/m_a1, a_vals, mfrac)
+        if a_mfrac_interp < 0 or a_mfrac_interp > 1 or np.isnan(a_mfrac_interp): #something went horribly wrong! 
+            #a_mfrac_interp = np.nan
+            # pick the a closest to mfrac, even if its far away
+            _, i_nearest = utils.find_nearest(m_vals/m_a1, mfrac)
+            return a_vals[i_nearest]
+        #if np.isnan(a_mfrac_interp):
+        #    print("nan!")
+        return a_mfrac_interp
 
 
 class SimulationReader:
@@ -290,7 +312,7 @@ class SimulationReader:
         print(f'Selected {self.N_halos}')
 
 
-    def add_catalog_property_to_halos(self, property_name):
+    def add_catalog_property_to_halos(self, property_name, halo_tag=None):
         if property_name=='sfr_hydro_subhalo_1Gyr':
             with h5py.File(f'{self.base_dir}/{self.sim_name}/postprocessing/star_formation_rates.hdf5', 'r') as f: 
                 idxs_subhalo_hydro = f[f'Snapshot_{self.snap_num}']['SubfindID']
@@ -300,12 +322,12 @@ class SimulationReader:
                     halo.set_catalog_property(property_name, idx_subhalo_to_sfr1[halo.idx_subhalo_hydro])
             return
 
-
+        if property_name.startswith('a_mfrac'):
+            self.add_MAH_to_halos_SAM(halo_tag)
 
         for halo in self.dark_halo_arr:
             # if property_name=='m200m' or         
             #     halo.compute_mrv_200m(mean_density_header, sim_reader.m_dmpart_dark, sim_reader.mass_multiplier, center=center_halo)
-
             if property_name=='r200m':
                 property_value = self.halos_dark['Group_R_Mean200'][halo.idx_halo_dark]
             elif property_name=='mass_hydro_subhalo_star':
@@ -342,6 +364,15 @@ class SimulationReader:
                 property_value = self.subhalos_hydro['SubhaloMassType'][:,self.ipart_gas][halo.idx_subhalo_hydro]
             elif property_name=='velocity_dispersion':
                 property_value = self.subhalos_hydro['SubhaloVelDisp'][halo.idx_subhalo_hydro]
+            elif property_name.startswith('a_mfrac_n'):
+                n = int(property_name.split('_n')[-1])
+                mfrac_vals = utils.get_mfrac_vals(n)
+                property_value = []
+                for mfrac in mfrac_vals:
+                    property_value.append(halo.get_a_mfrac(float(mfrac)))
+            elif property_name.startswith('a_mfrac'):
+                mfrac = property_name.split('_')[-1]
+                property_value = halo.get_a_mfrac(float(mfrac))
             else:
                 raise ValueError(f"Property name {property_name} not recognized!")
 
@@ -405,7 +436,13 @@ class SimulationReader:
         return mvirs
 
 
-    def add_MAH_to_halos_SAM(self):
+    def add_MAH_to_halos_SAM(self, halo_tag):
+ 
+        fn_mah = f'../data/mahs/mahs_SAM_{self.sim_name}{halo_tag}.npy'
+        if os.path.exists(fn_mah):
+            utils.load_mah(self.dark_halo_arr, fn_mah)
+            return
+    
         self.base_path_sam = f'{self.base_dir}/{self.sim_name_dark}_SCSAM'
         subvolume_list = self.gen_subvolumes_SAM()
 
@@ -436,7 +473,9 @@ class SimulationReader:
                                 matches=True)
             scale_factors = 1/(1+mtree[root_idx]['HalopropRedshift'])
             halo.set_catalog_property('MAH', [scale_factors, mtree[root_idx]['HalopropMvir']])
-                        
+
+        utils.save_mah(self.dark_halo_arr, fn_mah)        
+
 
     def add_MAH_to_halos_sublink(self):
 

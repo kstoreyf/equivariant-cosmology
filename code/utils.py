@@ -335,18 +335,22 @@ def uncertainty_log_sfr_to_uncertainty_log_ssfr(uncertainty_log_sfr_arr):
     return uncertainty_log_sfr_arr
 
 
-label_to_target_name = {'m_stellar': 'mass_hydro_subhalo_star',
+label_to_target_name = {'r_stellar': 'radius_hydro_subhalo_star',
+                        'm_stellar': 'mass_hydro_subhalo_star',
                         'ssfr1': 'sfr_hydro_subhalo_1Gyr'}
 
-def get_y_vals(y_label_name, sim_reader, mass_multiplier=1e10):
-    y_target_name = label_to_target_name[y_label_name]
-    sim_reader.add_catalog_property_to_halos(y_target_name)
+def get_y_vals(y_label_name, sim_reader, mass_multiplier=1e10, halo_tag=None):
+    if y_label_name.startswith('a_mfrac'):
+        assert halo_tag is not None, "Must pass halo_tag to get a_mfrac!"
+    
+    y_target_name = label_to_target_name[y_label_name] if y_label_name in label_to_target_name else y_label_name
+    sim_reader.add_catalog_property_to_halos(y_target_name, halo_tag=halo_tag)
     y_vals = np.array([halo.catalog_properties[y_target_name] for halo in sim_reader.dark_halo_arr])
 
-    if y_label_name=='m_stellar':
+    if y_label_name=='m_stellar' or y_label_name=='r_stellar':
         return np.log10(y_vals)
 
-    if y_label_name=='ssfr1':
+    elif y_label_name=='ssfr1':
         sim_reader.add_catalog_property_to_halos('mass_hydro_subhalo_star')
         m_stellar = np.array([halo.catalog_properties['mass_hydro_subhalo_star'] for halo in sim_reader.dark_halo_arr])
         sfr = y_vals
@@ -355,6 +359,9 @@ def get_y_vals(y_label_name, sim_reader, mass_multiplier=1e10):
         log_sfr = np.log10(sfr)
         log_ssfr = log_sfr_to_log_ssfr(log_sfr, m_stellar, mass_multiplier=mass_multiplier)
         return log_ssfr
+
+    else:
+        return y_vals
 
 
 def get_y_uncertainties(y_label_name, sim_reader=None, y_vals=None, log_mass_shift=10):
@@ -374,10 +381,53 @@ def get_y_uncertainties(y_label_name, sim_reader=None, y_vals=None, log_mass_shi
         uncertainties_genel2019_poisson_ssfr = uncertainty_log_sfr_to_uncertainty_log_ssfr(uncertainties_genel2019_poisson_sfr) 
         return uncertainties_genel2019_poisson_ssfr
             
-    elif y_label_name=='m_stellar':
+    elif y_label_name=='m_stellar' or y_label_name=='r_stellar':
         assert sim_reader is not None, "Must pass sim_reader!"
         sim_reader.add_catalog_property_to_halos('mass_hydro_subhalo_star')
         m_stellar = np.array([halo.catalog_properties['mass_hydro_subhalo_star'] for halo in sim_reader.dark_halo_arr])
         y_uncertainties = get_uncertainties_genel2019(y_label_name, np.log10(m_stellar)+log_mass_shift,
                                                               sim_name=sim_reader.sim_name)
-        return y_uncertainties                                             
+        return y_uncertainties            
+
+    else:
+        return y_vals*0.01 #TODO what should this be??                                 
+
+
+def save_mah(halos, fn_mah):
+    mah_dict = {}
+    for halo in halos:
+        mah_dict[halo.idx_halo_dark] = halo.catalog_properties['MAH']
+    np.save(fn_mah, mah_dict)
+    
+
+def load_mah(halos, fn_mah):
+    mah_dict = np.load(fn_mah, allow_pickle=True).item()
+    for halo in halos:
+        halo.set_catalog_property('MAH', mah_dict[halo.idx_halo_dark])
+
+
+# assumes y in reverse sorted order!! 
+def y_interpolated(x, y, x_val):
+    assert y[0]>y[1], "y def not in reverse sorted order!"
+    x = np.array(x)
+    y = np.array(y)
+    idx_below = np.where(x<=x_val)[0]
+    if len(idx_below)==0:
+        return np.nan
+    i_of_below = (np.abs(x[idx_below] - x_val)).argmin()
+    i0 = idx_below[i_of_below]
+    i1 = i0 - 1 #because reverse sorted order
+    x0, x1 = x[i0], x[i1]
+    y0, y1 = y[i0], y[i1]
+    y_val_interp = (y0*(x1-x_val) + y1*(x_val-x0))/(x1-x0)   
+    return y_val_interp
+
+
+def find_nearest(array, value):
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return array[idx], idx
+
+
+def get_mfrac_vals(n):
+    return np.logspace(-2, 0, int(n)) # should include 1 or no? now does
