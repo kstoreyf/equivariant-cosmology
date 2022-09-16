@@ -401,4 +401,65 @@ def plot_pred_vs_true_hist(y_label_name, y_true, y_pred,
              transform=ax.transAxes, verticalalignment='top', fontsize=22)
 
 
+def plot_halo_dark_geometric(base_path_dark, snap_num, m_dmpart, halo, bin_edges_frac):
+    
+    r200 = halo.catalog_properties['r200m']
+    bin_edges = r200*np.array(bin_edges_frac)
 
+    n_bins = len(bin_edges)-1
+    #colors = ['mediumblue', 'lightsteelblue', 'cornflowerblue']
+    
+    # Dark sim
+    fig = plt.figure(figsize=(10,10))
+    ax = plt.gca()
+    
+    s_dm = 0.6
+    alpha = 0.3
+    # want absolute positions, not shifted, so get directly from illustris
+    halo_dark_dm = il.snapshot.loadHalo(base_path_dark,snap_num,halo.idx_halo_dark,'dm')
+    x_halo_dark_dm = halo_dark_dm['Coordinates']
+    x_minPE = halo.catalog_properties['x_minPE']
+    dists = np.sqrt((x_halo_dark_dm[:,0]-x_minPE[0])**2 +
+                    (x_halo_dark_dm[:,1]-x_minPE[1])**2 +
+                    (x_halo_dark_dm[:,2]-x_minPE[2])**2)
+    
+    #cmap = matplotlib.cm.get_cmap(cmap_shifted)
+    cmap = matplotlib.cm.cool
+    #m_200 = halo.catalog_properties['m200m']
+    m_max = 1
+    
+    
+    masses = []
+    for i in range(n_bins):
+        x_inbin = x_halo_dark_dm[(dists >= bin_edges[i]) & (dists < bin_edges[i+1])]
+        m_inbin = len(x_inbin)*m_dmpart
+        masses.append(m_inbin)
+        
+    m_200 = np.sum(masses[:2])    
+    for i in range(n_bins):   
+        x_inbin = x_halo_dark_dm[(dists >= bin_edges[i]) & (dists < bin_edges[i+1])]
+        print(masses[i]/m_200)
+        color = cmap(masses[i]/m_200)
+        scat = ax.scatter(x_inbin[:,0], x_inbin[:,1], 
+               s=s_dm, alpha=alpha, marker='.', color=color, label='Dark halo DM', zorder=0)  
+        
+        com_bin = np.mean(x_inbin, axis=0)
+        ax.arrow(x_minPE[0], x_minPE[1], com_bin[0]-x_minPE[0], com_bin[1]-x_minPE[1], head_width=20,
+                  facecolor=color, edgecolor='k', zorder=2)
+        #ax.scatter(com_bin[0], com_bin[1], marker='o', color=color, edgecolor='k', s=150)
+        
+        if i < n_bins-1:
+            circle_r200 = plt.Circle((x_minPE[0], x_minPE[1]), bin_edges[i+1], color='dimgrey', fill=False, lw=1.5)
+            ax.add_patch(circle_r200)
+    
+    ax.scatter(x_minPE[0], x_minPE[1], marker='+', color='k', s=200, lw=3, zorder=1)
+
+    #scat.set_clim(0, 0.8)
+    sm = matplotlib.cm.ScalarMappable(cmap=cmap)
+    #sm.set_clim(0.1, 0.6)
+    cbar = fig.colorbar(sm, shrink=0.7, pad=0.04)
+    cbar.set_label(label=r'$M_\mathrm{bin}/M_{200}$', size=28)#, extend='max')
+    cbar.ax.tick_params(labelsize=24) 
+    
+    ax.set_aspect('equal')
+    plt.axis('off')
