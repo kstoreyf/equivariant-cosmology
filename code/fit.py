@@ -19,22 +19,50 @@ class Fitter:
         self.y_current_train = y_current_train
         self.y_uncertainties_train = y_uncertainties_train
 
-        self.N_halos = x_train.shape[0]
-        assert self.y_train.shape[0]==self.N_halos, "Must have same number of halos for x features and y labels!"
+        self.N_halos_train = x_train.shape[0]
+        assert self.y_train.shape[0]==self.N_halos_train, "Must have same number of halos for x features and y labels!"
         
         if y_current_train is not None:
             self.y_current_train = np.array(y_current_train)
-            assert self.y_current_train.shape[0]==self.N_halos, "Must have same number of halos for x features and y val current!"
+            assert self.y_current_train.shape[0]==self.N_halos_train, "Must have same number of halos for x features and y val current!"
         
         if x_extra_train is not None:
             self.x_extra_train = np.array(self.x_extra_train)
-            assert self.x_extra_train.shape[0]==self.N_halos, "Must have same number of halos for x scalar features and extra features!"
+            assert self.x_extra_train.shape[0]==self.N_halos_train, "Must have same number of halos for x scalar features and extra features!"
 
         # TODO: not sure this makes sense as default?? either make required, or 
         # should probs keep checking if none
         if y_uncertainties_train is not None:
             self.y_uncertainties_train = np.array(y_uncertainties_train)
-            assert self.y_uncertainties_train.shape[0]==self.N_halos, "Must have same number of halos for x features and y_uncertainties!"
+            assert self.y_uncertainties_train.shape[0]==self.N_halos_train, "Must have same number of halos for x features and y_uncertainties!"
+
+
+    def load_validation_data(self, x_valid, y_valid, 
+                           y_current_valid=None, x_extra_valid=None, 
+                           y_uncertainties_valid=None):
+
+        self.x_valid = np.array(x_valid)
+        self.y_valid = np.array(y_valid)
+        # y_current is our current best-guess for the y value, 
+        # e.g. from a broken power law model of the stellar-to-halo mass relation
+        self.x_extra_valid = x_extra_valid
+        self.y_current_valid = y_current_valid
+        self.y_uncertainties_valid = y_uncertainties_valid
+
+        self.N_halos_valid = x_valid.shape[0]
+        assert self.y_valid.shape[0]==self.N_halos_valid, "Must have same number of halos for x features and y labels!"
+        
+        if y_current_valid is not None:
+            self.y_current_valid = np.array(y_current_valid)
+            assert self.y_current_valid.shape[0]==self.N_halos_valid, "Must have same number of halos for x features and y val current!"
+        
+        if x_extra_valid is not None:
+            self.x_extra_valid = np.array(self.x_extra_valid)
+            assert self.x_extra_valid.shape[0]==self.N_halos_valid, "Must have same number of halos for x scalar features and extra features!"
+
+        if y_uncertainties_valid is not None:
+            self.y_uncertainties_valid = np.array(y_uncertainties_valid)
+            assert self.y_uncertainties_valid.shape[0]==self.N_halos_valid, "Must have same number of halos for x features and y_uncertainties!"
 
 
 

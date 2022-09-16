@@ -1,5 +1,5 @@
 import numpy as np
-import torch
+import torch 
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, QuantileTransformer
 
@@ -55,48 +55,61 @@ class NNFitter(Fitter):
                                         x_extra=self.x_extra_train,
                                         include_ones_feature=False
                                         )
-
-        #self.scaler = StandardScaler(with_mean=True, with_std=False)
         self.scaler = MinMaxScaler() # TODO revisit !! 
-        #self.scaler = QuantileTransformer(n_quantiles=10)
         self.scaler.fit(self.A_train)
         A_train_scaled = self.scaler.transform(self.A_train)
 
         self.dataset_train = DataSet(A_train_scaled, self.y_train, 
                                 y_var=self.y_uncertainties_train**2)
-        # g = torch.Generator()
-        # g.manual_seed(0)
         self.data_loader_train = DataLoader(self.dataset_train, 
                                           batch_size=32, shuffle=True,
                                           worker_init_fn=seed_worker,
-                                          #generator=g, 
+                                          num_workers=0)
+
+    def set_up_validation_data(self):
+        self.A_valid = self.construct_feature_matrix(self.x_valid, 
+                                        y_current=self.y_current_valid,
+                                        x_extra=self.x_extra_valid,
+                                        include_ones_feature=False
+                                        )
+        A_valid_scaled = self.scaler.transform(self.A_valid)
+
+        self.dataset_valid = DataSet(A_valid_scaled, self.y_valid, 
+                                y_var=self.y_uncertainties_valid**2)
+        self.data_loader_valid = DataLoader(self.dataset_valid, 
+                                          batch_size=32, shuffle=True,
+                                          worker_init_fn=seed_worker,
                                           num_workers=0)
 
     def train_one_epoch(self, epoch_index):
-        running_loss = 0.
-        last_loss = 0.
+        running_loss_train = 0.
+        running_loss_valid = 0.
         for i, data in enumerate(self.data_loader_train):
             x, y, y_var = data
 
             # Zero your gradients for every batch!
             self.optimizer.zero_grad()
-
             # Make predictions for this batch
             y_pred = self.model(x.double())
-
             # Compute the loss and its gradients
             loss = self.criterion(y_pred.squeeze(), y, y_var)
             loss.backward()
-
             # Adjust learning weights
             self.optimizer.step()
-
             # Gather data and report
-            running_loss += loss.item()
+            running_loss_train += loss.item()
 
-        last_loss = running_loss / len(self.data_loader_train)
-        print("Training epoch", epoch_index, 'loss', last_loss)
-        return last_loss
+        self.model.eval()
+        for i, data_val in enumerate(self.data_loader_valid):
+            x, y, y_var = data_val
+            y_pred = self.model(x.double())
+            loss = self.criterion(y_pred.squeeze(), y, y_var)
+            running_loss_valid += loss.item()
+
+        last_loss_train = running_loss_train / len(self.data_loader_train)
+        last_loss_valid = running_loss_valid / len(self.data_loader_valid)
+        print(f"Training epoch {epoch_index}, training loss {last_loss_train:.2f}, validation loss {last_loss_valid:.2f}")
+        return last_loss_train, last_loss_valid
 
 
 
@@ -107,27 +120,31 @@ class NNFitter(Fitter):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
 
         # Training loop
-        self.loss = []
+        self.loss_train = []
+        self.loss_valid = []
         self.model.train()
-        loss_min = np.inf
+        loss_valid_min = np.inf
         epoch_best = None
         state_dict_best = None
         for epoch_index in range(max_epochs):
-            last_loss = self.train_one_epoch(epoch_index)
+            last_loss_train, last_loss_valid = self.train_one_epoch(epoch_index)
             #print(last_loss, loss_min)
-            if save_at_min_loss and fn_model is not None and last_loss < loss_min:
+            if save_at_min_loss and fn_model is not None and last_loss_valid < loss_valid_min:
                 #print(last_loss, loss_min)
                 state_dict_best = self.model.state_dict()
                 #print(state_dict_best)
                 epoch_best = epoch_index
-                loss_min = last_loss
-            self.loss.append(last_loss)
+                loss_valid_min = last_loss_valid
+            self.loss_train.append(last_loss_train)
+            self.loss_valid.append(last_loss_valid)
         
         print('Epoch best:', epoch_best)
         # revert to state dict for model with lowest loss
         if save_at_min_loss:
             self.model.load_state_dict(state_dict_best)
-        self.save_model(fn_model, epoch=epoch_best)
+        if fn_model is not None:
+            # if save_at_min_loss=False, will just save the last epoch 
+            self.save_model(fn_model, epoch=epoch_best)
 
 
     def predict(self, x, y_current=None, x_extra=None):
@@ -144,7 +161,7 @@ class NNFitter(Fitter):
 
     def save_model(self, fn_model, epoch=None):
         if epoch is None:
-            epoch = len(self.loss)
+            epoch = len(self.loss_valid)
         save_dict = {
                     'input_size': self.model.input_size,
                     'hidden_size': self.model.hidden_size,
@@ -152,22 +169,31 @@ class NNFitter(Fitter):
                     'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
                     'scaler': self.scaler,
-                    'loss': self.loss,
-                    'epoch': self.loss
+                    'loss_train': self.loss_train,
+                    'loss_valid': self.loss_valid,
+                    'epoch': epoch
                     }
         torch.save(save_dict, fn_model)
 
 
     def load_model(self, fn_model):
-        print("hi!")
         model_checkpoint = torch.load(fn_model)
-        print(model_checkpoint['output_size'])
+        if 'output_size' in model_checkpoint:
+            output = model_checkpoint['output_size']
+        else:
+            # for back-compatibility
+            output = 1
         self.model = NeuralNet(model_checkpoint['input_size'], hidden_size=model_checkpoint['hidden_size'],
-                               output_size=model_checkpoint['output_size'])
+                               output_size=output)
         self.model.load_state_dict(model_checkpoint['model_state_dict'])
         self.model.eval()
         self.scaler = model_checkpoint['scaler']
-        self.loss = model_checkpoint['loss']
+        if 'loss_train' in model_checkpoint:
+            self.loss_train = model_checkpoint['loss_train']
+        if 'loss_valid' in model_checkpoint:
+            self.loss_valid = model_checkpoint['loss_valid']
+        if 'loss' in model_checkpoint:
+            self.loss = model_checkpoint['loss']        
         self.epoch = model_checkpoint['epoch']
 
 

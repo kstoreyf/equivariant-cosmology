@@ -141,8 +141,16 @@ def compute_error(y_true, y_pred, test_error_type='percentile'):
         percentile_84 = np.percentile(delta_y, 84, axis=0)
         error_inner68_test = (percentile_84-percentile_16)/2
 
-        error_str = fr"$\sigma_{{68}}$: {error_inner68_test:.3f}"
         n_outliers = len(delta_y[delta_y > 5*error_inner68_test])
+        return error_inner68_test, n_outliers
+
+    elif test_error_type=='percentile_frac':
+        frac_y = (y_pred - y_true)/y_true
+        percentile_16 = np.percentile(frac_y, 16, axis=0)
+        percentile_84 = np.percentile(frac_y, 84, axis=0)
+        error_inner68_test = (percentile_84-percentile_16)/2
+
+        n_outliers = len(frac_y[frac_y > 5*error_inner68_test])
         return error_inner68_test, n_outliers
 
     else:
@@ -430,4 +438,23 @@ def find_nearest(array, value):
 
 
 def get_mfrac_vals(n):
-    return np.logspace(-2, 0, int(n)) # should include 1 or no? now does
+    vals = np.linspace(0, 1, int(n+2))
+    # don't include 0 or 1! maybe messing up nn
+    return vals[1:-1]
+    # should include 1 or no? now does
+    #return np.linspace(0, 1, int(n)) # should include 1 or no? now does
+    #return np.logspace(-2, 0, int(n)) # should include 1 or no? now does
+
+
+def geo_feature_arr_to_values(geo_feature_arr):
+    geo_features = []
+    for geo_arr in geo_feature_arr:
+        geo_features_halo = []
+        for g in geo_arr:
+            if type(g.value)==np.ndarray or type(g.value)==list:
+                geo_features_halo.extend(list(g.value.flatten()))
+            else:
+                geo_features_halo.append(g.value)
+        geo_features.append(geo_features_halo)
+    geo_features = np.array(geo_features)
+    return geo_features

@@ -1,4 +1,6 @@
 import numpy as np
+import random
+import time
 import yaml
 
 import torch
@@ -10,7 +12,6 @@ from neural_net import NNFitter, NeuralNet, seed_worker
 from read_halos import SimulationReader
 import utils
 
-import random
 
 
 def seed_torch(seed=1029):
@@ -21,12 +22,15 @@ def seed_torch(seed=1029):
 
 
 def main():
+    y_label_names = ['m_stellar']
+    #y_label_names = ['m_stellar', 'ssfr1', 'r_stellar']
+    #y_label_names = ['a_mfrac_n19']
+    #y_label_names = ['a_mfrac_0.75']
+    #y_label_names = ['a_mfrac_n39']
+    run(y_label_names)
 
-    #y_label_name = 'm_stellar'
-    #y_label_name = 'ssfr1'
-    #y_label_name = 'r_stellar'
-    #y_label_name = 'a_mfrac_0.75'
-    y_label_name = 'a_mfrac_n32'
+
+def run(y_label_names):
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
@@ -35,9 +39,17 @@ def main():
     scalar_tag = ''
 
     # fit
-    max_epochs = 150
-    fit_tag = f'_{y_label_name}_nn_test'
+    max_epochs = 500
+    lr = 0.00005
+    hidden_size = 128
+
+    feature_mode = 'geos'
+    assert feature_mode in ['scalars', 'geos', 'catalog'], "Feature mode not recognized!"
+
+    y_str = '_'.join(y_label_names)
+    fit_tag = f'_{y_str}_nn_{feature_mode}_epochs{max_epochs}_lr{lr}_hs{hidden_size}'
     fn_model = f'../models/models_{sim_name}/model_{sim_name}{halo_tag}{geo_tag}{scalar_tag}{fit_tag}.pt'
+    # if fn_model isn't none, will save (save_at_min_loss=True by default)
 
     # load configs
     fn_scalar_config = f'../configs/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
@@ -61,63 +73,91 @@ def main():
     sim_reader.load_dark_halo_arr(halo_params['halo']['fn_dark_halo_arr'])
     sim_reader.read_simulations()
 
-    geo_featurizer = GeometricFeaturizer()
-    geo_featurizer.load_features(gp['fn_geo_features'])
+    if feature_mode=='scalars' or feature_mode=='geos':
+        geo_featurizer = GeometricFeaturizer()
+        geo_featurizer.load_features(gp['fn_geo_features'])
 
-    mrv_for_rescaling = utils.get_mrv_for_rescaling(sim_reader, scp['mrv_names_for_rescaling'])
-    scalar_featurizer = ScalarFeaturizer(geo_featurizer.geo_feature_arr,
-                            n_groups_rebin=scp['n_groups_rebin'], 
-                            transform_pseudotensors=scp['transform_pseudotensors'], 
-                            mrv_for_rescaling=mrv_for_rescaling)
+        mrv_for_rescaling = utils.get_mrv_for_rescaling(sim_reader, scp['mrv_names_for_rescaling'])
+        scalar_featurizer = ScalarFeaturizer(geo_featurizer.geo_feature_arr,
+                                n_groups_rebin=scp['n_groups_rebin'], 
+                                transform_pseudotensors=scp['transform_pseudotensors'], 
+                                mrv_for_rescaling=mrv_for_rescaling)
+        x_extra = np.log10(mrv_for_rescaling).T
+        
+        if feature_mode=='geos':
+            # need to grab from scalar featurizer bc its doing the rebinning, rescaling 
+            # and transforming for us (TODO: check if should be doing transforming here)
+            x = utils.geo_feature_arr_to_values(scalar_featurizer.geo_feature_arr)
 
-    x_extra = np.log10(mrv_for_rescaling).T
+        elif feature_mode=='scalars':
+            print('loading scalar features')
+            scalar_featurizer.load_features(scp['fn_scalar_features'])
+            print('loaded')
+            x = scalar_featurizer.scalar_features
 
-    print('loading scalar features')
-    scalar_featurizer.load_features(scp['fn_scalar_features'])
-    print('loaded')
+    elif feature_mode=='catalog':
+        catalog_feature_names = ['M200c', 'c200c', 'a_form']
+        sim_reader.get_structure_catalog_features(catalog_feature_names)
+        x = sim_reader.x_catalog_features
+        x_extra = None
+        
+    print("Feature (x) shape:", x.shape)
 
     # get y vals
-    y = utils.get_y_vals(y_label_name, sim_reader, halo_tag=halo_tag)
-
-    # print("FIX ME")
-    # print(y.shape)
-    # y = np.vstack((y, 2*y)).T
-    # print(y.shape)
-    
-    y_uncertainties = utils.get_y_uncertainties(y_label_name, sim_reader=sim_reader, y_vals=y)
-    print(y_uncertainties.shape)
+    if  'a_mfrac_n' in y_label_names[0]:
+        assert len(y_label_names)==1, "for now can only handle n by itself"
+        y = utils.get_y_vals(y_label_names[0], sim_reader, halo_tag=halo_tag)
+        y_uncertainties = utils.get_y_uncertainties(y_label_names[0], sim_reader=sim_reader, y_vals=y)
+    else:
+        y = [] 
+        y_uncertainties = []
+        for i in range(len(y_label_names)):
+            y_single = utils.get_y_vals(y_label_names[i], sim_reader, halo_tag=halo_tag)
+            y.append(y_single)
+            y_uncertainties = utils.get_y_uncertainties(y_label_names[i], sim_reader=sim_reader, y_vals=y_single)
+        y = np.array(y).T
+        y_uncertainties = np.array(y_uncertainties).T
+    print(y.shape)
 
     # Split data into train and test, only work with training data after this
     frac_train, frac_val, frac_test = 0.7, 0.15, 0.15
     random_ints = np.array([halo.random_int for halo in sim_reader.dark_halo_arr])
-    idx_train, idx_val, idx_test = utils.split_train_val_test(random_ints, 
+    idx_train, idx_valid, idx_test = utils.split_train_val_test(random_ints, 
                         frac_train=frac_train, frac_val=frac_val, frac_test=frac_test)
 
+    # training
     y_train = y[idx_train]
-    x_train = scalar_featurizer.scalar_features[idx_train]
+    x_train = x[idx_train]
     y_uncertainties_train = y_uncertainties[idx_train]
     y_current_train = None
     x_extra_train = x_extra[idx_train]
 
+    # validation
+    y_valid = y[idx_valid]
+    x_valid = x[idx_valid]
+    y_uncertainties_valid = y_uncertainties[idx_valid]
+    y_current_valid = None
+    x_extra_valid = x_extra[idx_valid]
+    
     nnfitter = NNFitter()
     nnfitter.load_training_data(x_train, y_train,
                         y_current_train=y_current_train, x_extra_train=x_extra_train,
                         y_uncertainties_train=y_uncertainties_train)
     nnfitter.set_up_training_data()
+    nnfitter.load_validation_data(x_valid, y_valid,
+                        y_current_valid=y_current_valid, x_extra_valid=x_extra_valid,
+                        y_uncertainties_valid=y_uncertainties_valid)
+    nnfitter.set_up_validation_data()
     
-    #lrs = [0.0001, 0.0001, 0.0001]
-    lrs = [0.0001]
-    for lr in lrs:
-        seed_torch(42)
-        # g = torch.Generator()
-        # g.manual_seed(0)
-        # nnfitter.data_loader_train = DataLoader(nnfitter.dataset_train, 
-        #                                   batch_size=32, shuffle=True,
-        #                                   worker_init_fn=seed_worker,
-        #                                   generator=g, num_workers=0)
-        train(nnfitter, hidden_size=128, max_epochs=max_epochs, learning_rate=lr,
-              fn_model=fn_model)
-        #nnfitter.save_model(fn_model)
+    start = time.time()
+    print(f"Starting training with learning rate {lr:.3f}")
+    seed_torch(42)
+    train(nnfitter, hidden_size=hidden_size, max_epochs=max_epochs, learning_rate=lr,
+            fn_model=fn_model)
+    end = time.time()
+    print(f"Time: {end-start} s = {(end-start)/60.0} min")
+    print("Saved to", fn_model)
+
 
 
 def train(nnfitter, hidden_size=128, max_epochs=250, learning_rate=0.00005,
@@ -126,8 +166,11 @@ def train(nnfitter, hidden_size=128, max_epochs=250, learning_rate=0.00005,
     print(hidden_size, max_epochs, learning_rate)
 
     input_size = nnfitter.A_train.shape[1]
-    output_size = nnfitter.y_train.shape[-1]
-    print(output_size)
+    if nnfitter.y_train.ndim==1:
+        output_size = 1
+    else:
+        output_size = nnfitter.y_train.shape[-1]
+    print("Output size:", output_size)
     hidden_size = hidden_size
     nnfitter.model = NeuralNet(input_size, hidden_size=hidden_size, output_size=output_size)
     nnfitter.train(max_epochs=max_epochs, learning_rate=learning_rate,
