@@ -92,19 +92,32 @@ class NNFitter(Fitter):
             # Make predictions for this batch
             y_pred = self.model(x.double())
             # Compute the loss and its gradients
-            loss = self.criterion(y_pred.squeeze(), y, y_var)
+            #loss = self.criterion(y_pred.squeeze(), y, y_var)
+            # squeeze all in case they are 1-dimc
+            loss = self.criterion(y_pred.squeeze(), y.squeeze(), y_var.squeeze())
             loss.backward()
+
             # Adjust learning weights
             self.optimizer.step()
             # Gather data and report
             running_loss_train += loss.item()
+            # print("train")
+            # print(y)
+            # print(y_pred)
+            # print(y_var)
+            # print(loss.item())
 
         self.model.eval()
         for i, data_val in enumerate(self.data_loader_valid):
             x, y, y_var = data_val
             y_pred = self.model(x.double())
-            loss = self.criterion(y_pred.squeeze(), y, y_var)
+            loss = self.criterion(y_pred.squeeze(), y.squeeze(), y_var.squeeze())
             running_loss_valid += loss.item()
+            # print("valid")
+            # print(y)
+            # print(y_pred)
+            # print(y_var)
+            # print(loss.item())
 
         last_loss_train = running_loss_train / len(self.data_loader_train)
         last_loss_valid = running_loss_valid / len(self.data_loader_valid)

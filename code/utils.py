@@ -20,6 +20,11 @@ label_dict = {'m_200m': r'log($M_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
               'm_vir': r'$M_\mathrm{vir}$'
               }
 
+lim_dict = {'m_200m': (10.5, 14),
+            'm_stellar': (7, 12),
+            'ssfr1': (-15,-8),
+            'r_stellar': (-1,2)}
+
 sfr_zero = 1e-3
 
 def get_alt_sim_name(sim_name):
@@ -397,6 +402,10 @@ def get_y_uncertainties(y_label_name, sim_reader=None, y_vals=None, log_mass_shi
                                                               sim_name=sim_reader.sim_name)
         return y_uncertainties            
 
+    elif y_label_name.startswith('a_mfrac') or y_label_name=='Mofa':
+        y_uncertainties = [0.02]*len(y_vals)
+        return np.array(y_uncertainties) #fraction so don't do as percent. does this accuracy make sense ?? 
+
     else:
         return y_vals*0.01 #TODO what should this be??                                 
 
@@ -458,3 +467,14 @@ def geo_feature_arr_to_values(geo_feature_arr):
         geo_features.append(geo_features_halo)
     geo_features = np.array(geo_features)
     return geo_features
+
+
+# just get the a values of all the snapshots,
+# by grabbing the first halo that has all
+def get_avals(dark_halo_arr):
+    n_snapshots = 100
+    for halo in dark_halo_arr:
+        a_vals = halo.catalog_properties['MAH'][0]
+        if len(a_vals)==n_snapshots:
+            return a_vals
+

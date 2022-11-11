@@ -27,6 +27,7 @@ def main():
     #y_label_names = ['a_mfrac_n19']
     #y_label_names = ['a_mfrac_0.75']
     #y_label_names = ['a_mfrac_n39']
+    #y_label_names = ['Mofa']
     run(y_label_names)
 
 
@@ -39,12 +40,15 @@ def run(y_label_names):
     scalar_tag = ''
 
     # fit
-    max_epochs = 500
+    max_epochs = 1000
     lr = 0.00005
     hidden_size = 128
 
-    feature_mode = 'geos'
-    assert feature_mode in ['scalars', 'geos', 'catalog'], "Feature mode not recognized!"
+    #feature_mode = 'scalars'
+    #feature_mode = 'geos'
+    #feature_mode = 'catalog'
+    feature_mode = 'mrv'
+    assert feature_mode in ['scalars', 'geos', 'catalog', 'mrv'], "Feature mode not recognized!"
 
     y_str = '_'.join(y_label_names)
     fit_tag = f'_{y_str}_nn_{feature_mode}_epochs{max_epochs}_lr{lr}_hs{hidden_size}'
@@ -95,6 +99,11 @@ def run(y_label_names):
             print('loaded')
             x = scalar_featurizer.scalar_features
 
+    elif feature_mode=='mrv':
+        mrv_for_rescaling = utils.get_mrv_for_rescaling(sim_reader, scp['mrv_names_for_rescaling'])
+        x = np.log10(mrv_for_rescaling).T
+        x_extra = None
+
     elif feature_mode=='catalog':
         catalog_feature_names = ['M200c', 'c200c', 'a_form']
         sim_reader.get_structure_catalog_features(catalog_feature_names)
@@ -103,21 +112,25 @@ def run(y_label_names):
         
     print("Feature (x) shape:", x.shape)
 
-    # get y vals
-    if  'a_mfrac_n' in y_label_names[0]:
-        assert len(y_label_names)==1, "for now can only handle n by itself"
-        y = utils.get_y_vals(y_label_names[0], sim_reader, halo_tag=halo_tag)
-        y_uncertainties = utils.get_y_uncertainties(y_label_names[0], sim_reader=sim_reader, y_vals=y)
-    else:
-        y = [] 
-        y_uncertainties = []
-        for i in range(len(y_label_names)):
-            y_single = utils.get_y_vals(y_label_names[i], sim_reader, halo_tag=halo_tag)
+    y = [] 
+    y_uncertainties = []
+    for i in range(len(y_label_names)):
+        y_single = utils.get_y_vals(y_label_names[i], sim_reader, halo_tag=halo_tag)
+        y_single = np.array(y_single)
+        print(y_single.shape)
+        print(y_single.ndim)
+        y_uncertainties_single = utils.get_y_uncertainties(y_label_names[i], sim_reader=sim_reader, y_vals=y_single)
+        if y_single.ndim>1:
+            y.extend(y_single.T)
+            y_uncertainties_single = np.array(y_uncertainties_single)
+            y_uncertainties.extend(y_uncertainties_single.T)
+        else:
             y.append(y_single)
-            y_uncertainties = utils.get_y_uncertainties(y_label_names[i], sim_reader=sim_reader, y_vals=y_single)
-        y = np.array(y).T
-        y_uncertainties = np.array(y_uncertainties).T
-    print(y.shape)
+            y_uncertainties.append(y_uncertainties_single)
+        #print(y.shape)
+    y = np.array(y).T
+    y_uncertainties = np.array(y_uncertainties).T
+    print('Label (y) shape:', y.shape)
 
     # Split data into train and test, only work with training data after this
     frac_train, frac_val, frac_test = 0.7, 0.15, 0.15
@@ -130,14 +143,20 @@ def run(y_label_names):
     x_train = x[idx_train]
     y_uncertainties_train = y_uncertainties[idx_train]
     y_current_train = None
-    x_extra_train = x_extra[idx_train]
+    if feature_mode=='catalog' or feature_mode=='mrv':
+        x_extra_train = None
+    else:
+        x_extra_train = x_extra[idx_train]
 
     # validation
     y_valid = y[idx_valid]
     x_valid = x[idx_valid]
     y_uncertainties_valid = y_uncertainties[idx_valid]
     y_current_valid = None
-    x_extra_valid = x_extra[idx_valid]
+    if feature_mode=='catalog' or feature_mode=='mrv':
+        x_extra_valid = None
+    else:
+        x_extra_valid = x_extra[idx_valid]
     
     nnfitter = NNFitter()
     nnfitter.load_training_data(x_train, y_train,

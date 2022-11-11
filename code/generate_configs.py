@@ -6,13 +6,13 @@ config_dir = '../configs'
 
 def main():
     
-    #sim_name = 'TNG100-1'
-    sim_name = 'TNG50-4'
+    sim_name = 'TNG100-1'
+    #sim_name = 'TNG50-4'
 
     #halo_config(sim_name)
     #geo_config(sim_name)
-    #scalar_config(sim_name)
-    fit_config(sim_name)
+    scalar_config(sim_name)
+    #fit_config(sim_name)
 
 
 def halo_config(sim_name):
@@ -124,20 +124,23 @@ def scalar_config(sim_name):
     geo_tag = ''
     fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
 
-    # save info
-    scalar_dir = f'../data/scalar_features/scalar_features_{sim_name}'
-    scalar_tag = ''
-    fn_scalar_features = f'{scalar_dir}/scalar_features{sim_name}{halo_tag}{geo_tag}{scalar_tag}.npy'
-    fn_scalar_config = f'{config_dir}/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
-
     # scalar parameters
     m_order_max = 2
     x_order_max = 4
     v_order_max = 4
-    n_groups_rebin = [[0,1,2], [3,4,5,6,7], [8,9,10]]
+    #n_groups_rebin = [[0,1,2], [3,4,5,6,7], [8,9,10]]
+    n_groups_rebin = [[8,9,10]]
     eigenvalues_not_trace = True
     mrv_names_for_rescaling = ['m200m', 'r200m', 'v200m']
     transform_pseudotensors = True
+
+    # save info
+    scalar_dir = f'../data/scalar_features/scalar_features_{sim_name}'
+    #scalar_tag = f'_x{x_order_max}_v{v_order_max}'
+    scalar_tag = '_n2'
+    fn_scalar_features = f'{scalar_dir}/scalar_features{sim_name}{halo_tag}{geo_tag}{scalar_tag}.npy'
+    fn_scalar_config = f'{config_dir}/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
+
 
     geo_config_dict = {'geo_tag': geo_tag,
                        'fn_geo_config': fn_geo_config,

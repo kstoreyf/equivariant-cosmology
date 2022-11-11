@@ -120,6 +120,23 @@ class DarkHalo:
         return a_mfrac_interp
 
 
+    def get_Mofa(self, a2idx_dict):
+        Ms = np.zeros(len(a2idx_dict))
+        if 'MAH' not in self.catalog_properties or len(self.catalog_properties['MAH'][0])==0:
+            return Ms
+        if 1.0 not in self.catalog_properties['MAH'][0]:
+            return Ms # something wrong but it seems to happen; need because getting M(a)/M(a=1)
+        a_vals = self.catalog_properties['MAH'][0]
+        m_vals = self.catalog_properties['MAH'][1]
+
+        a2m_dict = dict(zip(a_vals, m_vals))
+        M_a1 = a2m_dict[1.0]
+        for i in range(len(a_vals)):
+            idx = a2idx_dict[a_vals[i]]
+            Ms[idx] = m_vals[i]/M_a1
+        return Ms
+
+
 class SimulationReader:
 
     # TODO: replace snap_num_str with proper zfill (i think? check works)
@@ -322,8 +339,14 @@ class SimulationReader:
                     halo.set_catalog_property(property_name, idx_subhalo_to_sfr1[halo.idx_subhalo_hydro])
             return
 
-        if property_name.startswith('a_mfrac'):
+        if property_name.startswith('a_mfrac') or property_name=='Mofa':
             self.add_MAH_to_halos_SAM(halo_tag)
+
+        if property_name=='Mofa':
+            avals = utils.get_avals(self.dark_halo_arr)
+            n_snapshots = len(avals)
+            a2idx_dict = dict(zip(avals, range(n_snapshots)))
+
 
         for halo in self.dark_halo_arr:
             # if property_name=='m200m' or         
@@ -373,6 +396,8 @@ class SimulationReader:
             elif property_name.startswith('a_mfrac'):
                 mfrac = property_name.split('_')[-1]
                 property_value = halo.get_a_mfrac(float(mfrac))
+            elif property_name=='Mofa':
+                property_value = halo.get_Mofa(a2idx_dict)
             else:
                 raise ValueError(f"Property name {property_name} not recognized!")
 

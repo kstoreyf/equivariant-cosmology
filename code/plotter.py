@@ -208,7 +208,7 @@ def plot_pred_vs_true(y_label_name, y_true, y_pred, y_train, y_train_pred,
         plt.savefig(save_fn, bbox_inches='tight')
 
 
-def plot_pred_vs_true_hist(y_label_name, y_true, y_pred, y_train, y_train_pred, 
+def plot_pred_vs_true_hist2(y_label_name, y_true, y_pred, y_train, y_train_pred, 
                       text_results='', title=None, save_fn=None,
                       x_lim=(7,12), y_lim=(7,12), colors_test=None,
                       colorbar_label=''):

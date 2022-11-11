@@ -12,11 +12,11 @@ from scalar_features import ScalarFeaturizer
 
 def run():
 
-    #sim_name = 'TNG100-1'
-    sim_name = 'TNG50-4'
+    sim_name = 'TNG100-1'
+    #sim_name = 'TNG50-4'
     halo_tag = ''
     geo_tag = ''
-    scalar_tag = ''
+    scalar_tag = '_n01'
     fn_scalar_config = f'../configs/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
 
     with open(fn_scalar_config, 'r') as file:
