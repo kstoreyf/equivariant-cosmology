@@ -1,10 +1,11 @@
 #!/bin/bash
 ##SBATCH --job-name=halo_selector_tng100
 ##SBATCH --job-name=geo_scalar_featurizer_tng50
-##SBATCH --job-name=scalar_featurizer_tng100_nstarmin50_twin_pseudo_rall_mord2_xord4_vord4
+##SBATCH --job-name=scalar_featurizer_tng100_nstarmin50_twin_pseudo_rall_mord2_n01
 ##SBATCH --job-name=feature_importance_tng100_nstarmin10_mstellar
-##SBATCH --job-name=train_nn_a_mfrac_0.75_nn_epochs1000_lr1e-3
-#SBATCH --job-name=train_nn_geos_mstellar_epochs500_lr0.00005_hs128
+#SBATCH --job-name=train_nn_m_stellar_epochs1000_lr5e-5_hs128_mrv
+##SBATCH --job-name=train_nn_Mofa_epochs1000_lr0.0001_hs128
+##SBATCH --job-name=train_nn_a_mfrac_n39_epochs1000_lr0.0001_hs128
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=24
