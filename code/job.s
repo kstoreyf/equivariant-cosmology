@@ -3,7 +3,7 @@
 ##SBATCH --job-name=geo_scalar_featurizer_tng100_gx1_gv1_n5
 ##SBATCH --job-name=scalar_featurizer_tng100_x4_v4_n5
 ##SBATCH --job-name=feature_importance_tng100_nstarmin10_mstellar
-#SBATCH --job-name=train_nn_m_stellar_f0.005_geos
+#SBATCH --job-name=train_nn_m_stellar_spearman567
 ##SBATCH --job-name=train_nn_Mofa_epochs1000_lr1e-3_hs128_scalars
 ##SBATCH --job-name=train_nn_a_mfrac_39_epochs2000_lr5e-5_hs128_scalars_gx1_gv1_n5
 #SBATCH --output=logs/%x.out

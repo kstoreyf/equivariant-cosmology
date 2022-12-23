@@ -38,26 +38,32 @@ def run(y_label_names):
     halo_tag = ''
     geo_tag = ''
     scalar_tag = ''
-    frac_subset = 0.005
     #scalar_tag = '_gx1_gv1_n5'
+    frac_subset = 1.0
+    n_top_features = 567
+    info_metric = 'spearman'
 
     # fit
     max_epochs = 500
     lr = 5e-5
     hidden_size = 128
 
-    #feature_mode = 'scalars'
-    feature_mode = 'geos'
+    feature_mode = 'scalars'
+    #feature_mode = 'geos'
     #feature_mode = 'catalog'
     #feature_mode = 'mrv'
     #feature_mode = 'mrvc'
     assert feature_mode in ['scalars', 'geos', 'catalog', 'mrv', 'mrvc'], "Feature mode not recognized!"
 
-    frac_str = f'_f{frac_subset}'
     y_str = '_'.join(y_label_names)
-    fit_tag = f'_{y_str}_nn_{feature_mode}_epochs{max_epochs}_lr{lr}_hs{hidden_size}{frac_str}'
+    frac_tag, info_tag = '', ''
+    if frac_subset != 1.0:
+        frac_tag = f'_f{frac_subset}'
+    if info_metric is not None:
+        info_tag = f'_{info_metric}{n_top_features}'
+
+    fit_tag = f'_{y_str}_nn_{feature_mode}_epochs{max_epochs}_lr{lr}_hs{hidden_size}{frac_tag}{info_tag}'
     fn_model = f'../models/models_{sim_name}/model_{sim_name}{halo_tag}{geo_tag}{scalar_tag}{fit_tag}.pt'
-    # if fn_model isn't none, will save (save_at_min_loss=True by default)
 
     # load configs
     fn_scalar_config = f'../configs/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
@@ -123,6 +129,19 @@ def run(y_label_names):
         sim_reader.get_structure_catalog_features(catalog_feature_names)
         x = sim_reader.x_catalog_features
 
+
+    if info_metric is not None:
+        assert len(y_label_names)==1, "Info currently only computed for single labels"
+        y_label_name = y_label_names[0]
+        feature_info_dir = f'../data/feature_info/feature_info_{sim_name}'
+        fn_feature_info = f'{feature_info_dir}/feature_info_{sim_name}{halo_tag}{geo_tag}{scalar_tag}_{info_metric}_{y_label_name}.npy'
+        values = np.load(fn_feature_info, allow_pickle=True)
+        i_info = np.argsort(values)[::-1][:n_top_features]
+        print(len(i_info))
+        print(values[i_info])
+        print("Original feature (x) shape:", x.shape)
+        print("Taking top", n_top_features)
+        x = x[:,i_info]
         
     print("Feature (x) shape:", x.shape)
 
@@ -151,7 +170,7 @@ def run(y_label_names):
         else:
             y.append(y_single)
             y_uncertainties.append(y_uncertainties_single)
-        #print(y.shape)
+
     y = np.array(y).T
     y_uncertainties = np.array(y_uncertainties).T
     print('Label (y) shape:', y.shape)
