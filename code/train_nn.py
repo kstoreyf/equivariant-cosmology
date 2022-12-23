@@ -38,20 +38,24 @@ def run(y_label_names):
     halo_tag = ''
     geo_tag = ''
     scalar_tag = ''
+    frac_subset = 0.005
+    #scalar_tag = '_gx1_gv1_n5'
 
     # fit
-    max_epochs = 1000
-    lr = 0.00005
+    max_epochs = 500
+    lr = 5e-5
     hidden_size = 128
 
     #feature_mode = 'scalars'
-    #feature_mode = 'geos'
+    feature_mode = 'geos'
     #feature_mode = 'catalog'
-    feature_mode = 'mrv'
-    assert feature_mode in ['scalars', 'geos', 'catalog', 'mrv'], "Feature mode not recognized!"
+    #feature_mode = 'mrv'
+    #feature_mode = 'mrvc'
+    assert feature_mode in ['scalars', 'geos', 'catalog', 'mrv', 'mrvc'], "Feature mode not recognized!"
 
+    frac_str = f'_f{frac_subset}'
     y_str = '_'.join(y_label_names)
-    fit_tag = f'_{y_str}_nn_{feature_mode}_epochs{max_epochs}_lr{lr}_hs{hidden_size}'
+    fit_tag = f'_{y_str}_nn_{feature_mode}_epochs{max_epochs}_lr{lr}_hs{hidden_size}{frac_str}'
     fn_model = f'../models/models_{sim_name}/model_{sim_name}{halo_tag}{geo_tag}{scalar_tag}{fit_tag}.pt'
     # if fn_model isn't none, will save (save_at_min_loss=True by default)
 
@@ -109,17 +113,37 @@ def run(y_label_names):
         sim_reader.get_structure_catalog_features(catalog_feature_names)
         x = sim_reader.x_catalog_features
         x_extra = None
+
+    elif feature_mode=='mrvc':
+        mrv_for_rescaling = utils.get_mrv_for_rescaling(sim_reader, scp['mrv_names_for_rescaling'])
+        mrv = np.log10(mrv_for_rescaling).T
+        x_extra = mrv
+
+        catalog_feature_names = ['c200c']
+        sim_reader.get_structure_catalog_features(catalog_feature_names)
+        x = sim_reader.x_catalog_features
+
         
     print("Feature (x) shape:", x.shape)
+
+    # Split data into train, validation, and test
+    frac_train, frac_val, frac_test = 0.7, 0.15, 0.15
+    random_ints = np.array([halo.random_int for halo in sim_reader.dark_halo_arr])
+    idx_train, idx_valid, idx_test = utils.split_train_val_test(random_ints, 
+                        frac_train=frac_train, frac_val=frac_val, frac_test=frac_test)
+    if frac_subset != 1.0: 
+        rng = np.random.default_rng(seed=42)
+        idx_train = rng.choice(idx_train, size=int(frac_subset*len(idx_train)))
+        idx_valid = rng.choice(idx_valid, size=int(frac_subset*len(idx_valid)))
+    print("N_train:", len(idx_train), "N_valid:", len(idx_valid))
 
     y = [] 
     y_uncertainties = []
     for i in range(len(y_label_names)):
         y_single = utils.get_y_vals(y_label_names[i], sim_reader, halo_tag=halo_tag)
         y_single = np.array(y_single)
-        print(y_single.shape)
-        print(y_single.ndim)
-        y_uncertainties_single = utils.get_y_uncertainties(y_label_names[i], sim_reader=sim_reader, y_vals=y_single)
+        y_uncertainties_single = utils.get_y_uncertainties(y_label_names[i], sim_reader=sim_reader, y_vals=y_single,
+                                                           idx_train=idx_train)
         if y_single.ndim>1:
             y.extend(y_single.T)
             y_uncertainties_single = np.array(y_uncertainties_single)
@@ -131,16 +155,16 @@ def run(y_label_names):
     y = np.array(y).T
     y_uncertainties = np.array(y_uncertainties).T
     print('Label (y) shape:', y.shape)
+    print('Uncertainty (y_uncertainties) shape:', y_uncertainties.shape)
 
-    # Split data into train and test, only work with training data after this
-    frac_train, frac_val, frac_test = 0.7, 0.15, 0.15
-    random_ints = np.array([halo.random_int for halo in sim_reader.dark_halo_arr])
-    idx_train, idx_valid, idx_test = utils.split_train_val_test(random_ints, 
-                        frac_train=frac_train, frac_val=frac_val, frac_test=frac_test)
+    # print("SETTING FEATURES = LABELS AS TEST, CAREFUL")
+    # x = y
+    # print("Feature (x) shape:", x.shape)
+
 
     # training
-    y_train = y[idx_train]
     x_train = x[idx_train]
+    y_train = y[idx_train]
     y_uncertainties_train = y_uncertainties[idx_train]
     y_current_train = None
     if feature_mode=='catalog' or feature_mode=='mrv':
@@ -149,8 +173,8 @@ def run(y_label_names):
         x_extra_train = x_extra[idx_train]
 
     # validation
-    y_valid = y[idx_valid]
     x_valid = x[idx_valid]
+    y_valid = y[idx_valid]
     y_uncertainties_valid = y_uncertainties[idx_valid]
     y_current_valid = None
     if feature_mode=='catalog' or feature_mode=='mrv':
@@ -158,6 +182,8 @@ def run(y_label_names):
     else:
         x_extra_valid = x_extra[idx_valid]
     
+
+
     nnfitter = NNFitter()
     nnfitter.load_training_data(x_train, y_train,
                         y_current_train=y_current_train, x_extra_train=x_extra_train,

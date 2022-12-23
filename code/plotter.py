@@ -413,8 +413,8 @@ def plot_halo_dark_geometric(base_path_dark, snap_num, m_dmpart, halo, bin_edges
     fig = plt.figure(figsize=(10,10))
     ax = plt.gca()
     
-    s_dm = 0.6
-    alpha = 0.3
+    s_dm = 0.12
+    alpha = 0.1
     # want absolute positions, not shifted, so get directly from illustris
     halo_dark_dm = il.snapshot.loadHalo(base_path_dark,snap_num,halo.idx_halo_dark,'dm')
     x_halo_dark_dm = halo_dark_dm['Coordinates']
@@ -425,6 +425,7 @@ def plot_halo_dark_geometric(base_path_dark, snap_num, m_dmpart, halo, bin_edges
     
     #cmap = matplotlib.cm.get_cmap(cmap_shifted)
     cmap = matplotlib.cm.cool
+    cmap = utils.shiftedColorMap(cmap, start=0.3, midpoint=0.65, stop=1.0)
     #m_200 = halo.catalog_properties['m200m']
     m_max = 1
     
@@ -444,14 +445,15 @@ def plot_halo_dark_geometric(base_path_dark, snap_num, m_dmpart, halo, bin_edges
                s=s_dm, alpha=alpha, marker='.', color=color, label='Dark halo DM', zorder=0)  
         
         com_bin = np.mean(x_inbin, axis=0)
-        ax.arrow(x_minPE[0], x_minPE[1], com_bin[0]-x_minPE[0], com_bin[1]-x_minPE[1], head_width=20,
+        ax.arrow(x_minPE[0], x_minPE[1], com_bin[0]-x_minPE[0], com_bin[1]-x_minPE[1], head_width=15,
                   facecolor=color, edgecolor='k', zorder=2)
         #ax.scatter(com_bin[0], com_bin[1], marker='o', color=color, edgecolor='k', s=150)
         
         if i < n_bins-1:
-            circle_r200 = plt.Circle((x_minPE[0], x_minPE[1]), bin_edges[i+1], color='dimgrey', fill=False, lw=1.5)
+            circle_r200 = plt.Circle((x_minPE[0], x_minPE[1]), bin_edges[i+1], color='dimgrey', fill=False, lw=1)
             ax.add_patch(circle_r200)
     
+    circle_r200 = plt.Circle((x_minPE[0], x_minPE[1]), 1.2*r200, color='dimgrey', fill=False, lw=1)
     ax.scatter(x_minPE[0], x_minPE[1], marker='+', color='k', s=200, lw=3, zorder=1)
 
     #scat.set_clim(0, 0.8)

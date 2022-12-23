@@ -10,10 +10,10 @@ from geometric_features import GeometricFeaturizer
 
 def run():
 
-    #sim_name = 'TNG100-1'
-    sim_name = 'TNG50-4'
+    sim_name = 'TNG100-1'
+    #sim_name = 'TNG50-4'
     halo_tag = ''
-    geo_tag = ''
+    geo_tag = '_gx1_gv1'
     fn_geo_config = f'../configs/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
 
     with open(fn_geo_config, 'r') as file:

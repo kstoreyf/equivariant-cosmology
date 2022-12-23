@@ -377,7 +377,8 @@ def get_y_vals(y_label_name, sim_reader, mass_multiplier=1e10, halo_tag=None):
         return y_vals
 
 
-def get_y_uncertainties(y_label_name, sim_reader=None, y_vals=None, log_mass_shift=10):
+def get_y_uncertainties(y_label_name, sim_reader=None, y_vals=None, log_mass_shift=10,
+                        idx_train=None):
     
     ssfr_name_to_sfr_name = {'ssfr': 'sfr', 'ssfr1': 'sfr1'}
     if y_label_name=='ssfr' or y_label_name=='ssfr1':
@@ -403,11 +404,25 @@ def get_y_uncertainties(y_label_name, sim_reader=None, y_vals=None, log_mass_shi
         return y_uncertainties            
 
     elif y_label_name.startswith('a_mfrac') or y_label_name=='Mofa':
-        y_uncertainties = [0.02]*len(y_vals)
-        return np.array(y_uncertainties) #fraction so don't do as percent. does this accuracy make sense ?? 
+        assert idx_train is not None, "Must pass idx_train to get uncertainty for Mofa or a_mfrac!"
+        #y_uncertainties = [0.02]*len(y_vals)
+
+        y_train = y_vals[idx_train]
+        y_train_mean = np.mean(y_train, axis=0)
+        sample_var = y_train - y_train_mean
+
+        sample_p16 = np.percentile(sample_var, 16, axis=0)
+        sample_p84 = np.percentile(sample_var, 84, axis=0)
+        y_uncertainties_persample = 0.5*(sample_p84 - sample_p16)
+
+        print(y_uncertainties_persample)
+        # same for each sample, just based on aval
+        y_uncertainties = np.tile(y_uncertainties_persample, (len(y_vals), 1))
+        print(y_uncertainties.shape)
+        return y_uncertainties
 
     else:
-        return y_vals*0.01 #TODO what should this be??                                 
+        return y_vals*0.05 #TODO what should this be??                                 
 
 
 def save_mah(halos, fn_mah):

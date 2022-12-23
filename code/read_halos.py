@@ -397,7 +397,21 @@ class SimulationReader:
                 mfrac = property_name.split('_')[-1]
                 property_value = halo.get_a_mfrac(float(mfrac))
             elif property_name=='Mofa':
-                property_value = halo.get_Mofa(a2idx_dict)
+                Mofa_arr = halo.get_Mofa(a2idx_dict)
+                # remove a=1 because always Mfrac=1
+                idx_a1 = a2idx_dict[1]
+                Mofa_arr = np.delete(Mofa_arr, idx_a1)
+                #property_value = Mofa_arr
+
+                #avals_subset = [0.25, 0.5, 0.75]
+                avals_subset = [0.25]
+                idxs_subset = []
+                for aval in avals_subset:
+                    aval_closest, _ = utils.find_nearest(avals, aval)
+                    idxs_subset.append( a2idx_dict[aval_closest] )
+
+                property_value = Mofa_arr[idxs_subset]
+
             else:
                 raise ValueError(f"Property name {property_name} not recognized!")
 

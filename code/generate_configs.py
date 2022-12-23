@@ -83,13 +83,13 @@ def geo_config(sim_name):
     print(list(r_edges))
     r_units = 'r200m'
     # other
-    x_order_max = 2
-    v_order_max = 2
+    x_order_max = 1
+    v_order_max = 1
     center_halo = 'x_minPE'
 
     # save info
     geo_dir = f'../data/geometric_features/geometric_features_{sim_name}'
-    geo_tag = ''
+    geo_tag = '_gx1_gv1'
     fn_geo_features = f'{geo_dir}/geometric_features_{sim_name}{halo_tag}{geo_tag}.npy'
     fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
 
@@ -121,23 +121,24 @@ def scalar_config(sim_name):
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
     # geo info
-    geo_tag = ''
+    geo_tag = '_gx1_gv1'
     fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
 
     # scalar parameters
     m_order_max = 2
-    x_order_max = 4
-    v_order_max = 4
+    x_order_max = 2
+    v_order_max = 2
     #n_groups_rebin = [[0,1,2], [3,4,5,6,7], [8,9,10]]
-    n_groups_rebin = [[8,9,10]]
+    #n_groups_rebin = [[8,9,10]]
+    n_groups_rebin = [[0,1], [2,3], [4,5], [6,7], [8,9,10]]
     eigenvalues_not_trace = True
     mrv_names_for_rescaling = ['m200m', 'r200m', 'v200m']
     transform_pseudotensors = True
 
     # save info
     scalar_dir = f'../data/scalar_features/scalar_features_{sim_name}'
-    #scalar_tag = f'_x{x_order_max}_v{v_order_max}'
-    scalar_tag = '_n2'
+    #scalar_tag = f'_x{x_order_max}_v{v_order_max}_n5'
+    scalar_tag = '_n5'
     fn_scalar_features = f'{scalar_dir}/scalar_features{sim_name}{halo_tag}{geo_tag}{scalar_tag}.npy'
     fn_scalar_config = f'{config_dir}/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
 

@@ -19,6 +19,7 @@ class NeuralNet(torch.nn.Module):
         self.act2 = torch.nn.SELU()
         self.lin3 = torch.nn.Linear(self.hidden_size, self.hidden_size)
         self.act3 = torch.nn.SELU()
+        #self.act3 = torch.nn.Sigmoid()
         self.linfinal = torch.nn.Linear(self.hidden_size, output_size)
 
         torch.nn.init.xavier_uniform_(self.lin1.weight)
@@ -84,6 +85,7 @@ class NNFitter(Fitter):
     def train_one_epoch(self, epoch_index):
         running_loss_train = 0.
         running_loss_valid = 0.
+        losses_train = []
         for i, data in enumerate(self.data_loader_train):
             x, y, y_var = data
 
@@ -97,14 +99,20 @@ class NNFitter(Fitter):
             loss = self.criterion(y_pred.squeeze(), y.squeeze(), y_var.squeeze())
             loss.backward()
 
+            # print(y[0])
+            # print(y_pred[0])
+            # print(y_var[0])
+
             # Adjust learning weights
             self.optimizer.step()
             # Gather data and report
             running_loss_train += loss.item()
+            losses_train.append(loss.item())
+            # print("Epoch", epoch_index)
             # print("train")
-            # print(y)
-            # print(y_pred)
-            # print(y_var)
+            # print(y[0])
+            # print(y_pred[0])
+            # print(y_var[0])
             # print(loss.item())
 
         self.model.eval()
@@ -114,11 +122,12 @@ class NNFitter(Fitter):
             loss = self.criterion(y_pred.squeeze(), y.squeeze(), y_var.squeeze())
             running_loss_valid += loss.item()
             # print("valid")
-            # print(y)
-            # print(y_pred)
-            # print(y_var)
+            # print(y[0])
+            # print(y_pred[0])
+            # print(y_var[0])
             # print(loss.item())
 
+        #print(np.mean(losses_train), np.min(losses_train), np.max(losses_train))
         last_loss_train = running_loss_train / len(self.data_loader_train)
         last_loss_valid = running_loss_valid / len(self.data_loader_valid)
         print(f"Training epoch {epoch_index}, training loss {last_loss_train:.2f}, validation loss {last_loss_valid:.2f}")
@@ -142,7 +151,7 @@ class NNFitter(Fitter):
         for epoch_index in range(max_epochs):
             last_loss_train, last_loss_valid = self.train_one_epoch(epoch_index)
             #print(last_loss, loss_min)
-            if save_at_min_loss and fn_model is not None and last_loss_valid < loss_valid_min:
+            if save_at_min_loss and last_loss_valid < loss_valid_min:
                 #print(last_loss, loss_min)
                 state_dict_best = self.model.state_dict()
                 #print(state_dict_best)
