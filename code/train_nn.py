@@ -22,16 +22,21 @@ def seed_torch(seed=1029):
 
 
 def main():
-    y_label_names = ['m_stellar']
+    #y_label_names = ['m_stellar']
+    #y_label_names = ['gband']
+    y_label_names = ['bhmass']
     #y_label_names = ['m_stellar', 'ssfr1', 'r_stellar']
     #y_label_names = ['a_mfrac_n19']
     #y_label_names = ['a_mfrac_0.75']
     #y_label_names = ['a_mfrac_n39']
     #y_label_names = ['Mofa']
     run(y_label_names)
+    # ns_top_features = [1, 5, 10, 50, 100, 567]
+    # for nn in range(len(ns_top_features)):
+    #     run(y_label_names, n_top_features=ns_top_features[nn])
 
 
-def run(y_label_names):
+def run(y_label_names, n_top_features=None):
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
@@ -40,8 +45,10 @@ def run(y_label_names):
     scalar_tag = ''
     #scalar_tag = '_gx1_gv1_n5'
     frac_subset = 1.0
-    n_top_features = 567
-    info_metric = 'spearman'
+    #n_top_features = 1
+    #info_metric = 'spearman'
+    #info_metric = 'pca_top50'
+    info_metric = None
 
     # fit
     max_epochs = 500
@@ -60,7 +67,7 @@ def run(y_label_names):
     if frac_subset != 1.0:
         frac_tag = f'_f{frac_subset}'
     if info_metric is not None:
-        info_tag = f'_{info_metric}{n_top_features}'
+        info_tag = f'_{info_metric}_n{n_top_features}'
 
     fit_tag = f'_{y_str}_nn_{feature_mode}_epochs{max_epochs}_lr{lr}_hs{hidden_size}{frac_tag}{info_tag}'
     fn_model = f'../models/models_{sim_name}/model_{sim_name}{halo_tag}{geo_tag}{scalar_tag}{fit_tag}.pt'
@@ -134,7 +141,11 @@ def run(y_label_names):
         assert len(y_label_names)==1, "Info currently only computed for single labels"
         y_label_name = y_label_names[0]
         feature_info_dir = f'../data/feature_info/feature_info_{sim_name}'
-        fn_feature_info = f'{feature_info_dir}/feature_info_{sim_name}{halo_tag}{geo_tag}{scalar_tag}_{info_metric}_{y_label_name}.npy'
+        if info_metric.startswith('pca'):
+            label_tag = ''
+        else:
+            label_tag = f'_{y_label_name}'
+        fn_feature_info = f'{feature_info_dir}/feature_info_{sim_name}{halo_tag}{geo_tag}{scalar_tag}_{info_metric}{label_tag}.npy'
         values = np.load(fn_feature_info, allow_pickle=True)
         i_info = np.argsort(values)[::-1][:n_top_features]
         print(len(i_info))

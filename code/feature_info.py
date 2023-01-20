@@ -28,6 +28,7 @@ def seed_torch(seed=1029):
 
 
 def main():
+    #y_label_names = [] # none for pca version, indep of label
     y_label_names = ['m_stellar']
     #y_label_names = ['m_stellar', 'ssfr1', 'r_stellar']
     #y_label_names = ['a_mfrac_n19']
@@ -45,7 +46,10 @@ def run(y_label_names):
     geo_tag = ''
     scalar_tag = ''
 
-    info_metric = 'spearman'
+    #info_metric = 'spearman'
+    info_metric = 'MI'
+    #n_comp_top = 50
+    #info_metric = f'pca_top{n_comp_top}'
 
     feature_mode = 'scalars'
     #feature_mode = 'geos'
@@ -117,33 +121,51 @@ def run(y_label_names):
     x_train = x[idx_train]
     print(x_train.shape)
 
-    for y_label_name in y_label_names:
-        y = utils.get_y_vals(y_label_name, sim_reader)
-
-        y_train = y[idx_train]
-        print(y_train.shape)
-
-        values = []
-
-        # for each feature, compute correlation value
-        for i in range(x_train.shape[1]):
-            x_train_i = x_train[:,i]
-            
-            if info_metric=='spearman':
-                res = scipy.stats.spearmanr(x_train_i, y_train)
-                values.append(res[0])
-
-            elif info_metric=='MI':
-                X = np.vstack((x_train_i, y_train)).T
-                mi_estimator = EstimateMI()
-                MI_mean, _ = mi_estimator.fit(X)
-                values.append(MI_mean)
-
     feature_info_dir = f'../data/feature_info/feature_info_{sim_name}'
     Path(feature_info_dir).mkdir(parents=True, exist_ok=True)
-    fn_feature_info = f'{feature_info_dir}/feature_info_{sim_name}{halo_tag}{geo_tag}{scalar_tag}_{info_metric}_{y_label_name}.npy'
-    np.save(fn_feature_info, values)
-    print("Done and saved!")
+
+    if info_metric.startswith('pca'):
+        
+        from sklearn.decomposition import PCA
+        pca = PCA()
+        projection = pca.fit_transform(x_train)
+
+        pc_top = pca.components_[:n_comp_top]
+        summed_contributions_top = np.sum(np.abs(pc_top), axis=0)
+        values = summed_contributions_top
+        #i_importance_summed_top = np.argsort(summed_contributions)[::-1]
+        
+        fn_feature_info = f'{feature_info_dir}/feature_info_{sim_name}{halo_tag}{geo_tag}{scalar_tag}_{info_metric}.npy'
+        np.save(fn_feature_info, values)
+        print("Done and saved!")
+
+    else:
+        for y_label_name in y_label_names:
+            y = utils.get_y_vals(y_label_name, sim_reader)
+
+            y_train = y[idx_train]
+            print(y_train.shape)
+
+            values = []
+
+            # for each feature, compute correlation value
+            for i in range(x_train.shape[1]):
+                x_train_i = x_train[:,i]
+                
+                if info_metric=='spearman':
+                    res = scipy.stats.spearmanr(x_train_i, y_train)
+                    values.append(np.abs(res[0]))
+
+                elif info_metric=='MI':
+                    X = np.vstack((x_train_i, y_train)).T
+                    mi_estimator = EstimateMI()
+                    MI_mean, _ = mi_estimator.fit(X)
+                    values.append(MI_mean)
+
+            fn_feature_info = f'{feature_info_dir}/feature_info_{sim_name}{halo_tag}{geo_tag}{scalar_tag}_{info_metric}_{y_label_name}.npy'
+            np.save(fn_feature_info, values)
+            print("Done and saved!")
+
 
     end = time.time()
     print("Time:", end-start, 'sec')

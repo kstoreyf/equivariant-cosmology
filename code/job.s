@@ -1,11 +1,14 @@
 #!/bin/bash
-##SBATCH --job-name=halo_selector_tng100
+##SBATCH --job-name=gen_configs
+##SBATCH --job-name=halo_selector_tng100_mssm
 ##SBATCH --job-name=geo_scalar_featurizer_tng100_gx1_gv1_n5
 ##SBATCH --job-name=scalar_featurizer_tng100_x4_v4_n5
 ##SBATCH --job-name=feature_importance_tng100_nstarmin10_mstellar
-#SBATCH --job-name=train_nn_m_stellar_spearman567
+##SBATCH --job-name=train_nn_m_stellar_spearman_ns
+#SBATCH --job-name=train_nn_bhmass
 ##SBATCH --job-name=train_nn_Mofa_epochs1000_lr1e-3_hs128_scalars
 ##SBATCH --job-name=train_nn_a_mfrac_39_epochs2000_lr5e-5_hs128_scalars_gx1_gv1_n5
+##SBATCH --job-name=feature_info_MI
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=24
@@ -28,6 +31,7 @@ conda activate eqenv;
 #python run_scalar_featurizer.py;
 #python feature_importance.py;
 python train_nn.py
+#python feature_info.py
 "
 
 

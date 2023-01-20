@@ -8,9 +8,9 @@ from read_halos import SimulationReader
 
 def run():
 
-    #sim_name = 'TNG100-1'
-    sim_name = 'TNG50-4'
-    halo_tag = ''
+    sim_name = 'TNG100-1'
+    #sim_name = 'TNG50-4'
+    halo_tag = '_mssm'
     fn_halo_config = f'../configs/halos_{sim_name}{halo_tag}.yaml'
 
     with open(fn_halo_config, 'r') as file:
@@ -29,6 +29,7 @@ def run():
     sim_reader.read_simulations()
     sim_reader.match_twins()
     sim_reader.select_halos(num_star_particles_min=hp['num_star_particles_min'], 
+                            num_gas_particles_min=hp['num_gas_particles_min'], 
                             halo_logmass_min=hp['halo_logmass_min'], 
                             halo_logmass_max=hp['halo_logmass_max'],
                             halo_mass_difference_factor=hp['halo_mass_difference_factor'],

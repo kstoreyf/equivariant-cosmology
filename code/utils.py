@@ -40,7 +40,7 @@ def get_uncertainties_genel2019(gal_property, log_m_stellar, sim_name):
     # From Genel+2019, Figure 8
     # tng50-4: closest to epsilon=4 (blue)
     # tng100-1: closest to epsilon=1 (yellow)
-    gal_properties = ['m_stellar', 'r_stellar', 'sfr', 'sfr1']
+    gal_properties = ['m_stellar', 'r_stellar', 'sfr', 'sfr1', 'bhmass']
     assert gal_property in gal_properties, f'Property {gal_property} not in gal_properties={gal_properties}'
 
     logmstellar_bins = np.linspace(8.5, 11, 6)
@@ -64,10 +64,15 @@ def get_uncertainties_genel2019(gal_property, log_m_stellar, sim_name):
                       'TNG100-1': np.array([0.34, 0.17, 0.15, 0.16, 0.25, 0.5, 0.5]),
                     }
 
+    stdev_dict_bhmass = {'TNG50-4': np.array([0.26, 0.13, 0.12, 0.11, 0.08, 0.07, 0.07]), 
+                      'TNG100-1': np.array([0.22, 0.11, 0.13, 0.18, 0.12, 0.06, 0.06]),
+                    }
+
     gal_property_to_stdev_dict = {'m_stellar': stdev_dict_mstellar,
                                   'r_stellar': stdev_dict_rstellar,
                                   'sfr': stdev_dict_sfr, 
                                   'sfr1': stdev_dict_sfr, 
+                                  'bhmass': stdev_dict_bhmass
                                   }
 
     stdev_dict = gal_property_to_stdev_dict[gal_property]
@@ -372,6 +377,16 @@ def get_y_vals(y_label_name, sim_reader, mass_multiplier=1e10, halo_tag=None):
         log_sfr = np.log10(sfr)
         log_ssfr = log_sfr_to_log_ssfr(log_sfr, m_stellar, mass_multiplier=mass_multiplier)
         return log_ssfr
+    
+    elif y_label_name=='bhmass':
+        
+        sim_reader.add_catalog_property_to_halos('mass_hydro_subhalo_star')
+        m_stellar = np.array([halo.catalog_properties['mass_hydro_subhalo_star'] for halo in sim_reader.dark_halo_arr])
+        bhmass = y_vals
+        idx_zerobh = np.where(bhmass==0)[0]
+        bh_zero = 8e-6 #?? min in training set is 8e-5
+        bhmass[idx_zerobh] = bh_zero
+        return np.log10(bhmass)
 
     else:
         return y_vals
@@ -395,7 +410,7 @@ def get_y_uncertainties(y_label_name, sim_reader=None, y_vals=None, log_mass_shi
         uncertainties_genel2019_poisson_ssfr = uncertainty_log_sfr_to_uncertainty_log_ssfr(uncertainties_genel2019_poisson_sfr) 
         return uncertainties_genel2019_poisson_ssfr
             
-    elif y_label_name=='m_stellar' or y_label_name=='r_stellar':
+    elif y_label_name=='m_stellar' or y_label_name=='r_stellar' or y_label_name=='bhmass':
         assert sim_reader is not None, "Must pass sim_reader!"
         sim_reader.add_catalog_property_to_halos('mass_hydro_subhalo_star')
         m_stellar = np.array([halo.catalog_properties['mass_hydro_subhalo_star'] for halo in sim_reader.dark_halo_arr])

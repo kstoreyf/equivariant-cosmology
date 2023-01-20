@@ -173,7 +173,7 @@ class SimulationReader:
         if subhalo_fields_to_load is None:
             subhalo_fields_to_load = ['SubhaloLenType', 'SubhaloGrNr', 'SubhaloMassType', 'SubhaloMass',
                                       'SubhaloHalfmassRadType', 'SubhaloSFR', 'SubhaloPos', 'SubhaloFlag',
-                                      'SubhaloVelDisp']
+                                      'SubhaloVelDisp', 'SubhaloBHMass']
         #subhalo_fields_to_load_dark = ['SubhaloFlag', 'SubhaloPos']
 
         self.subhalos_hydro = il.groupcat.loadSubhalos(self.base_path_hydro,self.snap_num,
@@ -188,6 +188,7 @@ class SimulationReader:
         self.idxs_halos_dark_all = np.arange(self.halos_dark['count'])
 
         self.ipart_dm = il.snapshot.partTypeNum('dm') # 0
+        self.ipart_gas = il.snapshot.partTypeNum('gas')
         self.ipart_star = il.snapshot.partTypeNum('stars') # 4
 
 
@@ -232,7 +233,7 @@ class SimulationReader:
         return i_with_SAM_match
         
 
-    def select_halos(self, num_star_particles_min, halo_logmass_min, 
+    def select_halos(self, num_star_particles_min, num_gas_particles_min, halo_logmass_min, 
                      halo_logmass_max, halo_mass_difference_factor, subsample_frac,
                      subhalo_mode='most_massive', must_have_SAM_match=True,
                      must_have_halo_structure_info=True, seed=42):
@@ -281,6 +282,10 @@ class SimulationReader:
                 
             # if number of stars below a minimum, exclude
             if num_star_particles_min is not None and self.subhalos_hydro['SubhaloLenType'][:,self.ipart_star][idx_subhalo_hydro] < num_star_particles_min: 
+                continue
+
+            # if number of gas particles below a minimum, exclude
+            if num_gas_particles_min is not None and self.subhalos_hydro['SubhaloLenType'][:,self.ipart_gas][idx_subhalo_hydro] < num_gas_particles_min: 
                 continue
 
             # if halo is below a minimum mass, exclude
@@ -347,6 +352,11 @@ class SimulationReader:
             n_snapshots = len(avals)
             a2idx_dict = dict(zip(avals, range(n_snapshots)))
 
+        if 'band' in property_name:
+            phot_file = f'{self.tng_path_hydro}/postprocessing/stellar_photometry/Subhalo_StellarPhot_p07c_cf00dust_res_conv_ns1_rad30pkpc_{self.snap_num_str}.hdf5'
+            f_phot = h5py.File(phot_file)
+            print(f_phot.keys())
+            phot = f_phot['Subhalo_StellarPhot_p07c_cf00dust_res_conv_ns1_rad30pkpc']
 
         for halo in self.dark_halo_arr:
             # if property_name=='m200m' or         
@@ -387,6 +397,18 @@ class SimulationReader:
                 property_value = self.subhalos_hydro['SubhaloMassType'][:,self.ipart_gas][halo.idx_subhalo_hydro]
             elif property_name=='velocity_dispersion':
                 property_value = self.subhalos_hydro['SubhaloVelDisp'][halo.idx_subhalo_hydro]
+            elif property_name=='bhmass':
+                property_value = self.subhalos_hydro['SubhaloBHMass'][halo.idx_subhalo_hydro]
+            elif property_name=='gband':
+                # 2nd dim columns: sdss_u, sdss_g, sdss_r, sdss_i, sdss_z, wfc_acs_f606w, des_y, jwst_f150w
+                # 3rd dimension is viewing angles, just take first for now (0)
+                # sdss_g is index 1
+                property_value = phot[halo.idx_subhalo_hydro,1,0]
+            elif property_name=='gband_minus_iband':
+                # 2nd dim columns: sdss_u, sdss_g, sdss_r, sdss_i, sdss_z, wfc_acs_f606w, des_y, jwst_f150w
+                # 3rd dimension is viewing angles, just take first for now (0)
+                # sdss_g is index 1, sdss_i is index 3
+                property_value = phot[halo.idx_subhalo_hydro,1,0] - phot[halo.idx_subhalo_hydro,3,0]
             elif property_name.startswith('a_mfrac_n'):
                 n = int(property_name.split('_n')[-1])
                 mfrac_vals = utils.get_mfrac_vals(n)

@@ -9,9 +9,9 @@ def main():
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
 
-    #halo_config(sim_name)
+    halo_config(sim_name)
     #geo_config(sim_name)
-    scalar_config(sim_name)
+    #scalar_config(sim_name)
     #fit_config(sim_name)
 
 
@@ -23,23 +23,24 @@ def halo_config(sim_name):
     sim_name_dark = f'{sim_name}-Dark'
 
     # halo params 
-    num_star_particles_min = 50
-    halo_logmass_min = 10.8
+    num_star_particles_min = 1
+    num_gas_particles_min = 1
+    halo_logmass_min = 10
     halo_logmass_max = None
-    halo_mass_difference_factor = 3.0
+    halo_mass_difference_factor = None
     subsample_frac = None
     subhalo_mode = 'twin_subhalo'
-    if sim_name=='TNG100-1':
-        must_have_SAM_match = True
-        must_have_halo_structure_info = True
-    else:
+    must_have_SAM_match = False
+    must_have_halo_structure_info = False
+    if sim_name=='TNG50-4': # this sim doesnt have this data!
         must_have_SAM_match = False
-        must_have_halo_structure_info = False        
+        must_have_halo_structure_info = False     
+
     seed = 42
 
     # save info
     halo_dir = f'../data/halos/halos_{sim_name}'
-    halo_tag = ''
+    halo_tag = '_mssm'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
 
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
@@ -52,6 +53,7 @@ def halo_config(sim_name):
     halo_config_dict = {'halo_tag': halo_tag,
                         'fn_dark_halo_arr': fn_dark_halo_arr,
                         'num_star_particles_min': num_star_particles_min,
+                        'num_gas_particles_min': num_gas_particles_min,
                         'halo_logmass_min': halo_logmass_min, 
                         'halo_logmass_max': halo_logmass_max, 
                         'halo_mass_difference_factor': halo_mass_difference_factor,
