@@ -347,6 +347,10 @@ class SimulationReader:
         if property_name.startswith('a_mfrac') or property_name=='Mofa':
             self.add_MAH_to_halos_SAM(halo_tag)
 
+        if 'merger' in property_name:
+            self.add_merger_info_to_halos_sublink(halo_tag)
+            return
+
         if property_name=='Mofa':
             avals = utils.get_avals(self.dark_halo_arr)
             n_snapshots = len(avals)
@@ -358,9 +362,19 @@ class SimulationReader:
             print(f_phot.keys())
             phot = f_phot['Subhalo_StellarPhot_p07c_cf00dust_res_conv_ns1_rad30pkpc']
 
+        if property_name=='j_stellar':
+            fn_stellar = f'{sim_reader.tng_path_hydro}/postprocessing/circularities_aligned_allstars_L75n1820TNG099.hdf5'
+            f_stellar = h5py.File(fn_stellar)
+            j_stellar_all = np.array(f_stellar['SpecificAngMom']).flatten()
+
         for halo in self.dark_halo_arr:
             # if property_name=='m200m' or         
             #     halo.compute_mrv_200m(mean_density_header, sim_reader.m_dmpart_dark, sim_reader.mass_multiplier, center=center_halo)
+            if 'merger' in property_name:
+                print("here")
+                # already done above loop
+                continue
+                #total_merger_count, merger_mass_ratio, major_merger_count = get_major_merger_count(f, index)
             if property_name=='r200m':
                 property_value = self.halos_dark['Group_R_Mean200'][halo.idx_halo_dark]
             elif property_name=='mass_hydro_subhalo_star':
@@ -399,6 +413,12 @@ class SimulationReader:
                 property_value = self.subhalos_hydro['SubhaloVelDisp'][halo.idx_subhalo_hydro]
             elif property_name=='bhmass':
                 property_value = self.subhalos_hydro['SubhaloBHMass'][halo.idx_subhalo_hydro]
+            elif property_name=='bhmass_per_mstellar':
+                m_stellar = self.subhalos_hydro['SubhaloMassType'][:,self.ipart_star][halo.idx_subhalo_hydro]
+                bhmass = self.subhalos_hydro['SubhaloBHMass'][halo.idx_subhalo_hydro]
+                # doing this because these are both in 10^10 Msun units, but if we work in logspace 
+                # and are doing their difference (==ratio) this factor doesn't matter!
+                property_value = 10**(np.log10(bhmass) - np.log10(m_stellar)) if bhmass!=0 else 0
             elif property_name=='gband':
                 # 2nd dim columns: sdss_u, sdss_g, sdss_r, sdss_i, sdss_z, wfc_acs_f606w, des_y, jwst_f150w
                 # 3rd dimension is viewing angles, just take first for now (0)
@@ -433,6 +453,8 @@ class SimulationReader:
                     idxs_subset.append( a2idx_dict[aval_closest] )
 
                 property_value = Mofa_arr[idxs_subset]
+            elif property_name=='j_stellar':
+                property_value = j_stellar[halo.idx_subhalo_hydro]
 
             else:
                 raise ValueError(f"Property name {property_name} not recognized!")
@@ -497,9 +519,10 @@ class SimulationReader:
         return mvirs
 
 
-    def add_MAH_to_halos_SAM(self, halo_tag):
+    def add_MAH_to_halos_SAM(self, halo_tag, most_massive=True):
  
-        fn_mah = f'../data/mahs/mahs_SAM_{self.sim_name}{halo_tag}.npy'
+        mah_tag = '' if most_massive else '_allprogenitors' 
+        fn_mah = f'../data/mahs/mahs_SAM_{self.sim_name}{halo_tag}{mah_tag}.npy'
         if os.path.exists(fn_mah):
             utils.load_mah(self.dark_halo_arr, fn_mah)
             return
@@ -530,7 +553,7 @@ class SimulationReader:
             #print(halo.idx_halo_dark, root_idx)
 
             mtree = ilsam.merger.load_tree_haloprop(self.base_path_sam, root_idx, 
-                                fields=['HalopropRedshift', 'HalopropMvir'], most_massive=True,
+                                fields=['HalopropRedshift', 'HalopropMvir'], most_massive=most_massive,
                                 matches=True)
             scale_factors = 1/(1+mtree[root_idx]['HalopropRedshift'])
             halo.set_catalog_property('MAH', [scale_factors, mtree[root_idx]['HalopropMvir']])
@@ -566,6 +589,36 @@ class SimulationReader:
                 #print(mtree['SubhaloMass'])
             halo.set_catalog_property(property_name, [scale_factors, mtree['SubhaloMass']])
             count += 1
+
+
+    def add_merger_info_to_halos_sublink(self, halo_tag):
+
+        properties = ['num_mergers', 'num_major_mergers', 'ratio_last_major_merger']
+
+        fn_merger = f'../data/merger_info/merger_info_{self.sim_name}{halo_tag}.npy'
+        if os.path.exists(fn_merger):
+            utils.load_merger_info(self.dark_halo_arr, fn_merger, properties=properties)
+            return
+
+        fields = ['SubhaloID','NextProgenitorID','MainLeafProgenitorID','FirstProgenitorID','SubhaloMassType']
+        count = 0
+        ratio = 1./3.
+        for halo in self.dark_halo_arr:
+            tree = il.sublink.loadTree(self.base_path_dark, self.snap_num, halo.idx_subhalo_dark,
+                               fields=fields)
+            numMergers = il.sublink.numMergers(tree,massPartType='dm')
+            numMajorMergers = il.sublink.numMergers(tree,minMassRatio=ratio,massPartType='dm')
+            ratioLastMajorMerger = utils.last_merger_ratio(tree,minMassRatio=ratio,massPartType='dm')
+            if count % 1000 == 0:
+                print(count)
+                print(halo.idx_halo_dark, halo.idx_subhalo_dark)
+
+            halo.set_catalog_property('num_mergers', numMergers)
+            halo.set_catalog_property('num_major_mergers', numMajorMergers)
+            halo.set_catalog_property('ratio_last_major_merger', ratioLastMajorMerger)
+            count += 1
+
+        utils.save_merger_info(self.dark_halo_arr, fn_merger, properties=properties)        
 
 
     def get_mean_density_from_mr200m(self):

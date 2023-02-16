@@ -3,7 +3,12 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
 
+import sys
+sys.path.insert(1, '/home/ksf293/external')
+import illustris_python as il
+
 from geometric_features import GeometricFeature, geo_name
+
 
 
 label_dict = {'m_200m': r'log($M_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
@@ -357,7 +362,7 @@ label_to_target_name = {'r_stellar': 'radius_hydro_subhalo_star',
                         'm_stellar': 'mass_hydro_subhalo_star',
                         'ssfr1': 'sfr_hydro_subhalo_1Gyr'}
 
-def get_y_vals(y_label_name, sim_reader, mass_multiplier=1e10, halo_tag=None):
+def get_y_vals(y_label_name, sim_reader, mass_multiplier=1e10, halo_tag=''):
     if y_label_name.startswith('a_mfrac'):
         assert halo_tag is not None, "Must pass halo_tag to get a_mfrac!"
     
@@ -365,7 +370,8 @@ def get_y_vals(y_label_name, sim_reader, mass_multiplier=1e10, halo_tag=None):
     sim_reader.add_catalog_property_to_halos(y_target_name, halo_tag=halo_tag)
     y_vals = np.array([halo.catalog_properties[y_target_name] for halo in sim_reader.dark_halo_arr])
 
-    if y_label_name=='m_stellar' or y_label_name=='r_stellar':
+    if y_label_name=='m_stellar' or y_label_name=='r_stellar' \
+        or y_label_name=='num_mergers' or y_label_name=='j_stellar':
         return np.log10(y_vals)
 
     elif y_label_name=='ssfr1':
@@ -379,14 +385,19 @@ def get_y_vals(y_label_name, sim_reader, mass_multiplier=1e10, halo_tag=None):
         return log_ssfr
     
     elif y_label_name=='bhmass':
-        
-        sim_reader.add_catalog_property_to_halos('mass_hydro_subhalo_star')
-        m_stellar = np.array([halo.catalog_properties['mass_hydro_subhalo_star'] for halo in sim_reader.dark_halo_arr])
         bhmass = y_vals
         idx_zerobh = np.where(bhmass==0)[0]
         bh_zero = 8e-6 #?? min in training set is 8e-5
         bhmass[idx_zerobh] = bh_zero
+
         return np.log10(bhmass)
+
+    elif y_label_name.startswith('bhmass_per_mstellar'):
+        bhmass_per_mstellar = y_vals
+        idx_zerobhms = np.where(bhmass_per_mstellar==0)[0]
+        val_zerobhms = np.min(bhmass_per_mstellar[~idx_zerobhms])/10  
+        bhmass_per_mstellar[idx_zerobhms] = val_zerobhms
+        return np.log10(bhmass_per_mstellar)
 
     else:
         return y_vals
@@ -452,6 +463,23 @@ def load_mah(halos, fn_mah):
     for halo in halos:
         halo.set_catalog_property('MAH', mah_dict[halo.idx_halo_dark])
 
+# not very robust, should do better
+def save_merger_info(halos, fn_merger, properties=['num_mergers', 'num_major_mergers', 'ratio_last_major_merger']):
+    merger_dict = {}
+    for prop in properties:
+        vals = np.array([halo.catalog_properties[prop] for halo in halos])
+        merger_dict[prop] = vals
+    np.save(fn_merger, merger_dict)
+    
+
+def load_merger_info(halos, fn_merger, properties=['num_mergers', 'num_major_mergers', 'ratio_last_major_merger']):
+    merger_dict = np.load(fn_merger, allow_pickle=True).item()
+    for prop in properties:
+        vals = merger_dict[prop]
+        for i, halo in enumerate(halos):
+            halo.set_catalog_property(prop, vals[i])
+
+
 
 # assumes y in reverse sorted order!! 
 def y_interpolated(x, y, x_val):
@@ -508,3 +536,45 @@ def get_avals(dark_halo_arr):
         if len(a_vals)==n_snapshots:
             return a_vals
 
+
+def last_merger_ratio(tree, minMassRatio=1e-10, massPartType='dm', index=0):
+    """ Calculate the number of mergers in this sub-tree (optionally above some mass ratio threshold). """
+    # verify the input sub-tree has the required fields
+    reqFields = ['SubhaloID', 'NextProgenitorID', 'MainLeafProgenitorID',
+                 'FirstProgenitorID', 'SubhaloMassType']
+
+    if not set(reqFields).issubset(tree.keys()):
+        raise Exception('Error: Input tree needs to have loaded fields: '+', '.join(reqFields))
+
+    numMergers   = 0
+    invMassRatio = 1.0 / minMassRatio
+
+    # walk back main progenitor branch
+    rootID = tree['SubhaloID'][index]
+    fpID   = tree['FirstProgenitorID'][index]
+
+    while fpID != -1:
+        fpIndex = index + (fpID - rootID)
+        fpMass  = il.sublink.maxPastMass(tree, fpIndex, massPartType)
+
+        # explore breadth
+        npID = tree['NextProgenitorID'][fpIndex]
+        while npID != -1:
+            npIndex = index + (npID - rootID)
+            npMass  = il.sublink.maxPastMass(tree, npIndex, massPartType)
+            # count if both masses are non-zero, and ratio exceeds threshold
+            if fpMass > 0.0 and npMass > 0.0:
+                ratio = npMass / fpMass
+                if ratio >= minMassRatio and ratio <= invMassRatio:
+                    # for consistency
+                    if ratio <= 1:
+                        return ratio
+                    else:
+                        return 1/ratio
+
+            npID = tree['NextProgenitorID'][npIndex]
+
+        fpID = tree['FirstProgenitorID'][fpIndex]
+
+    # if get here, means no major mergers above mass ratio found
+    return 0

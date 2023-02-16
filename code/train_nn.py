@@ -22,9 +22,9 @@ def seed_torch(seed=1029):
 
 
 def main():
-    #y_label_names = ['m_stellar']
+    y_label_names = ['m_stellar']
     #y_label_names = ['gband']
-    y_label_names = ['bhmass']
+    #y_label_names = ['num_mergers']
     #y_label_names = ['m_stellar', 'ssfr1', 'r_stellar']
     #y_label_names = ['a_mfrac_n19']
     #y_label_names = ['a_mfrac_0.75']
@@ -55,12 +55,13 @@ def run(y_label_names, n_top_features=None):
     lr = 5e-5
     hidden_size = 128
 
-    feature_mode = 'scalars'
+    #feature_mode = 'scalars'
     #feature_mode = 'geos'
     #feature_mode = 'catalog'
+    feature_mode = 'catalog_mergers_noaform'
     #feature_mode = 'mrv'
     #feature_mode = 'mrvc'
-    assert feature_mode in ['scalars', 'geos', 'catalog', 'mrv', 'mrvc'], "Feature mode not recognized!"
+    assert feature_mode in ['scalars', 'geos', 'catalog', 'catalog_mergers', 'catalog_mergers_noaform', 'mrv', 'mrvc'], "Feature mode not recognized!"
 
     y_str = '_'.join(y_label_names)
     frac_tag, info_tag = '', ''
@@ -121,10 +122,18 @@ def run(y_label_names, n_top_features=None):
         x = np.log10(mrv_for_rescaling).T
         x_extra = None
 
-    elif feature_mode=='catalog':
+    elif 'catalog' in feature_mode:
         catalog_feature_names = ['M200c', 'c200c', 'a_form']
+        if feature_mode=='catalog_mergers_noaform':
+            catalog_feature_names = ['M200c', 'c200c']
         sim_reader.get_structure_catalog_features(catalog_feature_names)
         x = sim_reader.x_catalog_features
+        if feature_mode=='catalog_mergers':
+            properties_merger = ['num_mergers', 'num_major_mergers', 'ratio_last_major_merger']
+            for prop in properties_merger:
+                vals = utils.get_y_vals(prop, sim_reader)
+                vals = np.atleast_2d(vals).T
+                x = np.concatenate((x, vals), axis=1)
         x_extra = None
 
     elif feature_mode=='mrvc':
