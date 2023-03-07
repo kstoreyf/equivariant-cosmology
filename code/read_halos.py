@@ -363,7 +363,7 @@ class SimulationReader:
             phot = f_phot['Subhalo_StellarPhot_p07c_cf00dust_res_conv_ns1_rad30pkpc']
 
         if property_name=='j_stellar':
-            fn_stellar = f'{sim_reader.tng_path_hydro}/postprocessing/circularities_aligned_allstars_L75n1820TNG099.hdf5'
+            fn_stellar = f'{self.tng_path_hydro}/postprocessing/circularities_aligned_allstars_L75n1820TNG099.hdf5'
             f_stellar = h5py.File(fn_stellar)
             j_stellar_all = np.array(f_stellar['SpecificAngMom']).flatten()
 
@@ -454,7 +454,7 @@ class SimulationReader:
 
                 property_value = Mofa_arr[idxs_subset]
             elif property_name=='j_stellar':
-                property_value = j_stellar[halo.idx_subhalo_hydro]
+                property_value = j_stellar_all[halo.idx_subhalo_hydro]
 
             else:
                 raise ValueError(f"Property name {property_name} not recognized!")
@@ -595,7 +595,7 @@ class SimulationReader:
 
         properties = ['num_mergers', 'num_major_mergers', 'ratio_last_major_merger']
 
-        fn_merger = f'../data/merger_info/merger_info_{self.sim_name}{halo_tag}.npy'
+        fn_merger = f'../data/merger_info/merger_info_{self.sim_name}{halo_tag}_mpb.npy'
         if os.path.exists(fn_merger):
             utils.load_merger_info(self.dark_halo_arr, fn_merger, properties=properties)
             return
@@ -607,8 +607,9 @@ class SimulationReader:
             tree = il.sublink.loadTree(self.base_path_dark, self.snap_num, halo.idx_subhalo_dark,
                                fields=fields)
             numMergers = il.sublink.numMergers(tree,massPartType='dm')
-            numMajorMergers = il.sublink.numMergers(tree,minMassRatio=ratio,massPartType='dm')
-            ratioLastMajorMerger = utils.last_merger_ratio(tree,minMassRatio=ratio,massPartType='dm')
+            #numMajorMergers = il.sublink.numMergers(tree,minMassRatio=ratio,massPartType='dm')
+            numMajorMergers = utils.num_mergers_mpb(tree,minMassRatio=ratio,massPartType='dm')
+            ratioLastMajorMerger = utils.last_merger_ratio_mpb(tree,minMassRatio=ratio,massPartType='dm')
             if count % 1000 == 0:
                 print(count)
                 print(halo.idx_halo_dark, halo.idx_subhalo_dark)

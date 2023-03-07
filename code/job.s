@@ -5,8 +5,10 @@
 ##SBATCH --job-name=scalar_featurizer_tng100_x4_v4_n5
 ##SBATCH --job-name=feature_importance_tng100_nstarmin10_mstellar
 ##SBATCH --job-name=train_nn_m_stellar_spearman_ns
-#SBATCH --job-name=train_nn_m_stellar_catalog_mergers_noaform
-##SBATCH --job-name=compute_merger_info
+##SBATCH --job-name=train_nn_m_stellar_catalog_mergers_noaform
+#SBATCH --job-name=train_nn_a_mfrac_39_catalog_noaform
+##SBATCH --job-name=train_nn_j_stellar
+##SBATCH --job-name=compute_merger_info_mpb
 ##SBATCH --job-name=train_nn_Mofa_epochs1000_lr1e-3_hs128_scalars
 ##SBATCH --job-name=train_nn_a_mfrac_39_epochs2000_lr5e-5_hs128_scalars_gx1_gv1_n5
 ##SBATCH --job-name=feature_info_MI

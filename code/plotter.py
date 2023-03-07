@@ -291,6 +291,46 @@ def plot_pred_vs_property(x_label_name, y_label_name, x_property, y_true, y_pred
         plt.savefig(save_fn, bbox_inches='tight')
 
 
+def plot_pred_vs_property_hist(x_label_name, y_label_name, x_property, y,
+                      text_results='', title=None, save_fn=None, overplot_function=None,
+                      x_scale='linear', y_scale='linear',
+                      x_lim=(10.5, 14), y_lim=(7, 12), colors_test=None,
+                      colorbar_label='', mass_multiplier=1e10):
+    fig = plt.figure(figsize=(8,6))
+    ax = plt.gca()
+
+    # main hist plotting
+    bins_x = np.linspace(x_lim[0], x_lim[1], 100)
+    bins_y = np.linspace(y_lim[0], y_lim[1], 100)
+    inferno_r = matplotlib.cm.inferno_r
+    inferno_shifted = utils.shiftedColorMap(inferno_r, start=0.1, stop=1.0)
+
+    plt.hist2d(x_property, y, bins=[bins_x, bins_y], cmap=inferno_shifted, cmin=1)
+    cbar = plt.colorbar(label='number of test objects')
+    #cbar.ax.set_yticklabels(ticks)
+
+    # labels & adjustments
+    x_label = utils.label_dict[x_label_name]
+    y_label = utils.label_dict[y_label_name] if y_label_name in utils.label_dict else y_label_name
+
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.xscale(x_scale)
+    plt.yscale(y_scale)
+
+    plt.xlim(x_lim)
+    plt.ylim(y_lim)
+
+    plt.text(0.5, 0.3, text_results, 
+             transform=ax.transAxes, verticalalignment='top', fontsize=12)
+    plt.title(title)
+    plt.legend(loc='upper left', fontsize=12)
+    
+    # save
+    if save_fn is not None:
+        plt.savefig(save_fn, bbox_inches='tight')
+
+
 def plot_fits(x_label_name, y_label_name, fitter, log_m_halo, test_error_type='percentile', 
               regularization_lambda=0.0, colors_test=None, colorbar_label='',
               log_mass_shift=10, x_lim=(10.5, 14), y_lim=(7,12),

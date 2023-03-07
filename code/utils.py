@@ -22,13 +22,24 @@ label_dict = {'m_200m': r'log($M_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
               'a_form': r'$a_\mathrm{form}$',
               'c_200c': r'$log(c_\mathrm{200c})$',
               'M_acc': r'$M_\mathrm{acc,dyn}$',
-              'm_vir': r'$M_\mathrm{vir}$'
+              'm_vir': r'$M_\mathrm{vir} [h^{-1} \, M_\odot]$',
+              'gband': r'$g$-band magnitude',
+              'gband_minus_iband': 'r$g-i$ color',
+              'j_stellar': r'log($j_*$ [km/s kpc]), stellar specific' '\n' 'angular momentum',
+              'bhmass': r'log($M_\dot [h^{-1} \, M_\odot]$), black hole mass',
+              'bhmass_per_mstellar': r'log($M_\dot/m_*$), black hole mass' '\n' ' per stellar mass'
               }
 
 lim_dict = {'m_200m': (10.5, 14),
             'm_stellar': (7, 12),
             'ssfr1': (-15,-8),
-            'r_stellar': (-1,2)}
+            'r_stellar': (-1,2),
+            'gband': (-24, -13),
+            'gband_minus_iband': (0.0, 1.5),
+            'j_stellar': (0.5, 4.5),
+            'bhmass': (4.5, 10.5),
+            'bhmass_per_mstellar': (-4.5, -1)
+            }
 
 sfr_zero = 1e-3
 
@@ -578,3 +589,86 @@ def last_merger_ratio(tree, minMassRatio=1e-10, massPartType='dm', index=0):
 
     # if get here, means no major mergers above mass ratio found
     return 0
+
+
+def last_merger_ratio_mpb(tree, minMassRatio=1e-10, massPartType='dm', index=0):
+    """ Calculate the number of mergers in this sub-tree (optionally above some mass ratio threshold). """
+    # verify the input sub-tree has the required fields
+    reqFields = ['SubhaloID', 'NextProgenitorID', 'MainLeafProgenitorID',
+                 'FirstProgenitorID', 'SubhaloMassType']
+
+    if not set(reqFields).issubset(tree.keys()):
+        raise Exception('Error: Input tree needs to have loaded fields: '+', '.join(reqFields))
+
+    numMergers   = 0
+    invMassRatio = 1.0 / minMassRatio
+
+    # walk back main progenitor branch
+    rootID = tree['SubhaloID'][index]
+    fpID   = tree['FirstProgenitorID'][index]
+    count = 0
+    while fpID != -1:
+        fpIndex = index + (fpID - rootID)
+        fpMass  = il.sublink.maxPastMass(tree, fpIndex, massPartType)
+        # explore breadth
+        npID = tree['NextProgenitorID'][fpIndex]
+
+        if npID != -1:
+            npIndex = index + (npID - rootID)
+            npMass  = il.sublink.maxPastMass(tree, npIndex, massPartType)
+
+            # count if both masses are non-zero, and ratio exceeds threshold
+            if fpMass > 0.0 and npMass > 0.0:
+                ratio = npMass / fpMass
+                if ratio >= minMassRatio and ratio <= invMassRatio:
+                    #print(ratio)
+                    if ratio <= 1:
+                        return ratio
+                    else:
+                        return 1/ratio
+
+        fpID = tree['FirstProgenitorID'][fpIndex]
+        count += 1
+    # if get here, means no major mergers above mass ratio found
+    return -1
+
+def num_mergers_mpb(tree, minMassRatio=1e-10, massPartType='dm', index=0):
+    """ Calculate the number of mergers in this sub-tree (optionally above some mass ratio threshold). """
+    # verify the input sub-tree has the required fields
+    reqFields = ['SubhaloID', 'NextProgenitorID', 'MainLeafProgenitorID',
+                 'FirstProgenitorID', 'SubhaloMassType']
+
+    if not set(reqFields).issubset(tree.keys()):
+        raise Exception('Error: Input tree needs to have loaded fields: '+', '.join(reqFields))
+
+    numMergers   = 0
+    invMassRatio = 1.0 / minMassRatio
+    count = 0
+    
+    # walk back main progenitor branch
+    rootID = tree['SubhaloID'][index]
+    fpID   = tree['FirstProgenitorID'][index]
+    print('main leaf:', tree['MainLeafProgenitorID'][index])
+    
+    while fpID != -1:
+        fpIndex = index + (fpID - rootID)
+        fpMass  = il.sublink.maxPastMass(tree, fpIndex, massPartType)
+        print("count", count, "fpMass:", fpMass, fpID)
+
+        count += 1
+        # explore breadth
+        npID = tree['NextProgenitorID'][fpIndex]
+
+        if npID != -1:
+            npIndex = index + (npID - rootID)
+            npMass  = il.sublink.maxPastMass(tree, npIndex, massPartType)
+
+            # count if both masses are non-zero, and ratio exceeds threshold
+            if fpMass > 0.0 and npMass > 0.0:
+                ratio = npMass / fpMass
+                if ratio >= minMassRatio and ratio <= invMassRatio:
+                    numMergers += 1
+
+        fpID = tree['FirstProgenitorID'][fpIndex]
+
+    return numMergers

@@ -22,13 +22,14 @@ def seed_torch(seed=1029):
 
 
 def main():
-    y_label_names = ['m_stellar']
+    #y_label_names = ['m_stellar']
+    #y_label_names = ['j_stellar']
     #y_label_names = ['gband']
     #y_label_names = ['num_mergers']
     #y_label_names = ['m_stellar', 'ssfr1', 'r_stellar']
     #y_label_names = ['a_mfrac_n19']
     #y_label_names = ['a_mfrac_0.75']
-    #y_label_names = ['a_mfrac_n39']
+    y_label_names = ['a_mfrac_n39']
     #y_label_names = ['Mofa']
     run(y_label_names)
     # ns_top_features = [1, 5, 10, 50, 100, 567]
@@ -58,10 +59,11 @@ def run(y_label_names, n_top_features=None):
     #feature_mode = 'scalars'
     #feature_mode = 'geos'
     #feature_mode = 'catalog'
-    feature_mode = 'catalog_mergers_noaform'
+    feature_mode = 'catalog_noaform'
+    #feature_mode = 'catalog_mergers_noaform'
     #feature_mode = 'mrv'
     #feature_mode = 'mrvc'
-    assert feature_mode in ['scalars', 'geos', 'catalog', 'catalog_mergers', 'catalog_mergers_noaform', 'mrv', 'mrvc'], "Feature mode not recognized!"
+    assert feature_mode in ['scalars', 'geos', 'catalog', 'catalog_noaform', 'catalog_mergers', 'catalog_mergers_noaform', 'mrv', 'mrvc'], "Feature mode not recognized!"
 
     y_str = '_'.join(y_label_names)
     frac_tag, info_tag = '', ''
@@ -124,7 +126,7 @@ def run(y_label_names, n_top_features=None):
 
     elif 'catalog' in feature_mode:
         catalog_feature_names = ['M200c', 'c200c', 'a_form']
-        if feature_mode=='catalog_mergers_noaform':
+        if feature_mode=='catalog_noaform' or feature_mode=='catalog_mergers_noaform':
             catalog_feature_names = ['M200c', 'c200c']
         sim_reader.get_structure_catalog_features(catalog_feature_names)
         x = sim_reader.x_catalog_features
@@ -206,7 +208,7 @@ def run(y_label_names, n_top_features=None):
     y_train = y[idx_train]
     y_uncertainties_train = y_uncertainties[idx_train]
     y_current_train = None
-    if feature_mode=='catalog' or feature_mode=='mrv':
+    if 'catalog' in feature_mode or feature_mode=='mrv':
         x_extra_train = None
     else:
         x_extra_train = x_extra[idx_train]
@@ -216,7 +218,7 @@ def run(y_label_names, n_top_features=None):
     y_valid = y[idx_valid]
     y_uncertainties_valid = y_uncertainties[idx_valid]
     y_current_valid = None
-    if feature_mode=='catalog' or feature_mode=='mrv':
+    if 'catalog' in feature_mode or feature_mode=='mrv':
         x_extra_valid = None
     else:
         x_extra_valid = x_extra[idx_valid]
