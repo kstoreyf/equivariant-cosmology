@@ -210,7 +210,7 @@ def plot_pred_vs_true(y_label_name, y_true, y_pred, y_train, y_train_pred,
 
 def plot_pred_vs_true_hist2(y_label_name, y_true, y_pred, y_train, y_train_pred, 
                       text_results='', title=None, save_fn=None,
-                      x_lim=(7,12), y_lim=(7,12), colors_test=None,
+                      x_lim=None, y_lim=None, colors_test=None,
                       colorbar_label=''):
     fig = plt.figure(figsize=(6,6))
     ax = plt.gca()
@@ -291,44 +291,40 @@ def plot_pred_vs_property(x_label_name, y_label_name, x_property, y_true, y_pred
         plt.savefig(save_fn, bbox_inches='tight')
 
 
-def plot_pred_vs_property_hist(x_label_name, y_label_name, x_property, y,
-                      text_results='', title=None, save_fn=None, overplot_function=None,
-                      x_scale='linear', y_scale='linear',
-                      x_lim=(10.5, 14), y_lim=(7, 12), colors_test=None,
-                      colorbar_label='', mass_multiplier=1e10):
-    fig = plt.figure(figsize=(8,6))
-    ax = plt.gca()
+def plot_pred_vs_property_hist(ax, x_label_name, y_label_name, x_property, y_pred,
+                               cmap, text_results='', x_lim=None, y_lim=None,
+                               weight=1, weight_by_dex=False,
+                               label_append=', predicted'):
 
-    # main hist plotting
-    bins_x = np.linspace(x_lim[0], x_lim[1], 100)
-    bins_y = np.linspace(y_lim[0], y_lim[1], 100)
-    inferno_r = matplotlib.cm.inferno_r
-    inferno_shifted = utils.shiftedColorMap(inferno_r, start=0.1, stop=1.0)
+    y_label = utils.label_dict[y_label_name]
+    
+    if x_lim is None:
+        x_lim = utils.lim_dict[x_label_name]
+    if y_lim is None:
+        y_lim = utils.lim_dict[y_label_name]
+    
+    bin_width = (y_lim[1]-y_lim[0])/100
+    bins_x = np.arange(x_lim[0], x_lim[1]+bin_width, bin_width)
+    bins_y = np.arange(y_lim[0], y_lim[1]+bin_width, bin_width)
 
-    plt.hist2d(x_property, y, bins=[bins_x, bins_y], cmap=inferno_shifted, cmin=1)
-    cbar = plt.colorbar(label='number of test objects')
-    #cbar.ax.set_yticklabels(ticks)
+    if weight_by_dex:
+        weight /= bin_width 
+    weights = np.full(y_pred.shape, weight)
+    ax.hist2d(x_property, y_pred, bins=[bins_x, bins_y], cmap=cmap, cmin=weight, weights=weights)
 
     # labels & adjustments
     x_label = utils.label_dict[x_label_name]
-    y_label = utils.label_dict[y_label_name] if y_label_name in utils.label_dict else y_label_name
-
-    plt.xlabel(x_label)
-    plt.ylabel(y_label)
-    plt.xscale(x_scale)
-    plt.yscale(y_scale)
-
-    plt.xlim(x_lim)
-    plt.ylim(y_lim)
-
-    plt.text(0.5, 0.3, text_results, 
-             transform=ax.transAxes, verticalalignment='top', fontsize=12)
-    plt.title(title)
-    plt.legend(loc='upper left', fontsize=12)
+    y_label = utils.label_dict[y_label_name]
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label + label_append)
     
-    # save
-    if save_fn is not None:
-        plt.savefig(save_fn, bbox_inches='tight')
+    if x_lim is not None:
+        ax.set_xlim(x_lim)
+    if y_lim is not None:
+        ax.set_ylim(y_lim)
+
+    ax.text(0.1, 0.9, text_results, 
+             transform=ax.transAxes, verticalalignment='top', fontsize=22)
 
 
 def plot_fits(x_label_name, y_label_name, fitter, log_m_halo, test_error_type='percentile', 
@@ -408,37 +404,44 @@ def plot_fits(x_label_name, y_label_name, fitter, log_m_halo, test_error_type='p
                               x_lim=x_lim, y_lim=y_lim)
 
 
-def plot_pred_vs_true_hist(y_label_name, y_true, y_pred,
-                      text_results='',
-                      x_lim=(7,12), y_lim=(7,12)):
-    fig = plt.figure(figsize=(8,8))
-    ax = plt.gca()
-
-    y_label = utils.label_dict[y_label_name] if y_label_name in utils.label_dict else y_label_name
-
-    #ticks = np.arange(5, 25, 5)
-    bins = np.linspace(y_lim[0], y_lim[1], 100)
-
-    inferno_r = matplotlib.cm.inferno_r
-    inferno_shifted = utils.shiftedColorMap(inferno_r, start=0.1, stop=1.0)
-    plt.hist2d(y_true, y_pred, bins=bins, cmap=inferno_shifted, cmin=1)
-    cbar = plt.colorbar(label='number of test objects')
-    #cbar.ax.set_yticklabels(ticks)
+def plot_pred_vs_true_hist(ax, y_label_name, y_true, y_pred, cmap,
+                      text_results='', title=None, save_fn=None,
+                      colorbar_fig=None, weight=1, weight_by_dex=False,
+                      colorbar_label='', x_lim=None, y_lim=None):
     
-    true_line = np.linspace(*x_lim)
-    plt.plot(true_line, true_line, color='grey', zorder=0)
+    if y_lim is None:
+        y_lim = utils.lim_dict[y_label_name]
+    bin_width = (y_lim[1]-y_lim[0])/100
+    bins = np.arange(y_lim[0], y_lim[1]+bin_width, bin_width)
+
+    if weight_by_dex:
+        weight /= bin_width 
+    weights = np.full(y_true.shape, weight)
+    h = ax.hist2d(y_true, y_pred, bins=bins, cmap=cmap, cmin=weight, weights=weights)
+        
+    # true line
+    true_line = np.linspace(*y_lim)
+    ax.plot(true_line, true_line, color='grey', zorder=0)
 
     # labels & adjustments
-    plt.xlabel(y_label + ', true')
-    plt.ylabel(y_label + ', predicted')
-
+    ax.set_title(title)
+    y_label = utils.label_dict[y_label_name] if y_label_name in utils.label_dict else y_label_name
+    ax.set_xlabel(y_label + ', true')
+    ax.set_ylabel(y_label + ', predicted')
     ax.set_aspect('equal')
     
-    plt.xlim(x_lim)
-    plt.ylim(y_lim)
-
-    plt.text(0.1, 0.9, text_results, 
+    if x_lim is not None:
+        ax.set_xlim(x_lim)
+    if y_lim is not None:
+        ax.set_ylim(y_lim)
+        
+    ax.text(0.1, 0.9, text_results, 
              transform=ax.transAxes, verticalalignment='top', fontsize=22)
+    
+    if colorbar_fig is not None:
+        cbar = colorbar_fig.colorbar(h[3], ax=ax, label=colorbar_label)#, ticks=ticks)
+
+    return h
 
 
 def plot_halo_dark_geometric(base_path_dark, snap_num, m_dmpart, halo, bin_edges_frac):
@@ -505,3 +508,374 @@ def plot_halo_dark_geometric(base_path_dark, snap_num, m_dmpart, halo, bin_edges
     
     ax.set_aspect('equal')
     plt.axis('off')
+
+
+def plot_residual_vs_property_hist(ax, x_label_name, y_label_name, x_property, y_true, y_pred,
+                               cmap, text_results='', x_lim=None, y_lim=None):
+
+    x_lim = utils.lim_dict[x_label_name]    
+    bins_x = np.linspace(x_lim[0], x_lim[1], 100)
+    bins_y = np.linspace(-1, 1, 100)
+
+    # plot data
+    ax.hist2d(x_property, y_pred-y_true, bins=[bins_x, bins_y], 
+              cmap=cmap, cmin=1)
+    
+    # labels & adjustments
+    x_label = utils.label_dict[x_label_name]
+    y_label = utils.label_dict[y_label_name]
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(r'$\Delta$ ' + y_label)
+    
+    if x_lim is not None:
+        ax.set_xlim(x_lim)
+    if y_lim is not None:
+        ax.set_ylim(y_lim)
+        
+    ax.axhline(0, color='grey')
+    ax.text(0.1, 0.9, text_results, 
+             transform=ax.transAxes, verticalalignment='top', fontsize=22)
+
+
+def plot_multi_panel_pred(x_label_name, y_label_name, x_property, y_true, y_pred,
+                      text_results='', title=None, save_fn=None,
+                      colors_test=None,
+                      colorbar_label=''):
+    fig, axarr = plt.subplots(nrows=2, ncols=2, figsize=(12,12),
+                              gridspec_kw={'height_ratios': [1, 1], 'width_ratios': [10, 9]},
+                              )
+    plt.subplots_adjust(hspace=0.2, wspace=0.33)
+    
+    inferno_r = matplotlib.cm.inferno_r
+    cmap = utils.shiftedColorMap(inferno_r, start=0.1, stop=1.0)
+    
+    plot_pred_vs_property_hist(axarr[0,0], x_label_name, y_label_name, x_property, y_pred, cmap)
+    
+    h = plot_pred_vs_true_hist(axarr[0,1], y_label_name, y_true, y_pred, cmap, text_results=text_results)
+    
+    plot_residual_vs_property_hist(axarr[1,0], x_label_name, y_label_name, x_property, y_true, y_pred, cmap)
+
+    plot_residual_vs_property_hist(axarr[1,1], y_label_name, y_label_name, y_true, y_true, y_pred, cmap)
+    
+    ticks = np.arange(5, 25, 5)
+    cax = fig.add_axes([0.93, 0.33, 0.02, 0.33])
+    cbar = plt.colorbar(h[3], cax=cax, label='number of test objects per bin', ticks=ticks)
+    cbar.ax.set_yticklabels(ticks)
+
+
+def plot_multi_panel_gal_props(x_label_name, y_label_name_arr, x_property, y_true_arr, y_pred_arr,
+                      text_results_arr=[], title=None, save_fn=None,
+                      colorbar_label=''):
+    
+    nprops = len(y_label_name_arr)
+    fig, axarr = plt.subplots(nrows=nprops, ncols=2, figsize=(12, nprops*5),
+                              gridspec_kw={'width_ratios': [1, 1.1]})
+    plt.subplots_adjust(hspace=0.2, wspace=0.3)
+    
+    inferno_r = matplotlib.cm.inferno_r
+    cmap = utils.shiftedColorMap(inferno_r, start=0.1, stop=1.0)
+    
+    for i in range(nprops):
+        plot_pred_vs_property_hist(axarr[i,0], x_label_name, y_label_name_arr[i], x_property, y_pred_arr[i], 
+                                   cmap)
+
+        h = plot_pred_vs_true_hist(axarr[i,1], y_label_name_arr[i], y_true_arr[i], y_pred_arr[i], cmap, 
+                                   text_results=text_results_arr[i], colorbar_fig=fig)
+
+
+def plot_a_mfrac_accuracy(a_pred, a_true, mfracs, title='', n_show=8):
+    
+    locs_norm = matplotlib.colors.Normalize(vmin=0, vmax=n_show)
+    cmap = matplotlib.cm.get_cmap('turbo')
+    colors = [cmap(locs_norm(i)) for i in range(n_show)]
+
+    fig, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [2, 1, 1]},
+                                  figsize=(6,8))
+    plt.subplots_adjust(hspace=0.03)
+    fig.suptitle(title, fontsize=16)
+
+    #errs = (a_pred - a_true)/a_true
+    errs = a_pred - a_true
+
+    np.random.seed(14)
+    rand_idxs_show = np.random.randint(len(a_true), size=n_show)
+    for i, i_rand in enumerate(rand_idxs_show):
+        #halo = sim_reader.dark_halo_arr[i_rand]
+        #a_mah, m_mah = halo.catalog_properties['MAH']
+        #plt.plot(a_mah, m_mah/m_mah[0], marker='o', markersize=3, ls='None')
+
+        label_true, label_pred = None, None
+        if i==0:
+            label_true = 'true value'
+            label_pred = 'predicted value'
+
+        ax0.plot(mfracs, a_true[i_rand], marker='o', markersize=4, ls='None', color=colors[i], label=label_true)
+        ax0.plot(mfracs, a_pred[i_rand], color=colors[i], label=label_pred)
+
+        ax1.plot(mfracs, errs[i_rand], color=colors[i])
+
+    p16 = np.percentile(errs, 16, axis=0)
+    p84 = np.percentile(errs, 84, axis=0)
+    sig68_avg = 0.5*(p84-p16)
+    ax2.plot(mfracs, p16, color='k', lw=2, label='prediction error')
+    ax2.plot(mfracs, p84, color='k', lw=2)
+    ax2.axhline(0.0, color='grey', lw=1)
+
+    # print errors
+    mfracs_to_print_err = [0.25, 0.5, 0.75]
+    errs_to_print = []
+    for mfrac in mfracs_to_print_err:
+        _, idx_mfrac = utils.find_nearest(mfracs, mfrac)
+        errs_to_print.append(rf"$\sigma_{{68}}(M/M_{{a=1}}={mfrac:.2f}) = {sig68_avg[idx_mfrac]:.3f}$")
+    
+    ax0.text(0.4, 0.1, '\n'.join(errs_to_print), fontsize=14)
+
+    # TODO: this should be based on training set, not test, i think!
+    a_true_mean = np.mean(a_true, axis=0)
+    #sample_var = (y_test - y_test_mean)/y_test_mean
+    sample_var = (a_true - a_true_mean)
+    sample_p16 = np.percentile(sample_var, 16, axis=0)
+    sample_p84 = np.percentile(sample_var, 84, axis=0)
+    ax2.fill_between(mfracs, sample_p16, sample_p84, color='blue', lw=2, alpha=0.3, label='sample variance')
+
+    ax0.set_ylabel(r'$a$, scale factor')
+    #ax1.set_ylabel(r'$(a_\mathrm{pred}-a_\mathrm{true})/a_\mathrm{true}$')
+    ax1.set_ylabel(r'$a_\mathrm{pred}-a_\mathrm{true}$')
+    ax2.set_ylabel(r'$\sigma_{68}$')
+
+    ax2.set_xlabel(r'$M_\mathrm{vir}(a)$/$M_\mathrm{vir}(a=1)$ of most massive progenitor halo')
+
+    ax0.set_ylim(0,1)
+    ax1.axhline(0.0, color='grey', lw=1)
+    ax2.set_ylim(-0.2, 0.2)
+    
+    ax0.legend(fontsize=12, loc='upper left')
+    ax2.legend(fontsize=12, loc='lower left')
+
+
+def plot_errors_vs_mfracs(ax, a_pred_arr, a_true, mfracs, a_pred_labels, colors, 
+                          lws=None, title='', legend_loc='best'):
+
+    if lws is None:
+        lws = [2]*len(y_pred_arr)
+
+    for i_y in range(len(a_pred_arr)):
+        a_pred = a_pred_arr[i_y]
+        errs = a_pred - a_true
+
+        p16 = np.percentile(errs, 16, axis=0)
+        p84 = np.percentile(errs, 84, axis=0)
+        sig68_avg = 0.5*(p84-p16)
+        ax.plot(mfracs, p16, color=colors[i_y], lw=lws[i_y], label=a_pred_labels[i_y])
+        ax.plot(mfracs, p84, color=colors[i_y], lw=lws[i_y])
+        
+    ax.axhline(0.0, color='grey', lw=1)
+
+    
+    # TODO: this should be based on training set, not test, i think!
+    a_true_mean = np.mean(a_true, axis=0)
+    #sample_var = (y_test - y_test_mean)/y_test_mean
+    sample_var = (a_true - a_true_mean)
+    sample_p16 = np.percentile(sample_var, 16, axis=0)
+    sample_p84 = np.percentile(sample_var, 84, axis=0)
+    ax.fill_between(mfracs, sample_p16, sample_p84, color='blue', lw=0, alpha=0.15, label='sample variance')
+
+    ax.set_ylabel(r'$\sigma_{68}$')
+    ax.set_xlabel(r'$M_\mathrm{vir}(a)$/$M_\mathrm{vir}(a=1)$ of most massive progenitor halo')
+
+    ax.set_xlim(0, 1)
+    ax.set_ylim(-0.17, 0.17)
+    
+    ax.legend(fontsize=12, loc=legend_loc)
+
+
+def plot_errors_vs_a(ax, a_pred_arr, a_true, a_pred_labels, colors, 
+                          lws=None, title='', legend_loc='best',
+                          convert_to_Gyr=False):
+
+    print("FOR TESTING")
+    a_true = a_true[::5]
+    a_pred_arr = a_pred_arr[:,::5]
+
+    a_min, a_max = 0, 1
+
+    if convert_to_Gyr: 
+        from astropy.cosmology import Planck18, z_at_value
+        cosmo = Planck18
+        def a_to_Gyr(a):
+            assert not np.any(a==0), "Can't handle zeros rn"
+            z = 1/a - 1
+            return cosmo.age(z).value # returns in Gyr
+        a_max = a_to_Gyr(a_max)
+        print("conv true")
+        a_true = a_to_Gyr(a_true)
+        print("conv pred")
+        a_pred_arr = a_to_Gyr(a_pred_arr)
+        print("done!")
+        # print(np.sum(np.isfinite(a_true.flatten()))/len(a_true.flatten()))
+        # print(np.sum(np.isfinite(a_pred_arr.flatten()))/len(a_pred_arr.flatten()))
+
+    if lws is None:
+        lws = [2]*len(y_pred_arr)
+
+    a_bins = np.linspace(a_min, a_max, 12)
+    a_bins_avg = 0.5*(a_bins[:-1] + a_bins[1:])
+    # if convert_to_Gyr:
+    #    a_bins_avg = a_to_Gyr(a_bins_avg)
+
+    a_true_flat = a_true.flatten()
+    for i_y in range(len(a_pred_arr)):
+
+        a_pred_flat = a_pred_arr[i_y].flatten()
+
+        p16_arr, p84_arr = [], []
+        sample_p16_arr, sample_p84_arr = [], []
+        for i in range(len(a_bins)-1):
+            i_inbin = (a_true_flat >= a_bins[i]) & (a_true_flat < a_bins[i+1])
+            a_true_inbin = a_true_flat[i_inbin]
+            a_pred_inbin = a_pred_flat[i_inbin]
+            errs = a_pred_inbin - a_true_inbin
+            p16_arr.append( np.percentile(errs, 16) )
+            p84_arr.append( np.percentile(errs, 84) )
+            
+            # TODO: can't figure out right way to do sample variance here
+            # sample variance
+            # should be based on training set, not test ?
+            # a_true_mean = np.mean(a_true_inbin, axis=0)
+            # sample_var = (a_true_inbin - a_true_mean)
+            # sample_p16_arr.append( np.percentile(sample_var, 16) )
+            # sample_p84_arr.append( np.percentile(sample_var, 84) )
+        # if convert_to_Gyr:
+        #     signs_p16 = np.sign(p16_arr)
+        #     signs_p84 = np.sign(p84_arr)
+            
+        #     p16_arr = signs_p16*a_to_Gyr(np.abs(p16_arr))
+        #     p84_arr = signs_p84*a_to_Gyr(np.abs(p84_arr))
+
+        ax.plot(a_bins_avg, p16_arr, color=colors[i_y], lw=lws[i_y], label=a_pred_labels[i_y])
+        ax.plot(a_bins_avg, p84_arr, color=colors[i_y], lw=lws[i_y])
+        
+    # ax.fill_between(a_bins_avg, sample_p16_arr, sample_p84_arr, color='blue', lw=0, alpha=0.15, 
+    #                 label='sample variance')
+    
+    ax.axhline(0.0, color='grey', lw=1)
+
+    if convert_to_Gyr:
+        ax.set_ylim(-5, 5)        
+        ax.set_xlabel(r'age of universe [Gyr]')
+        ax.set_ylabel(r'$\sigma_{68}$, age of universe [Gyr]')
+        #a_max = a_to_Gyr(a_max)
+    else:
+        ax.set_ylim(-0.3, 0.3)
+        ax.set_xlabel(r'$a$, scale factor')
+        ax.set_ylabel(r'$\sigma_{68}, a$')
+    ax.set_xlim(a_min, a_max)
+
+    ax.legend(fontsize=12, loc=legend_loc)
+
+
+def plot_errors_vs_property(ax, x_label_name, y_label_name, x_property, y_true, y_pred_arr,
+                               y_pred_labels, colors, lws=None, x_lim=None, y_lim=None, show_legend=True,
+                               test_error_type='percentile'):
+
+    if lws is None:
+        lws = [2]*len(y_pred_arr)
+    
+    if x_lim is None:
+        x_lim = utils.lim_dict[x_label_name]    
+    if y_lim is None:
+        y_lim = utils.lim_dict[x_label_name]
+    bins_x = np.linspace(x_lim[0], x_lim[1], 12)
+    bins_x_mean = 0.5*(bins_x[:-1] + bins_x[1:])
+
+    for i_y in range(len(y_pred_arr)):
+        y_pred = y_pred_arr[i_y]
+        errors = []
+        for bb in range(len(bins_x)-1):
+            i_inbin = (x_property >= bins_x[bb]) & (x_property < bins_x[bb+1])
+            error_inbin, _ = utils.compute_error(y_true[i_inbin], y_pred[i_inbin], test_error_type=test_error_type)
+            errors.append(error_inbin)
+        ax.plot(bins_x_mean, errors, label=y_pred_labels[i_y], color=colors[i_y], lw=lws[i_y])
+    
+    # labels & adjustments
+    x_label = utils.get_label(x_label_name)
+    y_label = utils.get_label(y_label_name)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(fr'$\sigma_{{68}}$, {y_label}')
+    if show_legend:
+        ax.legend(loc='best')
+    
+    if x_lim is not None:
+        ax.set_xlim(x_lim)
+        
+    ax.axhline(0, color='grey')
+
+
+def plot_multi_panel_gal_props(x_label_name, y_label_name_arr, x_property, y_true_arr, y_pred_arr,
+                      text_results_arr=[], title=None, save_fn=None,
+                      colorbar_label=''):
+    
+    nprops = len(y_label_name_arr)
+    fig, axarr = plt.subplots(nrows=nprops, ncols=2, figsize=(12, nprops*5),
+                              gridspec_kw={'width_ratios': [1, 1]})
+    plt.subplots_adjust(hspace=0.3, wspace=0.3)
+    
+    inferno_r = matplotlib.cm.inferno_r
+    cmap = utils.shiftedColorMap(inferno_r, start=0.1, stop=1.0)
+    
+    for i in range(nprops):
+        #plot_pred_vs_property_hist(axarr[i,0], x_label_name, y_label_name_arr[i], x_property, y_pred_arr[i], 
+        #                           cmap)
+        h = plot_pred_vs_true_hist(axarr[i,0], y_label_name_arr[i], y_true_arr[i], y_pred_arr[i], cmap, 
+                                   text_results=text_results_arr[i], colorbar_fig=fig)
+
+        plot_errors_vs_property(axarr[i,1], x_label_name, y_label_name_arr[i], 
+                                x_property, 
+                                y_true_arr[i], [y_pred_arr[i]],
+                                ['scalars'], ['black'])
+
+
+def plot_multi_panel_gal_props_errors(x_label_name, y_label_name_arr, x_property, 
+                      y_true_arr, y_pred_arr, feature_labels, feature_colors,
+                      j_fiducial=0,
+                      weight=1, weight_by_dex=False,
+                      text_results_arr=[], title=None, save_fn=None,
+                      colorbar_label=''):
+    
+    y_true_arr = np.array(y_true_arr)
+    y_pred_arr = np.array(y_pred_arr)
+
+    n_labels = len(y_label_name_arr)
+    n_feature_sets = len(feature_labels)
+    assert n_labels==y_pred_arr.shape[0], "Wrong y shape!"
+    assert n_feature_sets==y_pred_arr.shape[1], "Wrong y shape!"
+
+    # line widths for error plot
+    lws = [1]*n_feature_sets
+    lws[j_fiducial] = 2
+
+    fig, axarr = plt.subplots(nrows=n_labels, ncols=4, figsize=(24, n_labels*5),
+                              gridspec_kw={'width_ratios': [1, 1, 1, 1]})
+    plt.subplots_adjust(hspace=0.3, wspace=0.5)
+    
+    inferno_r = matplotlib.cm.inferno_r
+    cmap = utils.shiftedColorMap(inferno_r, start=0.1, stop=1.0)
+    
+    for i in range(n_labels):
+        plot_pred_vs_property_hist(axarr[i,0], x_label_name, y_label_name_arr[i], x_property, y_true_arr[i], 
+                                   cmap, weight=weight, weight_by_dex=weight_by_dex, label_append=', true')
+
+        plot_pred_vs_property_hist(axarr[i,1], x_label_name, y_label_name_arr[i], x_property, y_pred_arr[i,j_fiducial], 
+                                   cmap, weight=weight, weight_by_dex=weight_by_dex)
+
+        h = plot_pred_vs_true_hist(axarr[i,2], y_label_name_arr[i], 
+                                    y_true_arr[i,:], y_pred_arr[i,j_fiducial,:], cmap, 
+                                   text_results=text_results_arr[i], colorbar_fig=fig,
+                                   weight=weight, weight_by_dex=weight_by_dex, colorbar_label=colorbar_label)
+
+        plot_errors_vs_property(axarr[i,3], x_label_name, 
+                            y_label_name_arr[i], 
+                            x_property, 
+                            y_true_arr[i], y_pred_arr[i],
+                            feature_labels, feature_colors,
+                            show_legend=False, lws=lws)

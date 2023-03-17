@@ -9,9 +9,9 @@ def main():
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
 
-    halo_config(sim_name)
+    #halo_config(sim_name)
     #geo_config(sim_name)
-    #scalar_config(sim_name)
+    scalar_config(sim_name)
     #fit_config(sim_name)
 
 
@@ -23,15 +23,15 @@ def halo_config(sim_name):
     sim_name_dark = f'{sim_name}-Dark'
 
     # halo params 
-    num_star_particles_min = 1
-    num_gas_particles_min = 1
+    num_star_particles_min = 50
+    num_gas_particles_min = 0
     halo_logmass_min = 10
     halo_logmass_max = None
     halo_mass_difference_factor = None
     subsample_frac = None
     subhalo_mode = 'twin_subhalo'
-    must_have_SAM_match = False
-    must_have_halo_structure_info = False
+    must_have_SAM_match = True
+    must_have_halo_structure_info = True
     if sim_name=='TNG50-4': # this sim doesnt have this data!
         must_have_SAM_match = False
         must_have_halo_structure_info = False     
@@ -40,7 +40,7 @@ def halo_config(sim_name):
 
     # save info
     halo_dir = f'../data/halos/halos_{sim_name}'
-    halo_tag = '_mssm'
+    halo_tag = '_Mmin10'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
 
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
@@ -123,7 +123,7 @@ def scalar_config(sim_name):
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
     # geo info
-    geo_tag = '_gx1_gv1'
+    geo_tag = ''
     fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
 
     # scalar parameters
@@ -131,16 +131,18 @@ def scalar_config(sim_name):
     x_order_max = 2
     v_order_max = 2
     #n_groups_rebin = [[0,1,2], [3,4,5,6,7], [8,9,10]]
+    n_groups_rebin = [[0], [1,2], [3,4,5,6,7]]
     #n_groups_rebin = [[8,9,10]]
-    n_groups_rebin = [[0,1], [2,3], [4,5], [6,7], [8,9,10]]
+    #n_groups_rebin = [[0,1], [2,3], [4,5], [6,7], [8,9,10]]
     eigenvalues_not_trace = True
+    elementary_scalars_only = True
     mrv_names_for_rescaling = ['m200m', 'r200m', 'v200m']
     transform_pseudotensors = True
 
     # save info
     scalar_dir = f'../data/scalar_features/scalar_features_{sim_name}'
     #scalar_tag = f'_x{x_order_max}_v{v_order_max}_n5'
-    scalar_tag = '_n5'
+    scalar_tag = '_elementary_n3'
     fn_scalar_features = f'{scalar_dir}/scalar_features{sim_name}{halo_tag}{geo_tag}{scalar_tag}.npy'
     fn_scalar_config = f'{config_dir}/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
 
@@ -160,6 +162,7 @@ def scalar_config(sim_name):
                           'v_order_max': v_order_max,
                           'n_groups_rebin': n_groups_rebin,
                           'eigenvalues_not_trace': eigenvalues_not_trace,
+                          'elementary_scalars_only': elementary_scalars_only,
                           'mrv_names_for_rescaling': mrv_names_for_rescaling,
                           'transform_pseudotensors': transform_pseudotensors
                           }

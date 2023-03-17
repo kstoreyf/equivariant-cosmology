@@ -13,21 +13,12 @@ def main():
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
-    halo_tag = ''
-    geo_tag = ''
-    fn_geo_config = f'../configs/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
+    halo_tag = '_Mmin10'
 
-    with open(fn_geo_config, 'r') as file:
-        geo_params = yaml.safe_load(file)
-    gp = geo_params['geo']
-
-    fn_halo_config = geo_params['halo']['fn_halo_config']
+    fn_halo_config = f'../configs/halos_{sim_name}{halo_tag}.yaml'
     with open(fn_halo_config, 'r') as file:
         halo_params = yaml.safe_load(file)
     sp = halo_params['sim']
-
-    fn_geo_features = gp['fn_geo_features']
-    Path(os.path.dirname(fn_geo_features)).mkdir(parents=True, exist_ok=True)
 
     # Go!
     start = time.time()
@@ -39,11 +30,20 @@ def main():
 
     print("Adding merger tree info")
     start = time.time()
-    sim_reader.add_merger_info_to_halos_sublink(halo_tag)
-    end = time.time()
-    print("Time:", end-start, 'sec')
+    #sim_reader.add_merger_info_to_halos_sublink(halo_tag)
 
+    # need to add x_minPE first to compute the mrv200mean values
+    sim_reader.add_catalog_property_to_halos('x_minPE')
+    sim_reader.add_catalog_property_to_halos('m200mean') # this will also add r200mean, v200mean
+
+    sim_reader.save_dark_halo_arr(halo_params['halo']['fn_dark_halo_arr'])
+    end = time.time()
+
+    print(sim_reader.dark_halo_arr[0].catalog_properties['m200mean'])
+    print("Time:", end-start, 'sec')
     print("Done!")
+
+
 
 
 if __name__=='__main__':

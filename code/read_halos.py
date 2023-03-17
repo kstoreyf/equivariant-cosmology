@@ -27,24 +27,23 @@ class DarkHalo:
     def set_random_int(self, random_int):
         self.random_int = random_int
 
-    def load_positions_and_velocities(self, shift=True, center='x_com'):
+    def load_positions_and_velocities(self, shift=True, center_mode='x_minPE'):
         halo_dark_dm = il.snapshot.loadHalo(self.base_path,self.snap_num,self.idx_halo_dark,'dm')
         x_data_halo = halo_dark_dm['Coordinates'] #c kpc/h
         v_data_halo = halo_dark_dm['Velocities']
 
         if shift:
             center_options = ['x_com','x_minPE','x_grouppos']
-            assert center in center_options, f"Center choice must be one of {center_options}!"
-                 
-            assert center in self.catalog_properties, f"Must first add center mode {center} to catalog property dict!"
-            x_data_halo = self.shift_x(x_data_halo, center)
+            assert center_mode in center_options, f"Center choice must be one of {center_options}!"
+            assert center_mode in self.catalog_properties, f"Must first add center mode {center_mode} to catalog property dict!"
+            x_data_halo = self.shift_x(x_data_halo, center_mode)
             v_data_halo = self.shift_v(v_data_halo)
 
         return x_data_halo, v_data_halo
 
     # for now, masses of all particles are assumed to be same
-    def shift_x(self, x_arr, center):
-        x_shift = self.catalog_properties[center]
+    def shift_x(self, x_arr, center_mode):
+        x_shift = self.catalog_properties[center_mode]
         # Subtract off shift for each halo, wrapping around torus
         x_arr_shifted = self.shift_points_torus(x_arr, x_shift)
         return x_arr_shifted
@@ -61,11 +60,11 @@ class DarkHalo:
         self.catalog_properties[property_name] = value
 
     # don't actually use! was for checks
-    def compute_mrv_200m(self, density_mean, m_dmpart_dark, mass_multiplier, center='x_com'):
+    def compute_mrv_200m(self, density_mean, m_dmpart_dark, mass_multiplier, center_mode='x_minPE'):
         number_density_mean = density_mean / m_dmpart_dark
         factor = 200
 
-        x_data_halo, v_data_halo = self.load_positions_and_velocities(shift=True, center=center)
+        x_data_halo, v_data_halo = self.load_positions_and_velocities(shift=True, center_mode=center_mode)
 
         dists_from_center = np.linalg.norm(x_data_halo, axis=1)
         x_rms = np.sqrt(np.mean(dists_from_center**2))
@@ -76,8 +75,8 @@ class DarkHalo:
             vol = 4/3*np.pi*(x_bin_edges[i]**3)
             number_density = n_part_inside_edge / vol 
             if number_density < 200*number_density_mean:
-                self.catalog_properties['r200m'] = x_bin_edges[i]
-                self.catalog_properties['m200m'] = n_part_inside_edge * m_dmpart_dark
+                self.catalog_properties['r200mean'] = x_bin_edges[i]
+                self.catalog_properties['m200mean'] = n_part_inside_edge * m_dmpart_dark
                 break
 
         import astropy
@@ -87,11 +86,11 @@ class DarkHalo:
         # m200m really in Msun/h and r200m in ckpc/h; the h's cancel out, and the c is comoving meaning
         # we need a factor of the scale factor, but here at z=0 just 1. if go to diff z need to 
         # make sure to include!
-        self.catalog_properties['v200m'] = np.sqrt(G * (mass_multiplier*self.catalog_properties['m200m']*u.Msun) / (self.catalog_properties['r200m']*u.kpc)).value
+        self.catalog_properties['v200mean'] = np.sqrt(G * (mass_multiplier*self.catalog_properties['m200mean']*u.Msun) / (self.catalog_properties['r200mean']*u.kpc)).value
 
 
-    def compute_MXV_rms(self, center, m_dmpart_dark):
-        x_data_halo, v_data_halo = self.load_positions_and_velocities(shift=True, center=center)
+    def compute_MXV_rms(self, center_mode, m_dmpart_dark):
+        x_data_halo, v_data_halo = self.load_positions_and_velocities(shift=True, center_mode=center_mode)
         dists_from_center = np.linalg.norm(x_data_halo, axis=1)
         self.X_rms = np.sqrt(np.mean(dists_from_center**2))
         n_part_in_X_rms = np.sum(dists_from_center < self.X_rms)
@@ -173,7 +172,7 @@ class SimulationReader:
         if subhalo_fields_to_load is None:
             subhalo_fields_to_load = ['SubhaloLenType', 'SubhaloGrNr', 'SubhaloMassType', 'SubhaloMass',
                                       'SubhaloHalfmassRadType', 'SubhaloSFR', 'SubhaloPos', 'SubhaloFlag',
-                                      'SubhaloVelDisp', 'SubhaloBHMass']
+                                      'SubhaloVelDisp', 'SubhaloBHMass', 'SubhaloSpin']
         #subhalo_fields_to_load_dark = ['SubhaloFlag', 'SubhaloPos']
 
         self.subhalos_hydro = il.groupcat.loadSubhalos(self.base_path_hydro,self.snap_num,
@@ -367,15 +366,32 @@ class SimulationReader:
             f_stellar = h5py.File(fn_stellar)
             j_stellar_all = np.array(f_stellar['SpecificAngMom']).flatten()
 
+        if property_name=='m200mean' or property_name=='r200mean' or property_name=='v200mean':      
+            mean_density_header = self.get_mean_density_from_header()
+
+        # just do this here bc sets the values internally
+        if property_name=='m200mean' or property_name=='r200mean' or property_name=='v200mean':     
+            for halo in self.dark_halo_arr: 
+                halo.compute_mrv_200m(mean_density_header, self.m_dmpart_dark, self.mass_multiplier, center_mode='x_minPE')
+            return
+
+        catalog_feature_names = ['M200c', 'c200c', 'a_form']
+        if property_name in catalog_feature_names:
+            self.get_structure_catalog_features([property_name])
+            prop_vals = self.x_catalog_features[:,0] #only 1 feature so 2nd dim should be 1 
+            for i, halo in enumerate(self.dark_halo_arr):
+                halo.set_catalog_property(property_name, prop_vals[i])
+            return
+
+
         for halo in self.dark_halo_arr:
-            # if property_name=='m200m' or         
-            #     halo.compute_mrv_200m(mean_density_header, sim_reader.m_dmpart_dark, sim_reader.mass_multiplier, center=center_halo)
             if 'merger' in property_name:
                 print("here")
                 # already done above loop
                 continue
                 #total_merger_count, merger_mass_ratio, major_merger_count = get_major_merger_count(f, index)
-            if property_name=='r200m':
+            
+            elif property_name=='r200m':
                 property_value = self.halos_dark['Group_R_Mean200'][halo.idx_halo_dark]
             elif property_name=='mass_hydro_subhalo_star':
                 property_value = self.subhalos_hydro['SubhaloMassType'][:,self.ipart_star][halo.idx_subhalo_hydro]
@@ -455,7 +471,11 @@ class SimulationReader:
                 property_value = Mofa_arr[idxs_subset]
             elif property_name=='j_stellar':
                 property_value = j_stellar_all[halo.idx_subhalo_hydro]
-
+            elif property_name=='veldisp_dm':
+                property_value = self.subhalos_dark['SubhaloVelDisp'][halo.idx_subhalo_dark]
+            elif property_name=='spin_dm':
+                spin_x, spin_y, spin_z = self.subhalos_dark['SubhaloSpin'][halo.idx_subhalo_dark]
+                property_value = np.sqrt(spin_x**2 + spin_y**2 + spin_z**2)
             else:
                 raise ValueError(f"Property name {property_name} not recognized!")
 
@@ -623,7 +643,6 @@ class SimulationReader:
 
 
     def get_mean_density_from_mr200m(self):
-        center = 'x_grouppos'
         factor = 200
         mean_densities = []
         for halo in self.dark_halo_arr:

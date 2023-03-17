@@ -8,9 +8,9 @@ from read_halos import SimulationReader
 
 def run():
 
-    sim_name = 'TNG100-1'
-    #sim_name = 'TNG50-4'
-    halo_tag = '_mssm'
+    #sim_name = 'TNG100-1'
+    sim_name = 'TNG50-4'
+    halo_tag = '_Mmin10'
     fn_halo_config = f'../configs/halos_{sim_name}{halo_tag}.yaml'
 
     with open(fn_halo_config, 'r') as file:

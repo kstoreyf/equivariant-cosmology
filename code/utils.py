@@ -1,5 +1,6 @@
 import matplotlib
 import numpy as np
+import yaml
 from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
 
@@ -7,14 +8,14 @@ import sys
 sys.path.insert(1, '/home/ksf293/external')
 import illustris_python as il
 
-from geometric_features import GeometricFeature, geo_name
+sys.path.insert(1, '../code')
 
 
 
 label_dict = {'m_200m': r'log($M_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
-              'm_stellar': r'log($m_\mathrm{stellar} \: [h^{-1} \, M_\odot]$)',
+              'm_stellar': r'log($m_\mathrm{*} \: [h^{-1} \, M_\odot]$)',
               'r_200m': r'log($R_\mathrm{halo} \: [h^{-1} \, \mathrm{kpc}]$)',
-              'r_stellar': r'log($r_\mathrm{stellar} \: [h^{-1} \, \mathrm{kpc}]$)',
+              'r_stellar': r'log($r_\mathrm{*} \: [h^{-1} \, \mathrm{kpc}]$)',
               'ssfr': r'log(sSFR $\: [\mathrm{yr}^{-1}]$)',
               'sfr': r'log(SFR $\: [M_\odot \, \mathrm{yr}^{-1}]$)',
               'ssfr1': r'log(sSFR$_\mathrm{1\,Gyr}$ $\: [\mathrm{yr}^{-1}]$)',
@@ -24,10 +25,11 @@ label_dict = {'m_200m': r'log($M_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
               'M_acc': r'$M_\mathrm{acc,dyn}$',
               'm_vir': r'$M_\mathrm{vir} [h^{-1} \, M_\odot]$',
               'gband': r'$g$-band magnitude',
-              'gband_minus_iband': 'r$g-i$ color',
-              'j_stellar': r'log($j_*$ [km/s kpc]), stellar specific' '\n' 'angular momentum',
-              'bhmass': r'log($M_\dot [h^{-1} \, M_\odot]$), black hole mass',
-              'bhmass_per_mstellar': r'log($M_\dot/m_*$), black hole mass' '\n' ' per stellar mass'
+              'gband_minus_iband': r'$g-i$ color',
+              'j_stellar': r'log($j_*$ [km/s kpc])',
+              'bhmass': r'log($M_\dot [h^{-1} \, M_\odot]$)',
+              'bhmass_per_mstellar': r'log($M_\dot/m_*$)',
+              'num_mergers': 'log(number of mergers)',
               }
 
 lim_dict = {'m_200m': (10.5, 14),
@@ -38,10 +40,18 @@ lim_dict = {'m_200m': (10.5, 14),
             'gband_minus_iband': (0.0, 1.5),
             'j_stellar': (0.5, 4.5),
             'bhmass': (4.5, 10.5),
-            'bhmass_per_mstellar': (-4.5, -1)
+            'bhmass_per_mstellar': (-4.5, -1),
+            'num_mergers': (0.5, 4.5),
             }
 
 sfr_zero = 1e-3
+
+
+def get_label(label_name):
+    if label_name in label_dict:
+        return label_dict[label_name]
+    return label_name
+
 
 def get_alt_sim_name(sim_name):
     sim_name_dict = {'TNG100-1': 'L75n1820TNG',
@@ -156,7 +166,6 @@ def compute_error(y_true, y_pred, test_error_type='percentile'):
     if test_error_type=='msfe':
         frac_err = (y_pred - y_true)/y_true
         msfe_test = np.mean(frac_err**2)
-        error_str = f'MSFE: {msfe_test:.3f}'
         n_outliers = len(frac_err[frac_err > 5*msfe_test])
         # TODO: finish implementing binned errors
         return msfe_test, n_outliers
@@ -179,6 +188,13 @@ def compute_error(y_true, y_pred, test_error_type='percentile'):
         n_outliers = len(frac_y[frac_y > 5*error_inner68_test])
         return error_inner68_test, n_outliers
 
+    elif test_error_type=='stdev':
+        delta_y = y_pred - y_true
+        stdev = np.std(delta_y, axis=0)
+
+        n_outliers = len(delta_y[delta_y > 5*stdev])
+        return stdev, n_outliers
+
     else:
         print(f"ERROR: {test_error_type} not recognized")
         return
@@ -186,6 +202,7 @@ def compute_error(y_true, y_pred, test_error_type='percentile'):
 
 # n_groups should be lists of the "n" to include in each group
 def rebin_geometric_features(geo_feature_arr, n_groups):
+    from geometric_features import GeometricFeature
     print("Rebinning geometric features")
     # TODO: implement check that bins listed in n_groups matches bins in the geo_feature_arr
     n_vals = [g.n for g in geo_feature_arr[0]] # 0 because just check first halo, features should be same
@@ -256,6 +273,7 @@ def rescale_geometric_features(geo_feature_arr, Ms, Rs, Vs):
 
 def transform_pseudotensors(geo_feature_arr):
     print("Transforming pseudotensors")
+    from geometric_features import GeometricFeature
     geo_feature_arr = list(geo_feature_arr)
     for i_halo, geo_features_halo in enumerate(geo_feature_arr):
         gs_to_insert = []
@@ -672,3 +690,102 @@ def num_mergers_mpb(tree, minMassRatio=1e-10, massPartType='dm', index=0):
         fpID = tree['FirstProgenitorID'][fpIndex]
 
     return numMergers
+
+
+def load_features(feature_mode, sim_reader, fn_geo_config=None,
+                  fn_scalar_config=None):
+
+    assert feature_mode in ['scalars', 'geos', 'catalog', 'catalog_z0', 'catalog_mergers', 'catalog_mergers_noaform', 'mrv', 'mrvc'], "Feature mode not recognized!"
+
+    if feature_mode=='scalars' or feature_mode=='geos':
+
+        assert fn_scalar_config is not None, "Must pass fn_scalar_config!"
+        from scalar_features import ScalarFeaturizer
+        with open(fn_scalar_config, 'r') as file:
+            scalar_params = yaml.safe_load(file)
+        scp = scalar_params['scalar']
+
+        if feature_mode=='scalars':
+            fn_geo_config = scalar_params['geo']['fn_geo_config']       
+
+        assert fn_geo_config is not None, "Must pass either fn_scalar_config or fn_geo_config for scalars/geos!"
+
+        from geometric_features import GeometricFeaturizer
+        with open(fn_geo_config, 'r') as file:
+            geo_params = yaml.safe_load(file)
+
+        geo_featurizer = GeometricFeaturizer()
+        geo_featurizer.load_features(geo_params['geo']['fn_geo_features'])
+
+        mrv_for_rescaling = get_mrv_for_rescaling(sim_reader, scp['mrv_names_for_rescaling'])
+        scalar_featurizer = ScalarFeaturizer(geo_featurizer.geo_feature_arr,
+                                n_groups_rebin=scp['n_groups_rebin'], 
+                                transform_pseudotensors=scp['transform_pseudotensors'], 
+                                mrv_for_rescaling=mrv_for_rescaling)
+        x_extra = np.log10(mrv_for_rescaling).T
+        
+        if feature_mode=='geos':
+            # need to grab from scalar featurizer bc its doing the rebinning, rescaling 
+            # and transforming for us (TODO: check if should be doing transforming here)
+            x = geo_feature_arr_to_values(scalar_featurizer.geo_feature_arr)
+
+        elif feature_mode=='scalars':
+            print('loading scalar features')
+            scalar_featurizer.load_features(scp['fn_scalar_features'])
+            print('loaded')
+            x = scalar_featurizer.scalar_features
+
+    elif feature_mode=='mrv':
+        #mrv_for_rescaling = get_mrv_for_rescaling(sim_reader, scp['mrv_names_for_rescaling'])
+        #feature_names = ['m200mean', 'r200mean', 'v200mean']
+        sim_reader.add_catalog_property_to_halos('x_minPE')
+        #sim_reader.add_catalog_property_to_halos('m200mean') # this will also add r200mean, v200mean
+
+        feature_names = ['m200m', 'r200m', 'v200m']
+        x = []
+        for name in feature_names:
+            x_feat = []
+            sim_reader.add_catalog_property_to_halos(name)
+            for halo in sim_reader.dark_halo_arr:
+                x_feat.append(halo.catalog_properties[name])
+            x.append(x_feat)
+        x = np.array(x).T
+        x = np.log10(x)
+        x_extra = None
+
+    elif 'catalog' in feature_mode:
+        #sim_reader.add_catalog_property_to_halos('veldisp_dm')
+        #sim_reader.add_catalog_property_to_halos('spin_dm')
+        catalog_feature_names = ['M200c', 'c200c', 'veldisp_dm', 'spin_dm', 'a_form']
+        if feature_mode=='catalog_z0' or feature_mode=='catalog_mergers_noaform':
+            catalog_feature_names = ['M200c', 'c200c', 'veldisp_dm', 'spin_dm']
+        # sim_reader.get_structure_catalog_features(catalog_feature_names)
+        # x = sim_reader.x_catalog_features
+
+        x = []
+        for name in catalog_feature_names:
+            x_feat = []
+            sim_reader.add_catalog_property_to_halos(name)
+            for halo in sim_reader.dark_halo_arr:
+                x_feat.append(halo.catalog_properties[name])
+            x.append(x_feat)
+        x = np.array(x).T
+
+        if 'mergers' in feature_mode:
+            properties_merger = ['num_mergers', 'num_major_mergers', 'ratio_last_major_merger']
+            for prop in properties_merger:
+                vals = get_y_vals(prop, sim_reader)
+                vals = np.atleast_2d(vals).T
+                x = np.concatenate((x, vals), axis=1)
+        x_extra = None
+
+    elif feature_mode=='mrvc':
+        mrv_for_rescaling = get_mrv_for_rescaling(sim_reader, scp['mrv_names_for_rescaling'])
+        mrv = np.log10(mrv_for_rescaling).T
+        x_extra = mrv
+
+        catalog_feature_names = ['c200c']
+        sim_reader.get_structure_catalog_features(catalog_feature_names)
+        x = sim_reader.x_catalog_features
+
+    return np.array(x), x_extra

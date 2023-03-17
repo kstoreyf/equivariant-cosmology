@@ -13,9 +13,10 @@ class ScalarFeaturizer:
     def __init__(self, geo_feature_arr=None, n_groups_rebin=None,
                  transform_pseudotensors=False, mrv_for_rescaling=None):
 
-        self.geo_feature_arr_orig = geo_feature_arr
-        # must use deepcopy because our array has opjects! np.copy doesn't work
-        geo_feature_arr = copy.deepcopy(geo_feature_arr)
+        if geo_feature_arr is not None:
+            self.geo_feature_arr_orig = geo_feature_arr
+            # must use deepcopy because our array has opjects! np.copy doesn't work
+            geo_feature_arr = copy.deepcopy(geo_feature_arr)
 
         if n_groups_rebin is not None:
             geo_feature_arr = utils.rebin_geometric_features(
@@ -26,14 +27,16 @@ class ScalarFeaturizer:
         if mrv_for_rescaling is not None:
             geo_feature_arr = utils.rescale_geometric_features(geo_feature_arr, *mrv_for_rescaling)
     
-        self.geo_feature_arr = geo_feature_arr
-        self.N_halos = len(self.geo_feature_arr)
+        if geo_feature_arr is not None:
+            self.geo_feature_arr = geo_feature_arr
+            self.N_halos = len(self.geo_feature_arr)
 
 
 
     def featurize(self, m_order_max, 
                   x_order_max=np.inf, v_order_max=np.inf,
-                  eigenvalues_not_trace=False):
+                  eigenvalues_not_trace=False,
+                  elementary_scalars_only=False):
 
         self.m_order_max = m_order_max
         self.x_order_max = x_order_max
@@ -44,7 +47,8 @@ class ScalarFeaturizer:
         for geo_features_halo in self.geo_feature_arr:
             scalar_arr_i = self.get_scalar_features(geo_features_halo, m_order_max,
                                                     x_order_max, v_order_max,
-                                                    eigenvalues_not_trace=eigenvalues_not_trace)
+                                                    eigenvalues_not_trace=eigenvalues_not_trace,
+                                                    elementary_scalars_only=elementary_scalars_only)
 
             scalar_vals = np.array([s.value for s in scalar_arr_i])
             self.scalar_feature_arr.append(scalar_arr_i)
@@ -62,7 +66,7 @@ class ScalarFeaturizer:
 
 
     def get_scalar_features(self, geometric_features, m_order_max, x_order_max, v_order_max,
-                            eigenvalues_not_trace=False):
+                            eigenvalues_not_trace=False, elementary_scalars_only=False):
 
         assert m_order_max >= 1 and m_order_max <= 2, "m_order_max must be 1 or 2 (for now!)"
 
@@ -139,22 +143,23 @@ class ScalarFeaturizer:
                                                             m_order, x_order, v_order, ns, operations) )
 
         # Combine single-term features into two-term features
-        for i_s in range(len(scalar_features_single)):
-            s1 = scalar_features_single[i_s]
-            for j_s in range(i_s, len(scalar_features_single)):
-                s2 = scalar_features_single[j_s]
+        if not elementary_scalars_only:
+            for i_s in range(len(scalar_features_single)):
+                s1 = scalar_features_single[i_s]
+                for j_s in range(i_s, len(scalar_features_single)):
+                    s2 = scalar_features_single[j_s]
 
-                value = s1.value * s2.value
-                idxs_geo_terms = np.concatenate((s1.idxs_geo_terms, s2.idxs_geo_terms))
-                m_order = s1.m_order + s2.m_order
-                x_order = s1.x_order + s2.x_order
-                v_order = s1.v_order + s2.v_order
-                ns = np.concatenate((s1.ns, s2.ns))
-                
-                operations = np.concatenate((s1.operations, s2.operations))
+                    value = s1.value * s2.value
+                    idxs_geo_terms = np.concatenate((s1.idxs_geo_terms, s2.idxs_geo_terms))
+                    m_order = s1.m_order + s2.m_order
+                    x_order = s1.x_order + s2.x_order
+                    v_order = s1.v_order + s2.v_order
+                    ns = np.concatenate((s1.ns, s2.ns))
+                    
+                    operations = np.concatenate((s1.operations, s2.operations))
 
-                scalar_features.append( ScalarFeature(value, idxs_geo_terms, 
-                                                        m_order, x_order, v_order, ns, operations) )
+                    scalar_features.append( ScalarFeature(value, idxs_geo_terms, 
+                                                            m_order, x_order, v_order, ns, operations) )
 
         # Add in single-term features on their own
         scalar_features.extend(scalar_features_single)
@@ -230,18 +235,23 @@ class ScalarFeaturizer:
                     geo_feat.value /= Vs[i_g]
     
 
-    def save_features(self, fn_scalar_features):
-        np.save(fn_scalar_features, self.scalar_feature_arr)
+    def save_features(self, fn_scalar_features, save_format='numpy'):
+        if save_format=='numpy':
+            np.save(fn_scalar_features, self.scalar_feature_arr)
+        else:
+            raise ValueError(f'Save format {save_format} not recognized!')
 
 
-    def load_features(self, fn_scalar_features):
-        self.scalar_feature_arr = np.load(fn_scalar_features, allow_pickle=True)
-        scalar_features = []
-        for i in range(self.scalar_feature_arr.shape[0]):
-            scalar_vals = np.array([s.value for s in self.scalar_feature_arr[i]])
-            scalar_features.append(scalar_vals)
-        self.scalar_features = np.array(scalar_features)
-
+    def load_features(self, fn_scalar_features, save_format='numpy'):
+        if save_format=='numpy':
+            self.scalar_feature_arr = np.load(fn_scalar_features, allow_pickle=True)
+            scalar_features = []
+            for i in range(self.scalar_feature_arr.shape[0]):
+                scalar_vals = np.array([s.value for s in self.scalar_feature_arr[i]])
+                scalar_features.append(scalar_vals)
+            self.scalar_features = np.array(scalar_features)
+        else:
+            raise ValueError(f'Save format {save_format} not recognized!')
 
 
 class ScalarFeature:
