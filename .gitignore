@@ -5,6 +5,7 @@ logs/
 profiling/
 configs/
 models/
+predictions/
 
 # other
 *.swp
