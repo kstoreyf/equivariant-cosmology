@@ -789,3 +789,54 @@ def load_features(feature_mode, sim_reader, fn_geo_config=None,
         x = sim_reader.x_catalog_features
 
     return np.array(x), x_extra
+
+
+def get_butterfly_error():
+        # columns:  Mh1    , Ms1,   , Mh2    , Ms2
+    arr_butterfly = np.loadtxt('../data/butterfly_m_stellar_TNG100-1.csv', skiprows=1, 
+                                    delimiter=',')
+    print(arr_butterfly.shape)
+
+    # should get from halo_params, but had typo in fiducial; update when redo
+    halo_logmass_min = 10.8
+    mh1, mh2 = arr_butterfly[:,0], arr_butterfly[:,2]
+    i_masscut = (mh1 >= halo_logmass_min) & (mh2 >= halo_logmass_min)
+    print(np.sum(i_masscut))
+    arr_butterfly = arr_butterfly[i_masscut]
+    mh1, ms1, mh2, ms2 = arr_butterfly.T
+
+    # diffs should not be absvalled here right?
+    diffs = ms1 - ms2
+    stdev_pairwise = np.std(diffs)
+    print(stdev_pairwise)
+    stdev_pairwise /= np.sqrt(2) #see sec 2.2.2 of butterfly paper for explanation
+    print(stdev_pairwise)
+
+    # can't figure out hpw these bins are defined - taking mean of the two for now 
+    #(tho this is diff than asking both of them to be greater, as did for cut)
+    mh_mean = np.log10(0.5*(10**mh1+10**mh2))
+    mh_bins = np.linspace(halo_logmass_min, np.max(mh_mean) + 0.01, 10)
+    stdevs_mh = []
+    for i in range(len(mh_bins)-1):
+        i_inbin = (mh_mean >= mh_bins[i]) & (mh_mean < mh_bins[i+1])
+        ms1_inbin, ms2_inbin = ms1[i_inbin], ms2[i_inbin]
+        stdev_pairwise = np.std(ms1_inbin - ms2_inbin) / np.sqrt(2)
+        stdevs_mh.append(stdev_pairwise)
+
+    mh_bins_avg = np.log10(0.5*(10**mh_bins[:-1] + 10**mh_bins[1:]))
+    plt.plot(mh_bins_avg, stdevs_mh)
+    plt.xlabel(utils.get_label('m_200m'))
+    plt.ylabel(r'stdev of pairwise diffs / $\sqrt{2}$')
+
+    # can't figure out hpw these bins are defined - taking mean of the two for now 
+    #(tho this is diff than asking both of them to be greater, as did for cut)
+    ms_mean = np.log10(0.5*(10**ms1+10**ms2))
+    ms_bins = np.linspace(np.min(ms_mean), np.max(ms_mean) + 0.01, 10)
+    stdevs_ms = []
+    for i in range(len(mh_bins)-1):
+        i_inbin = (mh_mean >= mh_bins[i]) & (mh_mean < mh_bins[i+1])
+        ms1_inbin, ms2_inbin = ms1[i_inbin], ms2[i_inbin]
+        stdev_pairwise = np.std(ms1_inbin - ms2_inbin) / np.sqrt(2)
+        stdevs_ms.append(stdev_pairwise)
+
+    ms_bins_avg = np.log10(0.5*(10**ms_bins[:-1] + 10**ms_bins[1:]))

@@ -51,13 +51,13 @@ def run(y_label_names, n_top_features=None):
 
     # fit parameters
     max_epochs = 1000
-    lr = 5e-5
+    lr = 0.0005
     hidden_size = 128
 
     #feature_mode = 'scalars'
-    feature_mode = 'geos'
+    #feature_mode = 'geos'
     #feature_mode = 'catalog'
-    #feature_mode = 'catalog_z0'
+    feature_mode = 'catalog_z0'
     #feature_mode = 'catalog_mergers_noaform'
     #feature_mode = 'mrv'
     #feature_mode = 'mrvc'
@@ -68,7 +68,7 @@ def run(y_label_names, n_top_features=None):
     #     frac_tag = f'_f{frac_subset}'
     # if info_metric is not None:
     #     info_tag = f'_{info_metric}_n{n_top_features}'
-    fit_tag = ''
+    fit_tag = '_dropout'
     if feature_mode=='scalars':
         fit_tag += geo_tag
         fit_tag += scalar_tag

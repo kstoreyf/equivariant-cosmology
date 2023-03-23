@@ -15,11 +15,14 @@ class NeuralNet(torch.nn.Module):
         self.output_size = output_size
         self.lin1 = torch.nn.Linear(self.input_size, self.hidden_size)
         self.act1 = torch.nn.SELU()
+        self.dropout1 = torch.nn.Dropout(0.2)
         self.lin2 = torch.nn.Linear(self.hidden_size, self.hidden_size)
         self.act2 = torch.nn.SELU()
+        self.dropout2 = torch.nn.Dropout(0.2)
         self.lin3 = torch.nn.Linear(self.hidden_size, self.hidden_size)
         self.act3 = torch.nn.SELU()
-        #self.act3 = torch.nn.Sigmoid()
+        self.dropout3 = torch.nn.Dropout(0.2)
+
         self.linfinal = torch.nn.Linear(self.hidden_size, output_size)
 
         torch.nn.init.xavier_uniform_(self.lin1.weight)
@@ -35,10 +38,16 @@ class NeuralNet(torch.nn.Module):
     def forward(self, x):
         x = self.lin1(x)
         x = self.act1(x)
+        x = self.dropout1(x)
+
         x = self.lin2(x)
         x = self.act2(x)
+        x = self.dropout2(x)
+
         x = self.lin3(x)
         x = self.act3(x)
+        x = self.dropout3(x)
+
         output = self.linfinal(x)
         return output
 

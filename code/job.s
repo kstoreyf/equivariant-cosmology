@@ -2,10 +2,10 @@
 ##SBATCH --job-name=gen_configs
 ##SBATCH --job-name=halo_selector_tng100_Mmin10
 ##SBATCH --job-name=geo_scalar_featurizer_tng100_gx1_gv1_n5
-#SBATCH --job-name=scalar_featurizer_tng100_elementary_n3
+##SBATCH --job-name=scalar_featurizer_tng100_elementary_n3
 ##SBATCH --job-name=feature_importance_tng100_nstarmin10_mstellar
 ##SBATCH --job-name=train_nn_m_stellar_geos
-##SBATCH --job-name=train_nn_m_stellar_catalog_z0
+#SBATCH --job-name=train_nn_m_stellar_catalog_z0_lr1e-4
 ##SBATCH --job-name=train_nn_num_mergers_geos
 ##SBATCH --job-name=train_nn_j_stellar
 ##SBATCH --job-name=compute_mrv
@@ -31,9 +31,9 @@ conda activate eqenv;
 #python generate_configs.py;
 #python run_halo_selector.py;
 #python run_geometric_featurizer.py;
-python run_scalar_featurizer.py;
+#python run_scalar_featurizer.py;
 #python feature_importance.py;
-#python train_nn.py
+python train_nn.py
 #python feature_info.py
 #python compute_halo_properties.py
 "
