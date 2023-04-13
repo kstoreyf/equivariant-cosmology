@@ -5,7 +5,7 @@
 ##SBATCH --job-name=scalar_featurizer_tng100_elementary_n3
 ##SBATCH --job-name=feature_importance_tng100_nstarmin10_mstellar
 ##SBATCH --job-name=train_nn_m_stellar_geos
-#SBATCH --job-name=train_nn_m_stellar_catalog_z0_lr1e-4
+#SBATCH --job-name=train_nn_m_stellar_catalog_z0_list_nl9
 ##SBATCH --job-name=train_nn_num_mergers_geos
 ##SBATCH --job-name=train_nn_j_stellar
 ##SBATCH --job-name=compute_mrv

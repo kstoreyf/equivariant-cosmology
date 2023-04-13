@@ -1,56 +1,134 @@
 import numpy as np
-import torch 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, QuantileTransformer
 
 from fit import Fitter
 
 
-class NeuralNet(torch.nn.Module):
+#class NeuralNetManual(nn.Module):
+class NeuralNet(nn.Module):
 
     def __init__(self, input_size, hidden_size=32, output_size=1):
         super(NeuralNet, self).__init__()
         self.input_size = input_size
         self.hidden_size  = hidden_size
         self.output_size = output_size
-        self.lin1 = torch.nn.Linear(self.input_size, self.hidden_size)
-        self.act1 = torch.nn.SELU()
-        self.dropout1 = torch.nn.Dropout(0.2)
-        self.lin2 = torch.nn.Linear(self.hidden_size, self.hidden_size)
-        self.act2 = torch.nn.SELU()
-        self.dropout2 = torch.nn.Dropout(0.2)
-        self.lin3 = torch.nn.Linear(self.hidden_size, self.hidden_size)
-        self.act3 = torch.nn.SELU()
-        self.dropout3 = torch.nn.Dropout(0.2)
 
-        self.linfinal = torch.nn.Linear(self.hidden_size, output_size)
+        self.lin1 = nn.Linear(self.input_size, self.hidden_size)
+        self.act1 = nn.SELU()
+        self.dropout1 = nn.Dropout(0.2)
+        self.bn1 = nn.BatchNorm1d(self.hidden_size)
 
-        torch.nn.init.xavier_uniform_(self.lin1.weight)
-        torch.nn.init.zeros_(self.lin1.bias)
-        torch.nn.init.xavier_uniform_(self.lin2.weight)
-        torch.nn.init.zeros_(self.lin2.bias)
-        torch.nn.init.xavier_uniform_(self.lin3.weight)
-        torch.nn.init.zeros_(self.lin3.bias)
-        torch.nn.init.xavier_uniform_(self.linfinal.weight)
-        torch.nn.init.zeros_(self.linfinal.bias)
+        self.lin2 = nn.Linear(self.hidden_size, self.hidden_size)
+        self.act2 = nn.SELU()
+        self.dropout2 = nn.Dropout(0.2)
+        self.bn2 = nn.BatchNorm1d(self.hidden_size)
+
+        self.lin3 = nn.Linear(self.hidden_size, self.hidden_size)
+        self.act3 = nn.SELU()
+        self.dropout3 = nn.Dropout(0.2)
+        self.bn3 = nn.BatchNorm1d(self.hidden_size)
+
+        self.linfinal = nn.Linear(self.hidden_size, output_size)
+
+        nn.init.xavier_uniform_(self.lin1.weight)
+        nn.init.zeros_(self.lin1.bias)
+        nn.init.xavier_uniform_(self.lin2.weight)
+        nn.init.zeros_(self.lin2.bias)
+        nn.init.xavier_uniform_(self.lin3.weight)
+        nn.init.zeros_(self.lin3.bias)
+        nn.init.xavier_uniform_(self.linfinal.weight)
+        nn.init.zeros_(self.linfinal.bias)
         self.double()
 
     def forward(self, x):
         x = self.lin1(x)
         x = self.act1(x)
         x = self.dropout1(x)
+        x = self.bn1(x)
 
         x = self.lin2(x)
         x = self.act2(x)
         x = self.dropout2(x)
+        x = self.bn2(x)
 
         x = self.lin3(x)
         x = self.act3(x)
         x = self.dropout3(x)
+        x = self.bn3(x)
 
         output = self.linfinal(x)
         return output
 
+# via Derek Lim,
+# https://github.com/cptq/SignNet-BasisNet/blob/main/GraphPrediction/layers/mlp.py
+class NeuralNetList(nn.Module):
+    def __init__(self, input_size, hidden_size=32, output_size=1, num_layers=6,
+                 use_bn=False, use_ln=False, dropout=0.2, activation_name='relu',
+                 residual=False):
+        super(NeuralNetList, self).__init__()
+
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.num_layers = num_layers
+        self.activation_name = activation_name
+
+        activation_dict = {'relu': nn.ReLU(),
+                           'selu': nn.SELU(),
+                           'elu': nn.ELU()}
+        if activation_name not in activation_dict:
+            raise ValueError(f"Activation {activation_name} not recognized!")
+        self.activation = activation_dict[activation_name]
+
+        self.lins = nn.ModuleList()
+        if use_bn: self.bns = nn.ModuleList()
+        if use_ln: self.lns = nn.ModuleList()
+        
+        if num_layers == 1:
+            # linear mapping
+            self.lins.append(nn.Linear(input_size, output_size))
+        else:
+            self.lins.append(nn.Linear(input_size, hidden_size))
+            if use_bn: self.bns.append(nn.BatchNorm1d(hidden_size))
+            if use_ln: self.lns.append(nn.LayerNorm(hidden_size))
+            for layer in range(num_layers-2):
+                self.lins.append(nn.Linear(hidden_size, hidden_size))
+                if use_bn: self.bns.append(nn.BatchNorm1d(hidden_size))
+                if use_ln: self.lns.append(nn.LayerNorm(hidden_size))
+            self.lins.append(nn.Linear(hidden_size, output_size))
+
+        self.use_bn = use_bn
+        self.use_ln = use_ln
+        self.dropout = dropout
+        self.residual = residual
+        self.double()
+        # Q: what about initialization, like i was doing before?
+
+            
+    def forward(self, x):
+        x_prev = x
+        for i, lin in enumerate(self.lins[:-1]):
+            x = lin(x)
+            x = self.activation(x)
+            if self.use_bn:
+                if x.ndim == 2:
+                    x = self.bns[i](x)
+                elif x.ndim == 3:
+                    x = self.bns[i](x.transpose(2,1)).transpose(2,1)
+                else:
+                    raise ValueError('invalid dimension of x')
+            if self.use_ln: x = self.lns[i](x)
+            if self.residual and x_prev.shape == x.shape: x = x + x_prev
+            x = F.dropout(x, p=self.dropout, training=self.training)
+            x_prev = x
+        x = self.lins[-1](x)
+        if self.residual and x_prev.shape == x.shape:
+            x = x + x_prev
+        return x
 
 
 
@@ -146,8 +224,10 @@ class NNFitter(Fitter):
 
     def train(self, max_epochs=100, learning_rate=0.0001, fn_model=None, save_at_min_loss=True):
         
-        #self.criterion = torch.nn.MSELoss()
-        self.criterion = torch.nn.GaussianNLLLoss()
+        #self.criterion = nn.MSELoss()
+        self.criterion = nn.GaussianNLLLoss()
+        # weight decay = 0.01
+        # scheduled lr - cos decay, warmup
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
 
         # Training loop
@@ -197,6 +277,12 @@ class NNFitter(Fitter):
                     'input_size': self.model.input_size,
                     'hidden_size': self.model.hidden_size,
                     'output_size': self.model.output_size,
+                    'num_layers': self.model.num_layers,
+                    'use_bn': self.model.use_bn,
+                    'use_ln': self.model.use_ln,
+                    'dropout': self.model.dropout,
+                    'activation_name': self.model.activation_name,
+                    'residual': self.model.residual,
                     'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
                     'scaler': self.scaler,
@@ -214,8 +300,17 @@ class NNFitter(Fitter):
         else:
             # for back-compatibility
             output = 1
-        self.model = NeuralNet(model_checkpoint['input_size'], hidden_size=model_checkpoint['hidden_size'],
-                               output_size=output)
+
+        self.model = NeuralNetList(model_checkpoint['input_size'], 
+                               hidden_size=model_checkpoint['hidden_size'],
+                               output_size=output,
+                               num_layers=model_checkpoint['num_layers'],
+                               use_bn=model_checkpoint['use_bn'],
+                               use_ln=model_checkpoint['use_ln'],
+                               dropout=model_checkpoint['dropout'],
+                               activation_name=model_checkpoint['activation_name'],
+                               residual=model_checkpoint['residual'],
+                               )
         self.model.load_state_dict(model_checkpoint['model_state_dict'])
         self.model.eval()
         self.scaler = model_checkpoint['scaler']

@@ -27,8 +27,8 @@ label_dict = {'m_200m': r'log($M_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
               'gband': r'$g$-band magnitude',
               'gband_minus_iband': r'$g-i$ color',
               'j_stellar': r'log($j_*$ [km/s kpc])',
-              'bhmass': r'log($M_\dot [h^{-1} \, M_\odot]$)',
-              'bhmass_per_mstellar': r'log($M_\dot/m_*$)',
+              'bhmass': r'log($M_\cdot [h^{-1} \, M_\odot]$)',
+              'bhmass_per_mstellar': r'log($M_{\cdot}/m_*$)',
               'num_mergers': 'log(number of mergers)',
               }
 
@@ -791,14 +791,19 @@ def load_features(feature_mode, sim_reader, fn_geo_config=None,
     return np.array(x), x_extra
 
 
-def get_butterfly_error():
+def get_butterfly_error(x_label, y_label, x_bins, halo_logmass_min=10.8):
         # columns:  Mh1    , Ms1,   , Mh2    , Ms2
-    arr_butterfly = np.loadtxt('../data/butterfly_m_stellar_TNG100-1.csv', skiprows=1, 
+    arr_shadow1 = np.loadtxt('../data/butterfly_NG100-1_shadow1.csv', skiprows=1, 
                                     delimiter=',')
-    print(arr_butterfly.shape)
+    arr_shadow2 = np.loadtxt('../data/butterfly_NG100-1_shadow2.csv', skiprows=1, 
+                                    delimiter=',')                            
+    print(arr_shadow1.shape)
+
+    # columns: log10(Subs_massTot/Msun),log10(Subs_mass(5)/Msun),log10(Subs_HalfmassRadType(5)/kpc),log10(SFR1Gyr/(Msun/yr)),g-r[mag],log10(Subs_BHMass/Msun),log10(Subs_SFR/(Msun/yr)),log10(Subs_mass(1)/Msun))
+    col_names = ['m200_m', 'm_stellar', 'r_stellar', 'SFR1', 'g_minus_r', 'bhmass', 'SFR', 'm_??']
+
 
     # should get from halo_params, but had typo in fiducial; update when redo
-    halo_logmass_min = 10.8
     mh1, mh2 = arr_butterfly[:,0], arr_butterfly[:,2]
     i_masscut = (mh1 >= halo_logmass_min) & (mh2 >= halo_logmass_min)
     print(np.sum(i_masscut))

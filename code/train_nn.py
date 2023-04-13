@@ -7,7 +7,8 @@ import torch
 from torch.utils.data import DataLoader
 
 import utils
-from neural_net import NNFitter, NeuralNet, seed_worker
+from neural_net import NNFitter, NeuralNet, NeuralNetList, seed_worker
+from regressor import BoosterFitter, RFFitter
 from read_halos import SimulationReader
 
 
@@ -50,14 +51,14 @@ def run(y_label_names, n_top_features=None):
     info_metric = None
 
     # fit parameters
-    max_epochs = 1000
-    lr = 0.0005
+    max_epochs = 1
+    lr = 1
     hidden_size = 128
 
-    #feature_mode = 'scalars'
+    feature_mode = 'scalars'
     #feature_mode = 'geos'
     #feature_mode = 'catalog'
-    feature_mode = 'catalog_z0'
+    #feature_mode = 'catalog_z0'
     #feature_mode = 'catalog_mergers_noaform'
     #feature_mode = 'mrv'
     #feature_mode = 'mrvc'
@@ -68,14 +69,21 @@ def run(y_label_names, n_top_features=None):
     #     frac_tag = f'_f{frac_subset}'
     # if info_metric is not None:
     #     info_tag = f'_{info_metric}_n{n_top_features}'
-    fit_tag = '_dropout'
+    #fit_tag = '_list_nl9_bn'
+    #model_tag = 'nn'
+    #model_tag = 'hgboost'
+    #model_tag = 'gboost'
+    model_tag = 'rf'
+    fit_tag = '_nest300'
+    #fit_tag = ''
+    #fit_tag = '_list_nl6'
     if feature_mode=='scalars':
         fit_tag += geo_tag
         fit_tag += scalar_tag
     if feature_mode=='geos':
          fit_tag += geo_tag       
 
-    fit_tag += f'_{y_str}_nn_{feature_mode}_epochs{max_epochs}_lr{lr}_hs{hidden_size}'
+    fit_tag += f'_{y_str}_{model_tag}_{feature_mode}_epochs{max_epochs}_lr{lr}_hs{hidden_size}'
     if frac_subset != 1.0:
         fit_tag += f'_f{frac_subset}'
     if info_metric is not None:
@@ -191,9 +199,14 @@ def run(y_label_names, n_top_features=None):
         x_extra_valid = x_extra[idx_valid]
         x_extra_test = x_extra[idx_test]
 
-
-
-    nnfitter = NNFitter()
+    if model_tag=='nn':
+        nnfitter = NNFitter()
+    elif model_tag=='hgboost' or model_tag=='gboost':
+        nnfitter = BoosterFitter()
+    elif model_tag=='rf':
+        nnfitter = RFFitter()
+    else:
+        raise ValueError(f"Model {model} not recognized!")
     nnfitter.load_training_data(x_train, y_train,
                         x_extra_train=x_extra_train,
                         y_uncertainties_train=y_uncertainties_train)
@@ -219,6 +232,12 @@ def run(y_label_names, n_top_features=None):
     print("Saved to", fn_model)
 
 
+def train_booster():
+    #from sklearn.ensemble import GradientBoostingRegressor
+    from sklearn.ensemble import HistGradientBoostingRegressor 
+    booster = HistGradientBoostingRegressor()
+    booster.fit(X, y)
+
 
 def train(nnfitter, hidden_size=128, max_epochs=250, learning_rate=0.00005,
           fn_model=None):
@@ -232,7 +251,7 @@ def train(nnfitter, hidden_size=128, max_epochs=250, learning_rate=0.00005,
         output_size = nnfitter.y_train.shape[-1]
     print("Output size:", output_size)
     hidden_size = hidden_size
-    nnfitter.model = NeuralNet(input_size, hidden_size=hidden_size, output_size=output_size)
+    nnfitter.model = NeuralNetList(input_size, hidden_size=hidden_size, output_size=output_size)
     nnfitter.train(max_epochs=max_epochs, learning_rate=learning_rate,
                    fn_model=fn_model)
 
