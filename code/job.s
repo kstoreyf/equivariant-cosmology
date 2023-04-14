@@ -1,11 +1,11 @@
 #!/bin/bash
 ##SBATCH --job-name=gen_configs
 ##SBATCH --job-name=halo_selector_tng100_Mmin10
-##SBATCH --job-name=geo_scalar_featurizer_tng100_gx1_gv1_n5
-##SBATCH --job-name=scalar_featurizer_tng100_elementary_n3
+##SBATCH --job-name=geo_scalar_featurizer_tng100_Mmin10_bins10
+##SBATCH --job-name=scalar_featurizer_tng100_Mmin10_bins10
 ##SBATCH --job-name=feature_importance_tng100_nstarmin10_mstellar
-##SBATCH --job-name=train_nn_m_stellar_geos
-#SBATCH --job-name=train_nn_m_stellar_catalog_z0_list_nl9
+#SBATCH --job-name=train_nn_m_stellar_Mmin10_bins10_n3
+##SBATCH --job-name=train_nn_m_stellar_catalog_z0_list_nl9
 ##SBATCH --job-name=train_nn_num_mergers_geos
 ##SBATCH --job-name=train_nn_j_stellar
 ##SBATCH --job-name=compute_mrv
@@ -19,6 +19,7 @@
 #SBATCH --time=24:00:00
 
 # need somewhere >30 and <60 GB for train_nn.py
+# for scalar featurizer, >10 and <60
 cd ~
 overlay_ext3=/scratch/ksf293/overlay-50G-10M.ext3
 singularity \

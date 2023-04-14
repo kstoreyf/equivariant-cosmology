@@ -22,7 +22,7 @@ class GeometricFeaturizer:
 
         print("Computing geometric features for all dark halos")
         for dark_halo in self.sim_reader.dark_halo_arr:
-            x_halo, v_halo = dark_halo.load_positions_and_velocities(shift=True, center=center_halo)
+            x_halo, v_halo = dark_halo.load_positions_and_velocities(shift=True, center_mode=center_halo)
 
             r_edges_scaled = r_edges
             if r_units is not None:

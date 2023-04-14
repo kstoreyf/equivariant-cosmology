@@ -14,12 +14,13 @@ def run():
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
-    halo_tag = ''
-    geo_tag = ''
+    halo_tag = '_Mmin10'
+    geo_tag = '_bins10'
     #geo_tag = '_gx1_gv1'
     #scalar_tag = '_n01'
     #scalar_tag = '_x4_v4_n5'
-    scalar_tag = '_elementary_n3'
+    #scalar_tag = '_elementary_n3'
+    scalar_tag = '_n3'
     fn_scalar_config = f'../configs/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
 
     with open(fn_scalar_config, 'r') as file:
@@ -53,20 +54,7 @@ def run():
     geo_featurizer = GeometricFeaturizer()
     geo_featurizer.load_features(gp['fn_geo_features'])
 
-    # geo_feature_arr_rebinned = utils.rebin_geometric_features(
-    #                                  geo_featurizer.geo_feature_arr, scp['n_groups_rebin'])
-    # if scp['transform_pseudotensors']:
-    #     geo_feature_arr_rebinned = utils.transform_pseudotensors(geo_feature_arr_rebinned)
-
-    # scalar_featurizer = ScalarFeaturizer(geo_feature_arr_rebinned)
-    # if scp['rescale_geometric_features']:
-    #     m_200m = np.array([dark_halo.catalog_properties['m200m'] for dark_halo in sim_reader.dark_halo_arr])
-    #     r_200m = np.array([dark_halo.catalog_properties['r200m'] for dark_halo in sim_reader.dark_halo_arr])
-    #     v_200m = np.array([dark_halo.catalog_properties['v200m'] for dark_halo in sim_reader.dark_halo_arr])
-    #     scalar_featurizer.rescale_geometric_features(m_200m, r_200m, v_200m)
-
     start = time.time()
-
     mrv_for_rescaling = utils.get_mrv_for_rescaling(sim_reader, scp['mrv_names_for_rescaling'])
     scalar_featurizer = ScalarFeaturizer(geo_featurizer.geo_feature_arr,
                             n_groups_rebin=scp['n_groups_rebin'], 

@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 import utils
 from neural_net import NNFitter, NeuralNet, NeuralNetList, seed_worker
-from regressor import BoosterFitter, RFFitter
+from regressor import BoosterFitter, RFFitter, TabNetFitter
 from read_halos import SimulationReader
 
 
@@ -40,9 +40,9 @@ def run(y_label_names, n_top_features=None):
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
-    halo_tag = ''
-    geo_tag = ''
-    scalar_tag = '_elementary'
+    halo_tag = '_Mmin10'
+    geo_tag = '_bins10'
+    scalar_tag = '_n3'
     #scalar_tag = '_gx1_gv1_n5'
     frac_subset = 1.0
     #n_top_features = 1
@@ -51,8 +51,10 @@ def run(y_label_names, n_top_features=None):
     info_metric = None
 
     # fit parameters
-    max_epochs = 1
-    lr = 1
+    max_epochs = 1000
+    lr = 5e-5
+    # max_epochs = 300
+    # lr = 0.1
     hidden_size = 128
 
     feature_mode = 'scalars'
@@ -70,12 +72,13 @@ def run(y_label_names, n_top_features=None):
     # if info_metric is not None:
     #     info_tag = f'_{info_metric}_n{n_top_features}'
     #fit_tag = '_list_nl9_bn'
-    #model_tag = 'nn'
+    model_tag = 'nn'
     #model_tag = 'hgboost'
     #model_tag = 'gboost'
-    model_tag = 'rf'
-    fit_tag = '_nest300'
-    #fit_tag = ''
+    #model_tag = 'rf'
+    #model_tag = 'tabnet'
+    #fit_tag = '_nest300'
+    fit_tag = ''
     #fit_tag = '_list_nl6'
     if feature_mode=='scalars':
         fit_tag += geo_tag
@@ -205,6 +208,8 @@ def run(y_label_names, n_top_features=None):
         nnfitter = BoosterFitter()
     elif model_tag=='rf':
         nnfitter = RFFitter()
+    elif model_tag=='tabnet':
+        nnfitter = TabNetFitter()
     else:
         raise ValueError(f"Model {model} not recognized!")
     nnfitter.load_training_data(x_train, y_train,

@@ -73,25 +73,26 @@ def halo_config(sim_name):
 def geo_config(sim_name):
 
     # halo info
-    halo_tag = ''
+    halo_tag = '_Mmin10'
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
     # geo feature params
     # bins
-    n_rbins = 8
+    n_rbins = 10
     r_edges = np.linspace(0, 1, n_rbins+1) # in units of r200
-    r_edges_outsider200 = np.array([2, 3, 10])
-    r_edges = np.concatenate((r_edges, r_edges_outsider200))
+    #r_edges_outsider200 = np.array([2, 3, 10])
+    #r_edges = np.concatenate((r_edges, r_edges_outsider200))
     print(list(r_edges))
     r_units = 'r200m'
     # other
-    x_order_max = 1
-    v_order_max = 1
+    x_order_max = 2
+    v_order_max = 2
     center_halo = 'x_minPE'
 
     # save info
     geo_dir = f'../data/geometric_features/geometric_features_{sim_name}'
-    geo_tag = '_gx1_gv1'
+    #geo_tag = '_gx1_gv1'
+    geo_tag = '_bins10'
     fn_geo_features = f'{geo_dir}/geometric_features_{sim_name}{halo_tag}{geo_tag}.npy'
     fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
 
@@ -119,11 +120,11 @@ def geo_config(sim_name):
 def scalar_config(sim_name):
 
     # halo info
-    halo_tag = ''
+    halo_tag = '_Mmin10'
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
     # geo info
-    geo_tag = ''
+    geo_tag = '_bins10'
     fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
 
     # scalar parameters
@@ -131,7 +132,9 @@ def scalar_config(sim_name):
     x_order_max = 2
     v_order_max = 2
     #n_groups_rebin = [[0,1,2], [3,4,5,6,7], [8,9,10]]
-    n_groups_rebin = [[0], [1,2], [3,4,5,6,7]]
+    #n_groups_rebin = [[0], [1,2], [3,4,5,6,7]]
+    #n_groups_rebin = [[0,1], [2,3], [4,5], [6,7], [8,9]]
+    n_groups_rebin = [[0], [1,2,3], [4,5,6,7,8,9]]
     #n_groups_rebin = [[8,9,10]]
     #n_groups_rebin = [[0,1], [2,3], [4,5], [6,7], [8,9,10]]
     eigenvalues_not_trace = True
@@ -142,7 +145,8 @@ def scalar_config(sim_name):
     # save info
     scalar_dir = f'../data/scalar_features/scalar_features_{sim_name}'
     #scalar_tag = f'_x{x_order_max}_v{v_order_max}_n5'
-    scalar_tag = '_elementary_n3'
+    #scalar_tag = '_elementary'
+    scalar_tag = '_n3'
     fn_scalar_features = f'{scalar_dir}/scalar_features{sim_name}{halo_tag}{geo_tag}{scalar_tag}.npy'
     fn_scalar_config = f'{config_dir}/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
 

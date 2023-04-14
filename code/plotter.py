@@ -775,39 +775,46 @@ def plot_errors_vs_a(ax, a_pred_arr, a_true, a_pred_labels, colors,
 
 
 def plot_errors_vs_property(ax, x_label_name, y_label_name, x_property, y_true, y_pred_arr,
-                               y_pred_labels, colors, lws=None, x_lim=None, y_lim=None, show_legend=True,
-                               test_error_type='percentile'):
+                               y_pred_labels, colors, lws=None, x_lim=None, show_legend=True,
+                               test_error_type='percentile',
+                               x_bins=None, y_lowerlim=None):
 
     if lws is None:
         lws = [2]*len(y_pred_arr)
     
     if x_lim is None:
         x_lim = utils.lim_dict[x_label_name]    
-    if y_lim is None:
-        y_lim = utils.lim_dict[x_label_name]
-    bins_x = np.linspace(x_lim[0], x_lim[1], 12)
-    bins_x_mean = 0.5*(bins_x[:-1] + bins_x[1:])
+
+    if x_bins is None:
+        x_bins = np.linspace(x_lim[0], x_lim[1], 12)
+        print("Assuming x bins are log !")
+    x_bins_avg = np.log10(0.5*(10**x_bins[:-1] + 10**x_bins[1:]))
 
     for i_y in range(len(y_pred_arr)):
         y_pred = y_pred_arr[i_y]
         errors = []
-        for bb in range(len(bins_x)-1):
-            i_inbin = (x_property >= bins_x[bb]) & (x_property < bins_x[bb+1])
+        for bb in range(len(x_bins)-1):
+            i_inbin = (x_property >= x_bins[bb]) & (x_property < x_bins[bb+1])
             error_inbin, _ = utils.compute_error(y_true[i_inbin], y_pred[i_inbin], test_error_type=test_error_type)
             errors.append(error_inbin)
-        ax.plot(bins_x_mean, errors, label=y_pred_labels[i_y], color=colors[i_y], lw=lws[i_y])
+        ax.plot(x_bins_avg, errors, label=y_pred_labels[i_y], color=colors[i_y], lw=lws[i_y])
     
+    if y_lowerlim is not None:
+        y_bottom = np.zeros(len(x_bins_avg))
+        ax.fill_between(x_bins_avg, y_bottom, y_lowerlim, alpha=0.2, color='k', label='Lower limit from chaos')
+
     # labels & adjustments
     x_label = utils.get_label(x_label_name)
     y_label = utils.get_label(y_label_name)
     ax.set_xlabel(x_label)
     ax.set_ylabel(fr'$\sigma_{{68}}$, {y_label}')
     if show_legend:
-        ax.legend(loc='best')
+        ax.legend(loc='best', fontsize=12)
     
-    if x_lim is not None:
-        ax.set_xlim(x_lim)
-        
+    # if x_lim is not None:
+    #     ax.set_xlim(x_lim)
+
+    ax.set_xlim(x_bins_avg[0], x_bins_avg[-1])
     ax.axhline(0, color='grey')
 
 
@@ -839,7 +846,9 @@ def plot_multi_panel_gal_props_errors(x_label_name, y_label_name_arr, x_property
                       y_true_arr, y_pred_arr, feature_labels, feature_colors,
                       j_fiducial=0,
                       weight=1, weight_by_dex=False,
-                      text_results_arr=[], title=None, save_fn=None,
+                      text_results_arr=[],
+                      x_bins=None, y_lowerlim_arr=None,
+                      title=None, save_fn=None,
                       colorbar_label=''):
     
     y_true_arr = np.array(y_true_arr)
@@ -873,9 +882,13 @@ def plot_multi_panel_gal_props_errors(x_label_name, y_label_name_arr, x_property
                                    text_results=text_results_arr[i], colorbar_fig=fig,
                                    weight=weight, weight_by_dex=weight_by_dex, colorbar_label=colorbar_label)
 
+        show_legend = False
+        if i==n_labels-1:
+            show_legend = True
         plot_errors_vs_property(axarr[i,3], x_label_name, 
                             y_label_name_arr[i], 
                             x_property, 
                             y_true_arr[i], y_pred_arr[i],
                             feature_labels, feature_colors,
-                            show_legend=False, lws=lws)
+                            show_legend=show_legend, lws=lws,
+                            x_bins=x_bins, y_lowerlim=y_lowerlim_arr[i])
