@@ -415,17 +415,19 @@ def get_y_vals(y_label_name, sim_reader, mass_multiplier=1e10, halo_tag=''):
     
     elif y_label_name=='bhmass':
         bhmass = y_vals
-        idx_zerobh = np.where(bhmass==0)[0]
+        i_zerobhms = abs(bhmass_per_mstellar) < tol
         bh_zero = 8e-6 #?? min in training set is 8e-5
-        bhmass[idx_zerobh] = bh_zero
+        bhmass[i_zerobhms] = i_zerobhms
 
         return np.log10(bhmass)
 
     elif y_label_name.startswith('bhmass_per_mstellar'):
         bhmass_per_mstellar = y_vals
-        idx_zerobhms = np.where(bhmass_per_mstellar==0)[0]
-        val_zerobhms = np.min(bhmass_per_mstellar[~idx_zerobhms])/10  
-        bhmass_per_mstellar[idx_zerobhms] = val_zerobhms
+        bhmass_per_mstellar = bhmass_per_mstellar.astype(float)
+        tol = 1e-10
+        i_zerobhms = abs(bhmass_per_mstellar) < tol
+        val_zerobhms = np.min(bhmass_per_mstellar[~i_zerobhms])/10.0  # set zero value to 1/10 of nonzero-min 
+        bhmass_per_mstellar[i_zerobhms] = val_zerobhms
         return np.log10(bhmass_per_mstellar)
 
     else:

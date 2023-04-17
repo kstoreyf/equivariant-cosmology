@@ -25,7 +25,8 @@ class BoosterFitter(Fitter):
                                         include_ones_feature=False
                                         )
         #self.scaler = MinMaxScaler() # TODO revisit !! 
-        self.scaler = StandardScaler() # TODO revisit !! 
+        #self.scaler = StandardScaler() # TODO revisit !! 
+        self.scaler = QuantileTransformer(n_quantiles=100, output_distribution='normal', random_state=0)
         self.scaler.fit(self.A_train)
         self.A_train_scaled = self.scaler.transform(self.A_train)
 
