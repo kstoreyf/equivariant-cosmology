@@ -12,7 +12,7 @@ def run():
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
-    halo_tag = '_Mmin10'
+    halo_tag = '_Mmin10_nstar1'
     #geo_tag = '_gx1_gv1'
     #geo_tag = '_gx1_gv1'
     geo_tag = '_bins10'

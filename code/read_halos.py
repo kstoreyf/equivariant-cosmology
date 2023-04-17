@@ -242,10 +242,11 @@ class SimulationReader:
                                                       option; choose one of {subhalo_mode_options}"
         # These are the indices of the most massive subhalo in the FOF halo; -1 means no subhalos, filter these out
         self.halos_dark['GroupFirstSub'] = self.halos_dark['GroupFirstSub'].astype('int32')
-        mask_has_subhalos = np.where(self.halos_dark['GroupFirstSub'] >= 0) # filter out halos with no subhalos
-        idxs_halos_dark_withsubhalos = self.idxs_halos_dark_all[mask_has_subhalos]
-        idxs_largestsubs_dark_all = self.halos_dark['GroupFirstSub'][mask_has_subhalos]
-        
+        print("N dark halos", len(self.halos_dark['GroupFirstSub']))
+        i_has_subhalos = np.where(self.halos_dark['GroupFirstSub'] >= 0) # filter out halos with no subhalos
+        idxs_halos_dark_withsubhalos = self.idxs_halos_dark_all[i_has_subhalos]
+        idxs_largestsubs_dark_all = self.halos_dark['GroupFirstSub'][i_has_subhalos]
+        print("N with subhalos", len(idxs_halos_dark_withsubhalos))
         halo_mass_min, halo_mass_max = None, None
         if halo_logmass_min is not None:
             halo_mass_min = 10**halo_logmass_min
@@ -253,6 +254,8 @@ class SimulationReader:
         if halo_logmass_max is not None:
             halo_mass_max = 10**halo_logmass_max
             halo_mass_max /= self.mass_multiplier # because masses in catalog have units of 10^10 M_sun/h
+
+        #i_select = 
 
         # For each dark halo that has a subhalo, get its most massive subhalo, 
         # and then check if that dark subhalo has a twin in the hydro sim.
@@ -306,16 +309,19 @@ class SimulationReader:
 
         rng = np.random.default_rng(seed=seed)
         dark_halo_arr = np.array(dark_halo_arr)
+        print("N arr post loop", len(dark_halo_arr))
 
         if must_have_SAM_match:
             idxs_halo_dark = [halo.idx_halo_dark for halo in dark_halo_arr]
             i_with_SAM_match = self.get_halos_with_SAM_match(idxs_halo_dark)
             dark_halo_arr = dark_halo_arr[i_with_SAM_match]
+        print("N arr post must_have_SAM_match", len(dark_halo_arr))
 
         if must_have_halo_structure_info:
             idxs_halo_dark = [halo.idx_halo_dark for halo in dark_halo_arr]
             i_with_halo_structure_info = self.has_halo_structure_info(idxs_halo_dark)
             dark_halo_arr = dark_halo_arr[i_with_halo_structure_info]
+        print("N arr post must_have_SAM_match", len(dark_halo_arr))
 
         # Subsample the dark halos if we want (for testing purposes)
         if subsample_frac is not None:
@@ -323,6 +329,7 @@ class SimulationReader:
             
         self.dark_halo_arr = dark_halo_arr
         self.N_halos = len(self.dark_halo_arr)
+        print("N halos:", self.N_halos)
 
         # Give each halo a random number; will be useful later, e.g. for splitting train/test consistently
         random_ints = np.arange(self.N_halos)
@@ -501,7 +508,7 @@ class SimulationReader:
         x_catalog_features = x_catalog_features_all[idxs_halo_dark]
 
         i_has_halo_structure_info = ~np.isnan(x_catalog_features).any(axis=1)
-        print(f'Keeping {np.sum(i_has_halo_structure_info)}/{len(i_has_halo_structure_info)} halos with SAM matches')
+        print(f'Keeping {np.sum(i_has_halo_structure_info)}/{len(i_has_halo_structure_info)} halos with halo structure info')
         return i_has_halo_structure_info
 
 

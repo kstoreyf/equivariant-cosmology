@@ -23,11 +23,11 @@ def halo_config(sim_name):
     sim_name_dark = f'{sim_name}-Dark'
 
     # halo params 
-    num_star_particles_min = 50
+    num_star_particles_min = 1
     num_gas_particles_min = 0
     halo_logmass_min = 10
     halo_logmass_max = None
-    halo_mass_difference_factor = None
+    halo_mass_difference_factor = 3
     subsample_frac = None
     subhalo_mode = 'twin_subhalo'
     must_have_SAM_match = True
@@ -40,7 +40,7 @@ def halo_config(sim_name):
 
     # save info
     halo_dir = f'../data/halos/halos_{sim_name}'
-    halo_tag = '_Mmin10'
+    halo_tag = '_Mmin10_nstar1'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
 
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
@@ -73,7 +73,7 @@ def halo_config(sim_name):
 def geo_config(sim_name):
 
     # halo info
-    halo_tag = '_Mmin10'
+    halo_tag = '_Mmin10_nstar1'
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
     # geo feature params
@@ -120,7 +120,7 @@ def geo_config(sim_name):
 def scalar_config(sim_name):
 
     # halo info
-    halo_tag = '_Mmin10'
+    halo_tag = '_Mmin10_nstar1'
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
     # geo info

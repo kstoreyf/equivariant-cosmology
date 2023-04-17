@@ -40,9 +40,11 @@ def run(y_label_names, n_top_features=None):
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
-    halo_tag = '_Mmin10'
-    geo_tag = '_bins10'
-    scalar_tag = '_n3'
+    halo_tag = '_Mmin10_nstar1'
+    # geo_tag = '_bins10'
+    # scalar_tag = '_n3'
+    geo_tag = None
+    scalar_tag = None
     #scalar_tag = '_gx1_gv1_n5'
     frac_subset = 1.0
     #n_top_features = 1
@@ -51,16 +53,16 @@ def run(y_label_names, n_top_features=None):
     info_metric = None
 
     # fit parameters
-    max_epochs = 1000
-    lr = 5e-5
-    # max_epochs = 300
-    # lr = 0.1
+    #max_epochs = 1000
+    #lr = 5e-5
+    max_epochs = 300
+    lr = 0.1
     hidden_size = 128
 
-    feature_mode = 'scalars'
+    #feature_mode = 'scalars'
     #feature_mode = 'geos'
     #feature_mode = 'catalog'
-    #feature_mode = 'catalog_z0'
+    feature_mode = 'catalog_z0'
     #feature_mode = 'catalog_mergers_noaform'
     #feature_mode = 'mrv'
     #feature_mode = 'mrvc'
@@ -72,8 +74,8 @@ def run(y_label_names, n_top_features=None):
     # if info_metric is not None:
     #     info_tag = f'_{info_metric}_n{n_top_features}'
     #fit_tag = '_list_nl9_bn'
-    model_tag = 'nn'
-    #model_tag = 'hgboost'
+    #model_tag = 'nn'
+    model_tag = 'hgboost'
     #model_tag = 'gboost'
     #model_tag = 'rf'
     #model_tag = 'tabnet'
