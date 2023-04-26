@@ -1,10 +1,10 @@
 #!/bin/bash
 ##SBATCH --job-name=gen_configs
-##SBATCH --job-name=halo_selector_tng100_Mmin10_nostruct
-##SBATCH --job-name=geo_scalar_featurizer_tng100_Mmin10_nstar1_bins10
-##SBATCH --job-name=scalar_featurizer_tng100_Mmin10_nstar1_bins10
+##SBATCH --job-name=halo_selector_tng100_Mmin10.25
+##SBATCH --job-name=geo_scalar_featurizer_tng100_Mmin10.25
+##SBATCH --job-name=scalar_featurizer_tng100_Mmin10.25_n10
 ##SBATCH --job-name=feature_importance_tng100_nstarmin10_mstellar
-#SBATCH --job-name=train_multi_geos_Mmin10
+#SBATCH --job-name=train_nn_multi_scalars_Mmin10.25_yerr0.05
 ##SBATCH --job-name=train_nn_m_stellar_catalog_z0_list_nl9
 ##SBATCH --job-name=train_nn_num_mergers_geos
 ##SBATCH --job-name=train_nn_j_stellar
@@ -14,11 +14,12 @@
 ##SBATCH --job-name=feature_info_MI
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=24
-#SBATCH --mem=60GB
+#SBATCH --cpus-per-task=48
+#SBATCH --mem=10GB
 #SBATCH --time=2:00:00
 
 # need somewhere >30 and <60 GB for train_nn.py
+# now only need 10GB for train_nn!
 # for scalar featurizer, >10 and <60
 cd ~
 overlay_ext3=/scratch/ksf293/overlay-50G-10M.ext3

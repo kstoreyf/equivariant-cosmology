@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+from torch.optim.lr_scheduler import CosineAnnealingLR
+
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, QuantileTransformer
 
 from fit import Fitter
@@ -67,7 +69,7 @@ class NeuralNet(nn.Module):
 # https://github.com/cptq/SignNet-BasisNet/blob/main/GraphPrediction/layers/mlp.py
 class NeuralNetList(nn.Module):
     def __init__(self, input_size, hidden_size=32, output_size=1, num_layers=6,
-                 use_bn=False, use_ln=False, dropout=0.2, activation_name='relu',
+                 use_bn=True, use_ln=False, dropout=0.5, activation_name='selu',
                  residual=False):
         super(NeuralNetList, self).__init__()
 
@@ -101,14 +103,19 @@ class NeuralNetList(nn.Module):
                 if use_ln: self.lns.append(nn.LayerNorm(hidden_size))
             self.lins.append(nn.Linear(hidden_size, output_size))
 
+        # initialization
+        for lin in self.lins:
+            nn.init.xavier_uniform_(lin.weight)
+            nn.init.zeros_(lin.bias)            
+
         self.use_bn = use_bn
         self.use_ln = use_ln
         self.dropout = dropout
         self.residual = residual
-        self.double()
-        # Q: what about initialization, like i was doing before?
 
-            
+        self.double()
+
+
     def forward(self, x):
         x_prev = x
         for i, lin in enumerate(self.lins[:-1]):
@@ -143,14 +150,17 @@ class NNFitter(Fitter):
                                         x_extra=self.x_extra_train,
                                         include_ones_feature=False
                                         )
-        self.scaler = MinMaxScaler() # TODO revisit !! 
+        self.scaler = QuantileTransformer(n_quantiles=100, output_distribution='normal', random_state=0)
+        #self.scaler = MinMaxScaler()
+        #self.scaler = StandardScaler() 
+
         self.scaler.fit(self.A_train)
         A_train_scaled = self.scaler.transform(self.A_train)
 
         self.dataset_train = DataSet(A_train_scaled, self.y_train, 
                                 y_var=self.y_uncertainties_train**2)
         self.data_loader_train = DataLoader(self.dataset_train, 
-                                          batch_size=32, shuffle=True,
+                                          batch_size=128, shuffle=True,
                                           worker_init_fn=seed_worker,
                                           num_workers=0)
 
@@ -222,13 +232,20 @@ class NNFitter(Fitter):
 
 
 
-    def train(self, max_epochs=100, learning_rate=0.0001, fn_model=None, save_at_min_loss=True):
+    def train(self, max_epochs=100, learning_rate=0.0001, fn_model=None, save_at_min_loss=True, patience=50):
         
+        self.model = NeuralNetList(self.input_size, hidden_size=self.hidden_size, output_size=self.output_size)
+
         #self.criterion = nn.MSELoss()
         self.criterion = nn.GaussianNLLLoss()
         # weight decay = 0.01
         # scheduled lr - cos decay, warmup
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), 
+                                          lr=learning_rate,
+                                          weight_decay=1e-2)
+        self.scheduler = CosineAnnealingLR(self.optimizer,
+                                    T_max=32, # Maximum number of iterations.
+                                    eta_min=1e-6) # Minimum learning rate.
 
         # Training loop
         self.loss_train = []
@@ -237,6 +254,7 @@ class NNFitter(Fitter):
         loss_valid_min = np.inf
         epoch_best = None
         state_dict_best = None
+        early_stopper = EarlyStopper(patience=patience, min_delta=0)
         for epoch_index in range(max_epochs):
             last_loss_train, last_loss_valid = self.train_one_epoch(epoch_index)
             #print(last_loss, loss_min)
@@ -248,6 +266,10 @@ class NNFitter(Fitter):
                 loss_valid_min = last_loss_valid
             self.loss_train.append(last_loss_train)
             self.loss_valid.append(last_loss_valid)
+            self.scheduler.step()
+            if early_stopper.early_stop(last_loss_valid):   
+                print("Stopping early because patience criterion hit")          
+                break
         
         print('Epoch best:', epoch_best)
         # revert to state dict for model with lowest loss
@@ -355,3 +377,20 @@ class DataSet(Dataset):
             return _x, _y, _y_var
         return _x, _y
 
+
+class EarlyStopper:
+    def __init__(self, patience=1, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.min_validation_loss = np.inf
+
+    def early_stop(self, validation_loss):
+        if validation_loss < self.min_validation_loss:
+            self.min_validation_loss = validation_loss
+            self.counter = 0
+        elif validation_loss > (self.min_validation_loss + self.min_delta):
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True
+        return False

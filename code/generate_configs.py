@@ -23,9 +23,9 @@ def halo_config(sim_name):
     sim_name_dark = f'{sim_name}-Dark'
 
     # halo params 
-    num_star_particles_min = 1
+    num_star_particles_min = 50
     num_gas_particles_min = 0
-    halo_logmass_min = 10
+    halo_logmass_min = 10.25
     halo_logmass_max = None
     halo_mass_difference_factor = 3
     subsample_frac = None
@@ -40,7 +40,7 @@ def halo_config(sim_name):
 
     # save info
     halo_dir = f'../data/halos/halos_{sim_name}'
-    halo_tag = '_Mmin10_nstar1'
+    halo_tag = '_Mmin10.25'
     fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
 
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
@@ -73,16 +73,22 @@ def halo_config(sim_name):
 def geo_config(sim_name):
 
     # halo info
-    halo_tag = '_Mmin10_nstar1'
+    halo_tag = '_Mmin10.25'
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
     # geo feature params
     # bins
     n_rbins = 10
-    r_edges = np.linspace(0, 1, n_rbins+1) # in units of r200
+    r_min, r_max = 0.0, 1.0
+    bin_width = (r_max - r_min)/n_rbins
+    print(bin_width)
+    r_edges = np.arange(r_min, r_max + bin_width, bin_width)
+    # round to nearest 0.01; careful, make sure want this!
+    r_edges = np.array([round(r,2) for r in r_edges])
+    #r_edges = np.linspace(0.0, 1.0, n_rbins+1) # in units of r200
     #r_edges_outsider200 = np.array([2, 3, 10])
     #r_edges = np.concatenate((r_edges, r_edges_outsider200))
-    print(list(r_edges))
+    print(r_edges)
     r_units = 'r200m'
     # other
     x_order_max = 2
@@ -92,7 +98,7 @@ def geo_config(sim_name):
     # save info
     geo_dir = f'../data/geometric_features/geometric_features_{sim_name}'
     #geo_tag = '_gx1_gv1'
-    geo_tag = '_bins10'
+    geo_tag = ''
     fn_geo_features = f'{geo_dir}/geometric_features_{sim_name}{halo_tag}{geo_tag}.npy'
     fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
 
@@ -120,11 +126,11 @@ def geo_config(sim_name):
 def scalar_config(sim_name):
 
     # halo info
-    halo_tag = '_Mmin10_nstar1'
+    halo_tag = '_Mmin10.25'
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
     # geo info
-    geo_tag = '_bins10'
+    geo_tag = ''
     fn_geo_config = f'{config_dir}/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
 
     # scalar parameters
@@ -133,10 +139,12 @@ def scalar_config(sim_name):
     v_order_max = 2
     #n_groups_rebin = [[0,1,2], [3,4,5,6,7], [8,9,10]]
     #n_groups_rebin = [[0], [1,2], [3,4,5,6,7]]
-    #n_groups_rebin = [[0,1], [2,3], [4,5], [6,7], [8,9]]
-    n_groups_rebin = [[0], [1,2,3], [4,5,6,7,8,9]]
+    #n_groups_rebin = [[0,1], [2,3], [4,5], [6,7], [8,9]] # '_n5'
+    #n_groups_rebin = [[0], [1,2,3], [4,5,6,7,8,9]] # '_n3'
     #n_groups_rebin = [[8,9,10]]
     #n_groups_rebin = [[0,1], [2,3], [4,5], [6,7], [8,9,10]]
+    n_groups_rebin = [[i] for i in range(10)] # '_n10'
+    print(n_groups_rebin)
     eigenvalues_not_trace = True
     elementary_scalars_only = True
     mrv_names_for_rescaling = ['m200m', 'r200m', 'v200m']
@@ -146,7 +154,8 @@ def scalar_config(sim_name):
     scalar_dir = f'../data/scalar_features/scalar_features_{sim_name}'
     #scalar_tag = f'_x{x_order_max}_v{v_order_max}_n5'
     #scalar_tag = '_elementary'
-    scalar_tag = '_n3'
+    #scalar_tag = '_n3'
+    scalar_tag = '_n10'
     fn_scalar_features = f'{scalar_dir}/scalar_features{sim_name}{halo_tag}{geo_tag}{scalar_tag}.npy'
     fn_scalar_config = f'{config_dir}/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
 

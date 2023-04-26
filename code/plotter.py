@@ -310,6 +310,7 @@ def plot_pred_vs_property_hist(ax, x_label_name, y_label_name, x_property, y_pre
     if weight_by_dex:
         weight /= bin_width 
     weights = np.full(y_pred.shape, weight)
+
     ax.hist2d(x_property, y_pred, bins=[bins_x, bins_y], cmap=cmap, cmin=weight, weights=weights)
 
     # labels & adjustments
@@ -408,16 +409,21 @@ def plot_pred_vs_true_hist(ax, y_label_name, y_true, y_pred, cmap,
                       text_results='', title=None, save_fn=None,
                       colorbar_fig=None, weight=1, weight_by_dex=False,
                       colorbar_label='', x_lim=None, y_lim=None):
-    
+
+    # if x_lim is None:
+    #     x_lim = utils.lim_dict[x_label_name]    
     if y_lim is None:
         y_lim = utils.lim_dict[y_label_name]
-    bin_width = (y_lim[1]-y_lim[0])/100
-    bins = np.arange(y_lim[0], y_lim[1]+bin_width, bin_width)
+    bin_width_y = (y_lim[1]-y_lim[0])/100
+    bins_y = np.arange(y_lim[0], y_lim[1]+bin_width_y, bin_width_y)
+    # bin_width_x = (x_lim[1]-x_lim[0])/100
+    # bins_x = np.arange(x_lim[0], x_lim[1]+bin_width_x, bin_width_x)
 
     if weight_by_dex:
-        weight /= bin_width 
+        #weight /= bin_width_x*bin_width_y
+        weight /= bin_width_y*bin_width_y
     weights = np.full(y_true.shape, weight)
-    h = ax.hist2d(y_true, y_pred, bins=bins, cmap=cmap, cmin=weight, weights=weights)
+    h = ax.hist2d(y_true, y_pred, bins=(bins_y, bins_y), cmap=cmap, cmin=weight, weights=weights)
         
     # true line
     true_line = np.linspace(*y_lim)
@@ -815,8 +821,9 @@ def plot_errors_vs_property(ax, x_label_name, y_label_name, x_property, y_true, 
     #     ax.set_xlim(x_lim)
 
     ax.set_xlim(x_bins_avg[0], x_bins_avg[-1])
+    ax.set_ylim(0)
     ax.axhline(0, color='grey')
-
+    
 
 def plot_multi_panel_gal_props(x_label_name, y_label_name_arr, x_property, y_true_arr, y_pred_arr,
                       text_results_arr=[], title=None, save_fn=None,
@@ -865,7 +872,7 @@ def plot_multi_panel_gal_props_errors(x_label_name, y_label_name_arr, x_property
 
     fig, axarr = plt.subplots(nrows=n_labels, ncols=4, figsize=(24, n_labels*5),
                               gridspec_kw={'width_ratios': [1, 1, 1, 1]})
-    plt.subplots_adjust(hspace=0.3, wspace=0.5)
+    plt.subplots_adjust(hspace=0.3, wspace=0.7)
     
     inferno_r = matplotlib.cm.inferno_r
     cmap = utils.shiftedColorMap(inferno_r, start=0.1, stop=1.0)

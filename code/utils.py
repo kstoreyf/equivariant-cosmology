@@ -32,7 +32,7 @@ label_dict = {'m_200m': r'log($M_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
               'num_mergers': 'log(number of mergers)',
               }
 
-lim_dict = {'m_200m': (10.5, 14),
+lim_dict = {'m_200m': (10, 14),
             'm_stellar': (7, 12),
             'ssfr1': (-15,-8),
             'r_stellar': (-1,2),
@@ -40,7 +40,7 @@ lim_dict = {'m_200m': (10.5, 14),
             'gband_minus_iband': (0.0, 1.5),
             'j_stellar': (0.5, 4.5),
             'bhmass': (4.5, 10.5),
-            'bhmass_per_mstellar': (-4.5, -1),
+            'bhmass_per_mstellar': (-5.5, -1),
             'num_mergers': (0.5, 4.5),
             }
 
@@ -415,13 +415,13 @@ def get_y_vals(y_label_name, sim_reader, mass_multiplier=1e10, halo_tag=''):
     
     elif y_label_name=='bhmass':
         bhmass = y_vals
-        i_zerobhms = abs(bhmass_per_mstellar) < tol
+        tol = 1e-10
+        i_zerobhms = abs(bhmass) < tol
         bh_zero = 8e-6 #?? min in training set is 8e-5
-        bhmass[i_zerobhms] = i_zerobhms
-
+        bhmass[i_zerobhms] = bh_zero
         return np.log10(bhmass)
 
-    elif y_label_name.startswith('bhmass_per_mstellar'):
+    elif y_label_name=='bhmass_per_mstellar':
         bhmass_per_mstellar = y_vals
         bhmass_per_mstellar = bhmass_per_mstellar.astype(float)
         tol = 1e-10
@@ -458,7 +458,25 @@ def get_y_uncertainties(y_label_name, sim_reader=None, y_vals=None, log_mass_shi
         m_stellar = np.array([halo.catalog_properties['mass_hydro_subhalo_star'] for halo in sim_reader.dark_halo_arr])
         y_uncertainties = get_uncertainties_genel2019(y_label_name, np.log10(m_stellar)+log_mass_shift,
                                                               sim_name=sim_reader.sim_name)
+        # the fact that some ys are in units of 10^10 doesnt matter bc its just a constant
         return y_uncertainties            
+
+    elif y_label_name=='bhmass_per_mstellar':
+        assert sim_reader is not None, "Must pass sim_reader!"
+        sim_reader.add_catalog_property_to_halos('mass_hydro_subhalo_star')
+        m_stellar = np.array([halo.catalog_properties['mass_hydro_subhalo_star'] for halo in sim_reader.dark_halo_arr])
+        y_uncertainties_bhmass = get_uncertainties_genel2019('bhmass', np.log10(m_stellar)+log_mass_shift,
+                                                              sim_name=sim_reader.sim_name)
+        y_uncertainties_mstellar = get_uncertainties_genel2019('m_stellar', np.log10(m_stellar)+log_mass_shift,
+                                                              sim_name=sim_reader.sim_name)     
+
+        # propogation of error - use subtraction formula bc working in logspace
+        # i think this is ok because both bhmass and mstellar in 10^10 units...
+        y_uncertainties = np.sqrt((y_uncertainties_bhmass)**2 + (y_uncertainties_mstellar)**2)
+
+                                                                                                   
+        return y_uncertainties
+
 
     elif y_label_name.startswith('a_mfrac') or y_label_name=='Mofa':
         assert idx_train is not None, "Must pass idx_train to get uncertainty for Mofa or a_mfrac!"
@@ -479,6 +497,8 @@ def get_y_uncertainties(y_label_name, sim_reader=None, y_vals=None, log_mass_shi
         return y_uncertainties
 
     else:
+        # this will just not do anything, bc using them as delta_y/sigma_2, or sample_weight
+        #return np.ones(len(y_vals)) #TODO what should this be??                                 
         return y_vals*0.05 #TODO what should this be??                                 
 
 
@@ -810,10 +830,8 @@ def get_butterfly_error(x_label_name, y_label_name, halo_logmass_min=10.8, n_bin
         y_label_name = 'bhmass'
         property_divide_by = 'm_stellar'
 
-    # columns: log10(Subs_massTot/Msun),log10(Subs_mass(5)/Msun),log10(Subs_HalfmassRadType(5)/kpc),log10(SFR1Gyr/(Msun/yr)),g-r[mag],log10(Subs_BHMass/Msun),log10(Subs_SFR/(Msun/yr)),log10(Subs_mass(1)/Msun))
-    col_names = ['m_200m', 'm_stellar', 'r_stellar', 'SFR1', 'gband_minus_rband', 'bhmass', 'SFR', 'm_??']
-    i_x = col_names.index(x_label_name)
-    i_y = col_names.index(y_label_name)
+    # columns: index,log10(Subs_massTot/Msun),log10(Subs_mass(5)/Msun),log10(Subs_HalfmassRadType(5)/kpc),log10(SFR1Gyr/(Msun/yr)),g-i[mag],log10(Subs_BHMass/Msun),log10(Subs_SFR/(Msun/yr)),log10(Subs_mass(1)/Msun)),log10(j_stellar/(kpc*km/s)))
+    col_names = ['index','m_200m', 'm_stellar', 'r_stellar', 'SFR1', 'gband_minus_iband', 'bhmass', 'SFR', 'm_gas', 'j_stellar']
 
     # Limit to shadow sources in our mass range
     m200_1 = arr_shadow1[:,col_names.index('m_200m')]
@@ -826,8 +844,16 @@ def get_butterfly_error(x_label_name, y_label_name, halo_logmass_min=10.8, n_bin
     arr_shadow2 = arr_shadow2[i_masscut]
 
     # compute pairwise diffs
+    i_x = col_names.index(x_label_name)
     x1 = arr_shadow1[:,i_x]
     x2 = arr_shadow2[:,i_x]
+    x_mean = np.log10(0.5*(10**x1 + 10**x2))
+    x_bins = np.linspace(np.min(x_mean), np.max(x_mean) + 0.01, n_bins)
+
+    if y_label_name not in col_names:
+        return x_bins, np.full(n_bins-1, np.nan)
+
+    i_y = col_names.index(y_label_name)
     y1 = arr_shadow1[:,i_y]
     y2 = arr_shadow2[:,i_y]
     # some values are -inf (in log, so zero.) assigning small val for now
@@ -840,9 +866,6 @@ def get_butterfly_error(x_label_name, y_label_name, halo_logmass_min=10.8, n_bin
         y2 -= arr_shadow1[:,col_names.index(property_divide_by)]
 
     # bin the results
-    print("Assuming y is logscale! (CHECK)")
-    x_mean = np.log10(0.5*(10**x1 + 10**x2))
-    x_bins = np.linspace(np.min(x_mean), np.max(x_mean) + 0.01, n_bins)
     stdevs_binned = []
     for i in range(len(x_bins)-1):
         i_inbin = (x_mean >= x_bins[i]) & (x_mean < x_bins[i+1])

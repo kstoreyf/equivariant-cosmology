@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 import utils
 from neural_net import NNFitter, NeuralNet, NeuralNetList, seed_worker
-from regressor import BoosterFitter, RFFitter, TabNetFitter
+from regressor import BoosterFitter, XGBoosterFitter, RFFitter, TabNetFitter
 from read_halos import SimulationReader
 
 
@@ -25,8 +25,8 @@ def main():
     #y_label_names = ['j_stellar']
     #y_label_names = ['gband']
     #y_label_names = ['num_mergers']
-    #y_label_names = ['m_stellar', 'ssfr1', 'r_stellar', 'gband_minus_iband', 'bhmass_per_mstellar', 'j_stellar']
-    y_label_names = ['m_stellar', 'ssfr1', 'r_stellar', 'bhmass_per_mstellar']
+    y_label_names = ['m_stellar', 'ssfr1', 'r_stellar', 'gband_minus_iband', 'bhmass_per_mstellar', 'j_stellar']
+    #y_label_names = ['m_stellar', 'ssfr1', 'r_stellar', 'bhmass_per_mstellar']
     #y_label_names = ['a_mfrac_n19']
     #y_label_names = ['a_mfrac_0.75']
     #y_label_names = ['a_mfrac_n39']
@@ -42,8 +42,8 @@ def run(y_label_names, n_top_features=None):
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
     #halo_tag = '_Mmin10_nstar1'
-    halo_tag = '_Mmin10'
-    geo_tag = '_bins10'
+    halo_tag = '_Mmin10.25'
+    geo_tag = ''
     scalar_tag = '_n3'
     # geo_tag = None
     # scalar_tag = None
@@ -55,18 +55,25 @@ def run(y_label_names, n_top_features=None):
     info_metric = None
 
     # fit parameters
-    #max_epochs = 1000
-    #lr = 5e-5
-    max_epochs = 300
-    lr = 0.1
+    max_epochs = 1000
+    lr = 5e-5
     hidden_size = 128
+    # max_epochs = 300
+    # lr = 0.1
+    # hidden_size = None
+    # max_epochs = 1000
+    # lr = 0.02
+    # hidden_size = None
+    # max_epochs = None
+    # lr = 0.02
+    # hidden_size = None
 
-    #feature_mode = 'scalars'
+    feature_mode = 'scalars'
     #feature_mode = 'geos'
     #feature_mode = 'catalog'
     #feature_mode = 'catalog_z0'
     #feature_mode = 'catalog_mergers_noaform'
-    feature_mode = 'mrv'
+    #feature_mode = 'mrv'
     #feature_mode = 'mrvc'
 
     y_str = '_'.join(y_label_names)
@@ -76,14 +83,16 @@ def run(y_label_names, n_top_features=None):
     # if info_metric is not None:
     #     info_tag = f'_{info_metric}_n{n_top_features}'
     #fit_tag = '_list_nl9_bn'
-    #model_tag = 'nn'
-    model_tag = 'hgboost'
+    model_tag = 'nn'
+    #model_tag = 'hgboost'
     #model_tag = 'gboost'
     #model_tag = 'rf'
+    #model_tag = 'xgboost'
     #model_tag = 'tabnet'
     #fit_tag = '_nest300'
     #fit_tag = '_scaleqt100normal'
-    fit_tag = ''
+    fit_tag = '_yerr0.05'
+    #fit_tag = '_unweighted'
     #fit_tag = '_list_nl6'
     if feature_mode=='scalars':
         fit_tag += geo_tag
@@ -91,7 +100,14 @@ def run(y_label_names, n_top_features=None):
     if feature_mode=='geos':
          fit_tag += geo_tag       
 
-    fit_tag += f'_{y_str}_{model_tag}_{feature_mode}_epochs{max_epochs}_lr{lr}_hs{hidden_size}'
+    fit_tag += f'_{y_str}_{model_tag}_{feature_mode}'
+    if model_tag=='nn' or model_tag=='hgboost':
+        fit_tag += f'_epochs{max_epochs}_lr{lr}'
+    if model_tag=='nn':
+        fit_tag += f'_hs{hidden_size}'
+    if model_tag=='xgboost':
+        fit_tag += f'_lr{lr}'
+
     if frac_subset != 1.0:
         fit_tag += f'_f{frac_subset}'
     if info_metric is not None:
@@ -211,6 +227,8 @@ def run(y_label_names, n_top_features=None):
         nnfitter = NNFitter()
     elif model_tag=='hgboost' or model_tag=='gboost':
         nnfitter = BoosterFitter()
+    elif model_tag=='xgboost':
+        nnfitter = XGBoosterFitter()
     elif model_tag=='rf':
         nnfitter = RFFitter()
     elif model_tag=='tabnet':
@@ -254,14 +272,13 @@ def train(nnfitter, hidden_size=128, max_epochs=250, learning_rate=0.00005,
     print("training:")
     print(hidden_size, max_epochs, learning_rate)
 
-    input_size = nnfitter.A_train.shape[1]
+    nnfitter.input_size = nnfitter.A_train.shape[1]
     if nnfitter.y_train.ndim==1:
-        output_size = 1
+        nnfitter.output_size = 1
     else:
-        output_size = nnfitter.y_train.shape[-1]
-    print("Output size:", output_size)
-    hidden_size = hidden_size
-    nnfitter.model = NeuralNetList(input_size, hidden_size=hidden_size, output_size=output_size)
+        nnfitter.output_size = nnfitter.y_train.shape[-1]
+    print("Output size:", nnfitter.output_size)
+    nnfitter.hidden_size = hidden_size
     nnfitter.train(max_epochs=max_epochs, learning_rate=learning_rate,
                    fn_model=fn_model)
 

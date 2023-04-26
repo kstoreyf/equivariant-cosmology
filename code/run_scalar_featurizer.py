@@ -14,13 +14,13 @@ def run():
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
-    halo_tag = '_Mmin10_nstar1'
-    geo_tag = '_bins10'
+    halo_tag = '_Mmin10.25'
+    geo_tag = ''
     #geo_tag = '_gx1_gv1'
     #scalar_tag = '_n01'
     #scalar_tag = '_x4_v4_n5'
     #scalar_tag = '_elementary_n3'
-    scalar_tag = '_n3'
+    scalar_tag = '_n10'
     fn_scalar_config = f'../configs/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
 
     with open(fn_scalar_config, 'r') as file:
