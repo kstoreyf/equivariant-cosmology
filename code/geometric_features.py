@@ -20,6 +20,14 @@ class GeometricFeaturizer:
             self.sim_reader.load_sim_dark_halos()
             self.sim_reader.add_catalog_property_to_halos(r_units)
 
+        fn_halos = f'../data/halo_tables/halos_{sim_name}.fits'
+        print(f"Loading halo table {fn_halos}")
+        tab_halos = Table.read(fn_halos)
+
+        for i, idx_halo_dark in enumerate(tab_halos['idx_halo_dark']):
+            halo = DarkHalo(idx_halo_dark, sim_reader.base_path_dark, sim_reader.snap_num, sim_reader.box_size)
+
+
         print("Computing geometric features for all dark halos")
         for dark_halo in self.sim_reader.dark_halo_arr:
             x_halo, v_halo = dark_halo.load_positions_and_velocities(shift=True, center_mode=center_halo)
@@ -85,12 +93,48 @@ class GeometricFeaturizer:
         return geo_features_halo
 
 
-    def save_features(self, fn_geo_features):
-        np.save(fn_geo_features, self.geo_feature_arr)
+    def save_features(self, fn_geo_features, overwrite=True):
+
+        # get geo names from first halo; should be same for all halos
+        # these are the columns; number N_geos
+        geo_names = [geo_name(g) for g in self.geo_feature_arr[0]]
+        # vals is a 2nd array of (N_halos, N_geos)
+        vals = [[g.value for g in geos] for geos in self.geo_feature_arr]
+        
+        tab_geos = Table(vals, names=geo_names)
+        tab_geos.write(fn_geo_features, overwrite=overwrite)
+        print(f"Wrote table to {fn_select}")
+        
+        #np.save(fn_geo_features, self.geo_feature_arr)
+        return tab_geos
+
+
+    def save_geo_info(self, fn_geo_info, overwrite=True):
+
+        # get geos for first halo; same for all halos
+        geos = self.geo_feature_arr[0]
+        geo_names = [geo_name(g) for g in geos]        
+        m_orders = [g.m_order for g in geos]
+        x_orders = [g.x_order for g in geos]
+        v_orders = [g.v_order for g in geos]
+        ns = [g.n for g in self.geo_feature_arr]
+        hermitians = [g.hermitian for g in self.geo_feature_arr]
+        modifications = [g.modification for g in self.geo_feature_arr]
+        
+        tab_geos = Table([geo_names, m_orders, ],
+                          names=('geo_name', 'value'))
+        tab_geos.write(fn_geo_features, overwrite=overwrite)
+        print(f"Wrote table to {fn_select}")
+        
+        #np.save(fn_geo_features, self.geo_feature_arr)
+        return tab_geos
 
 
     def load_features(self, fn_geo_features):
-        self.geo_feature_arr = np.load(fn_geo_features, allow_pickle=True)
+
+        tab_geos = Table.read(fn_geo_features)
+        #self.geo_feature_arr = np.load(fn_geo_features, allow_pickle=True)
+        return tab_geos
 
 
 class GeometricFeature:

@@ -2,6 +2,9 @@ import h5py
 import numpy as np
 import os
 import sys
+from astropy.table import Table
+import astropy.constants as const
+import astropy.units as u
 
 sys.path.insert(1, '/home/ksf293/external')
 import illustris_python as il
@@ -27,25 +30,22 @@ class DarkHalo:
     def set_random_int(self, random_int):
         self.random_int = random_int
 
-    def load_positions_and_velocities(self, shift=True, center_mode='x_minPE'):
+    def load_positions_and_velocities(self, shift=True, pos_center=None):
         halo_dark_dm = il.snapshot.loadHalo(self.base_path,self.snap_num,self.idx_halo_dark,'dm')
         x_data_halo = halo_dark_dm['Coordinates'] #c kpc/h
         v_data_halo = halo_dark_dm['Velocities']
 
         if shift:
-            center_options = ['x_com','x_minPE','x_grouppos']
-            assert center_mode in center_options, f"Center choice must be one of {center_options}!"
-            assert center_mode in self.catalog_properties, f"Must first add center mode {center_mode} to catalog property dict!"
-            x_data_halo = self.shift_x(x_data_halo, center_mode)
+            assert pos_center is not None, "Must pass pos_center to shift!"
+            x_data_halo = self.shift_x(x_data_halo, pos_center)
             v_data_halo = self.shift_v(v_data_halo)
 
         return x_data_halo, v_data_halo
 
     # for now, masses of all particles are assumed to be same
-    def shift_x(self, x_arr, center_mode):
-        x_shift = self.catalog_properties[center_mode]
+    def shift_x(self, x_arr, pos_center):
         # Subtract off shift for each halo, wrapping around torus
-        x_arr_shifted = self.shift_points_torus(x_arr, x_shift)
+        x_arr_shifted = self.shift_points_torus(x_arr, pos_center)
         return x_arr_shifted
 
     def shift_points_torus(self, points, shift):
@@ -60,24 +60,39 @@ class DarkHalo:
         self.catalog_properties[property_name] = value
 
     # don't actually use! was for checks
-    def compute_mrv_200m(self, density_mean, m_dmpart_dark, mass_multiplier, center_mode='x_minPE'):
+    def compute_mrv_200m_fof(self, density_mean, m_dmpart_dark, log_mass_shift, pos_center, r_max=None):
         number_density_mean = density_mean / m_dmpart_dark
         factor = 200
 
-        x_data_halo, v_data_halo = self.load_positions_and_velocities(shift=True, center_mode=center_mode)
+        x_data_halo, v_data_halo = self.load_positions_and_velocities(shift=True, pos_center=pos_center)
 
         dists_from_center = np.linalg.norm(x_data_halo, axis=1)
         x_rms = np.sqrt(np.mean(dists_from_center**2))
+        if r_max is None:
+            r_max = 2*x_rms
+        r_min = 0.1*x_rms
 
-        x_bin_edges = np.linspace(0.5*x_rms, 10*x_rms, 500)
+        #print(r_max)
+        #print(np.min(dists_from_center), np.max(dists_from_center))
+        #print(x_rms)
+        # Loop backwards because we expect it to be close to r200
+        #x_bin_edges = np.arange(r_max, r_min, -0.01)
+        x_bin_edges = np.linspace(r_max, r_min, 1000)
         for i in range(len(x_bin_edges)):
             n_part_inside_edge = np.sum(dists_from_center < x_bin_edges[i])
             vol = 4/3*np.pi*(x_bin_edges[i]**3)
             number_density = n_part_inside_edge / vol 
-            if number_density < 200*number_density_mean:
-                self.catalog_properties['r200mean'] = x_bin_edges[i]
-                self.catalog_properties['m200mean'] = n_part_inside_edge * m_dmpart_dark
+            #print(number_density)
+            if number_density > factor*number_density_mean:
+                #self.catalog_properties['r200mean'] = x_bin_edges[i]
+                r200m_fof = x_bin_edges[i]
+                #print(r200m_fof)
+                #self.catalog_properties['m200mean'] = n_part_inside_edge * m_dmpart_dark
+                m200m_fof = np.log10(n_part_inside_edge * m_dmpart_dark) + log_mass_shift
                 break
+        #print(i)
+        if i==0 or i==len(x_bin_edges)-1:
+            raise ValueError(f"Did not find R200 properly! (idx_dark_halo={self.idx_halo_dark}, i={i}), r_max={r_max}, r_min={r_min}, number_density={number_density}, ref num dens={factor*number_density_mean}")
 
         import astropy
         import astropy.constants as const
@@ -86,7 +101,8 @@ class DarkHalo:
         # m200m really in Msun/h and r200m in ckpc/h; the h's cancel out, and the c is comoving meaning
         # we need a factor of the scale factor, but here at z=0 just 1. if go to diff z need to 
         # make sure to include!
-        self.catalog_properties['v200mean'] = np.sqrt(G * (mass_multiplier*self.catalog_properties['m200mean']*u.Msun) / (self.catalog_properties['r200mean']*u.kpc)).value
+        v200m_fof = np.sqrt(G * (10**m200m_fof*u.Msun) / (r200m_fof*u.kpc)).value
+        return m200m_fof, r200m_fof, v200m_fof
 
 
     def compute_MXV_rms(self, center_mode, m_dmpart_dark):
@@ -139,8 +155,7 @@ class DarkHalo:
 class SimulationReader:
 
     # TODO: replace snap_num_str with proper zfill (i think? check works)
-    def __init__(self, base_dir, sim_name, sim_name_dark, snap_num_str,
-                 mass_multiplier=1e10):
+    def __init__(self, base_dir, sim_name, sim_name_dark, snap_num_str):
         self.base_dir = base_dir
         self.sim_name = sim_name
         self.sim_name_dark = sim_name_dark
@@ -151,7 +166,8 @@ class SimulationReader:
         self.snap_num_str = snap_num_str
         self.snap_num = int(self.snap_num_str)
         self.halo_arr = []
-        self.mass_multiplier = mass_multiplier
+        self.mass_multiplier = 1e10
+        self.log_mass_shift = 10
 
         with h5py.File(f'{self.base_path_dark}/snapdir_{self.snap_num_str}/snap_{self.snap_num_str}.0.hdf5','r') as f:
             header = dict( f['Header'].attrs.items() )
@@ -230,114 +246,229 @@ class SimulationReader:
         i_with_SAM_match = np.in1d(idxs_halo_dark, idxs_halo_dark_SAM)
         print(f'Keeping {np.sum(i_with_SAM_match)}/{len(i_with_SAM_match)} halos with SAM matches')
         return i_with_SAM_match
-        
 
-    def select_halos(self, num_star_particles_min, num_gas_particles_min, halo_logmass_min, 
-                     halo_logmass_max, halo_mass_difference_factor, subsample_frac,
-                     subhalo_mode='most_massive', must_have_SAM_match=True,
+
+
+    def construct_halo_table(self, fn_halos, overwrite=False):
+
+        # Construct main halo table, above a conservative mass cut for M200_mean
+        # Only require that dark halos have >=1 subhalo, and a hydro halo match
+        halo_logmass_min = 10
+
+        print(f"Starting with all {len(self.halos_dark)} halos in {self.sim_name}")
+
+        # Make mass cut
+        i_select = np.log10(self.halos_dark['Group_M_Mean200']) + self.log_mass_shift >= halo_logmass_min 
+        print(f"After mass cut: N = {np.sum(i_select)}")
+
+        # Cut out halos with no subhalos
+        # (These are the indices of the most massive subhalo in the FOF halo; -1 means no subhalos)
+        self.halos_dark['GroupFirstSub'] = self.halos_dark['GroupFirstSub'].astype('int32')
+        i_has_subhalos = self.halos_dark['GroupFirstSub'] >= 0
+        i_select = i_select & i_has_subhalos
+        print(f"After no-subhalos cut: N = {np.sum(i_select)}")
+
+        # Cut out halos with no match in hydro 
+        #print(self.halos_dark['GroupFirstSub'])
+        print(len(self.halos_dark['GroupFirstSub']))
+        print(len(self.subhalo_dark_to_full_dict.keys()))
+        print(self.halos_dark['GroupFirstSub'][:10])
+        print(list(self.subhalo_dark_to_full_dict.keys())[:10])
+        i_has_hydro_match = np.isin(self.halos_dark['GroupFirstSub'], list(self.subhalo_dark_to_full_dict.keys()))
+        print(np.sum(i_has_hydro_match))
+        i_select = i_select & i_has_hydro_match
+        print(f"After no-hydro-match cut: N = {np.sum(i_select)}")
+
+        # Get indices for halos and subhalos of selected objects
+        # Note that idxs are the indices into the relevant info arrays! 
+        idxs_halos_dark = self.idxs_halos_dark_all[i_select]
+        idxs_subhalos_dark = self.halos_dark['GroupFirstSub'][i_select]
+
+        # This is the index of the hydro subhalo that is the twin of the largest subhalo in the dark halo
+        idxs_subtwins_hydro = [self.subhalo_dark_to_full_dict[idx] for idx in idxs_subhalos_dark]
+        # This is that hydro subhalo's parent halo in the hydro sim
+        idxs_halos_hydro = [self.subhalos_hydro['SubhaloGrNr'][idx] for idx in idxs_subtwins_hydro]
+
+        tab_halos = Table([idxs_halos_dark, idxs_subhalos_dark, idxs_subtwins_hydro, idxs_halos_hydro], 
+                    names=('idx_halo_dark', 'idx_subhalo_dark', 'idx_subhalo_hydro', 'idx_halo_hydro'))
+        tab_halos.write(fn_halos, overwrite=overwrite)
+        print(f"Wrote table to {fn_halos}")
+        return tab_halos
+
+
+    def log_m(self, m_tng_units):
+        return np.log10(m_tng_units) + self.log_mass_shift
+
+
+    def add_properties_dark(self, fn_halos, overwrite=True):
+
+        print(f"Loading halo table {fn_halos}")
+        tab_halos = Table.read(fn_halos)
+
+        print("Adding dark halo & subhalo properties")
+        idxs_halos_dark = tab_halos['idx_halo_dark']
+        idxs_subhalos_dark = tab_halos['idx_subhalo_dark']
+
+        ### M, R, V 200 mean
+        tab_halos['m200m'] = self.log_m(self.halos_dark['Group_M_Mean200'][idxs_halos_dark])
+        tab_halos['r200m'] = self.halos_dark['Group_R_Mean200'][idxs_halos_dark]
+        G = const.G.to('(kpc * km**2)/(Msun * s**2)')
+        # m200m in Msun/h and r200m in ckpc/h; the h's cancel out, and the c is comoving meaning
+        # we need a factor of the scale factor, but here at z=0 just 1. if go to diff z need to 
+        # make sure to include!
+        v200m = np.sqrt(G * ((self.mass_multiplier * self.halos_dark['Group_M_Mean200'][idxs_halos_dark])*u.Msun) / (self.halos_dark['Group_R_Mean200'][idxs_halos_dark]*u.kpc))
+        tab_halos['v200m'] = v200m.value
+
+        ### positions
+        tab_halos['x_com'] = self.halos_dark['GroupCM'][idxs_halos_dark]
+        tab_halos['x_grouppos'] = self.halos_dark['GroupCM'][idxs_halos_dark]
+        tab_halos['x_minPE'] = self.subhalos_dark['SubhaloPos'][idxs_subhalos_dark]
+
+        ### subhalo spin 
+        spin_x, spin_y, spin_z = self.subhalos_dark['SubhaloSpin'][idxs_subhalos_dark].T
+        tab_halos['spin_subhalo'] = np.sqrt(spin_x**2 + spin_y**2 + spin_z**2)
+
+        tab_halos.write(fn_halos, overwrite=overwrite)
+
+
+    def add_properties_hydro(self, fn_halos, overwrite=True):
+
+        print(f"Loading halo table {fn_halos}")
+        tab_halos = Table.read(fn_halos)
+
+        print("Adding hydro halo & subhalo properties")
+        idxs_halos_hydro = tab_halos['idx_halo_hydro']
+        idxs_subhalos_hydro = tab_halos['idx_subhalo_hydro']
+
+        ### Masses, radii, number
+        # TODO: what to do about zeros?? letting them fail for now, get -infs.
+        tab_halos['m200m_hydro'] = self.log_m(self.halos_hydro['Group_M_Mean200'][idxs_halos_hydro])
+        tab_halos['mstellar'] = self.log_m(self.subhalos_hydro['SubhaloMassType'][:,self.ipart_star][idxs_subhalos_hydro])
+        tab_halos['rstellar'] = self.subhalos_hydro['SubhaloHalfmassRadType'][:,self.ipart_star][idxs_subhalos_hydro]
+        tab_halos['mgas'] = self.log_m(self.subhalos_hydro['SubhaloMassType'][:,self.ipart_gas][idxs_subhalos_hydro])
+        tab_halos['mbh'] = self.log_m(self.subhalos_hydro['SubhaloBHMass'][idxs_subhalos_hydro])
+        tab_halos['mbh_per_mstellar'] = tab_halos['mbh'] - tab_halos['mstellar']
+        tab_halos['npartstellar'] = self.subhalos_hydro['SubhaloLenType'][:,self.ipart_star][idxs_subhalos_hydro]
+        tab_halos['npartgas'] = self.subhalos_hydro['SubhaloLenType'][:,self.ipart_gas][idxs_subhalos_hydro]
+
+        ### Star formation
+        tab_halos['sfr'] = self.subhalos_hydro['SubhaloSFR'][idxs_subhalos_hydro]
+        with h5py.File(f'{self.base_dir}/{self.sim_name}/postprocessing/star_formation_rates.hdf5', 'r') as f: 
+            idxs_subhalos_hydro_sfrfile = f[f'Snapshot_{self.snap_num}']['SubfindID']
+            sfrs1 = f[f'Snapshot_{self.snap_num}']['SFR_MsunPerYrs_in_all_1000Myrs']
+            idx_subhalo_to_sfr1 = dict(zip(idxs_subhalos_hydro_sfrfile, sfrs1))
+            tab_halos['sfr1'] = [idx_subhalo_to_sfr1[idx] if idx in idx_subhalo_to_sfr1 else np.nan for idx in idxs_subhalos_hydro]
+
+        ### Photometry and colors
+        # 2nd dim columns: sdss_u, sdss_g, sdss_r, sdss_i, sdss_z, wfc_acs_f606w, des_y, jwst_f150w
+        # 3rd dimension is viewing angles, just take first for now (0)
+        phot_file = f'{self.tng_path_hydro}/postprocessing/stellar_photometry/Subhalo_StellarPhot_p07c_cf00dust_res_conv_ns1_rad30pkpc_{self.snap_num_str}.hdf5'
+        f_phot = h5py.File(phot_file)
+        phot = np.array(f_phot['Subhalo_StellarPhot_p07c_cf00dust_res_conv_ns1_rad30pkpc'])
+        tab_halos['gband'] = phot[idxs_subhalos_hydro,1,0]
+        tab_halos['gband_minus_iband'] = tab_halos['gband'] - phot[idxs_subhalos_hydro,3,0]
+
+        ### Angular momentum, j_stellar
+        fn_stellar = f'{self.tng_path_hydro}/postprocessing/circularities_aligned_allstars_L75n1820TNG099.hdf5'
+        f_stellar = h5py.File(fn_stellar)
+        j_stellar_all = np.array(f_stellar['SpecificAngMom']).flatten()
+        tab_halos['jstellar'] = j_stellar_all[idxs_subhalos_hydro]
+
+        tab_halos.write(fn_halos, overwrite=overwrite)
+
+
+
+    def add_MRV_dark(self, fn_halos, overwrite=True):
+
+        print(f"Loading halo table {fn_halos}")
+        tab_halos = Table.read(fn_halos)
+
+        print("Adding dark halo MRV mean 200 properties")
+        idxs_halos_dark = tab_halos['idx_halo_dark']
+
+        mean_density = self.get_mean_density_from_header()
+
+        m200m_fof = np.empty(len(idxs_halos_dark))
+        r200m_fof = np.empty(len(idxs_halos_dark))
+        v200m_fof = np.empty(len(idxs_halos_dark))
+        count = 0
+
+        # so can see how long will take better
+        rng = np.random.default_rng(42)
+        i_shuffle = np.arange(len(tab_halos))
+        rng.shuffle(i_shuffle)
+        #for i, idx_halo_dark in enumerate(idxs_halos_dark[i_shuffle]):
+        for i in i_shuffle:
+        #for i in range(len(idxs_halos_dark)-1, 0, -1):
+            idx_halo_dark = idxs_halos_dark[i]
+            #print(idx_halo_dark, tab_halos['m200m'][i])
+            halo = DarkHalo(idx_halo_dark, self.base_path_dark, self.snap_num, self.box_size)
+            m200m_fof[i], r200m_fof[i], v200m_fof[i] = halo.compute_mrv_200m_fof(mean_density, self.m_dmpart_dark, self.log_mass_shift, 
+                                tab_halos['x_minPE'][i], r_max=tab_halos['r200m'][i])
+            if count % 1000 == 0:
+                print("count", count, flush=True)
+                print(tab_halos['m200m'][i], m200m_fof[i], tab_halos['r200m'][i], r200m_fof[i], flush=True)
+            count += 1
+
+        tab_halos['m200m_fof_rmax'] = m200m_fof
+        tab_halos['r200m_fof_rmax'] = r200m_fof
+        tab_halos['v200m_fof_rmax'] = v200m_fof
+
+        tab_halos.write(fn_halos, overwrite=overwrite)
+
+
+
+    def select_halos(self, fn_halos, fn_select, 
+                     num_star_particles_min=0, num_gas_particles_min=0, halo_logmass_min=0, 
+                     halo_logmass_max=20, halo_mass_difference_factor=None,
+                     must_have_SAM_match=True,
                      must_have_halo_structure_info=True, seed=42):
 
-        subhalo_mode_options = ['most_massive_subhalo', 'twin_subhalo']
-        assert subhalo_mode in subhalo_mode_options, f"Input subhalo_mode {subhalo_mode} not an \
-                                                      option; choose one of {subhalo_mode_options}"
-        # These are the indices of the most massive subhalo in the FOF halo; -1 means no subhalos, filter these out
-        self.halos_dark['GroupFirstSub'] = self.halos_dark['GroupFirstSub'].astype('int32')
-        print("N dark halos", len(self.halos_dark['GroupFirstSub']))
-        i_has_subhalos = np.where(self.halos_dark['GroupFirstSub'] >= 0) # filter out halos with no subhalos
-        idxs_halos_dark_withsubhalos = self.idxs_halos_dark_all[i_has_subhalos]
-        idxs_largestsubs_dark_all = self.halos_dark['GroupFirstSub'][i_has_subhalos]
-        print("N with subhalos", len(idxs_halos_dark_withsubhalos))
-        halo_mass_min, halo_mass_max = None, None
-        if halo_logmass_min is not None:
-            halo_mass_min = 10**halo_logmass_min
-            halo_mass_min /= self.mass_multiplier # because masses in catalog have units of 10^10 M_sun/h
-        if halo_logmass_max is not None:
-            halo_mass_max = 10**halo_logmass_max
-            halo_mass_max /= self.mass_multiplier # because masses in catalog have units of 10^10 M_sun/h
+        print(f"Loading halo table {fn_halos}")
+        tab_halos = Table.read(fn_halos)
 
-        #i_select = 
+        i_select = np.full(len(tab_halos), True)
 
-        # For each dark halo that has a subhalo, get its most massive subhalo, 
-        # and then check if that dark subhalo has a twin in the hydro sim.
-        # (Note: I could have gone through the twin dict, but that includes non-most-massive subhalos.) 
-        dark_halo_arr = []
-        for i, idx_halo_dark in enumerate(idxs_halos_dark_withsubhalos):
-            
-            idx_largestsub_dark = idxs_largestsubs_dark_all[i]
-            if idx_largestsub_dark not in self.subhalo_dark_to_full_dict:
-                continue
-                
-            # This is the index of the hydro subhalo that is the twin of the largest subhalo in the dark halo
-            idx_subtwin_hydro = self.subhalo_dark_to_full_dict[idx_largestsub_dark]
-            # This is that hydro subhalo's parent halo in the hydro sim
-            idx_halo_hydro = self.subhalos_hydro['SubhaloGrNr'][idx_subtwin_hydro]
+        i_Nstellar_abovemin = tab_halos['npartstellar'] >= num_star_particles_min
+        i_select = i_select & i_Nstellar_abovemin
 
-            if subhalo_mode=='most_massive_subhalo':
-                # This is the largest hydro subhalo of that hydro halo
-                idx_subhalomassive_hydro = self.halos_hydro['GroupFirstSub'][idx_halo_hydro]
-                idx_subhalo_hydro = idx_subhalomassive_hydro
-            elif subhalo_mode=='twin_subhalo':
-                # This is just the twin
-                idx_subhalo_hydro = idx_subtwin_hydro
-            else:
-                raise ValueError("Mode not recognized! (should not get here, there's an assert above)")
-                
-            # if number of stars below a minimum, exclude
-            if num_star_particles_min is not None and self.subhalos_hydro['SubhaloLenType'][:,self.ipart_star][idx_subhalo_hydro] < num_star_particles_min: 
-                continue
+        i_mhalo_inbounds = (tab_halos['m200m_fof'] >= halo_logmass_min) & \
+                           (tab_halos['m200m_fof'] < halo_logmass_max)
+        i_select = i_select & i_mhalo_inbounds
 
-            # if number of gas particles below a minimum, exclude
-            if num_gas_particles_min is not None and self.subhalos_hydro['SubhaloLenType'][:,self.ipart_gas][idx_subhalo_hydro] < num_gas_particles_min: 
-                continue
-
-            # if halo is below a minimum mass, exclude
-            if halo_mass_min is not None and self.halos_dark['GroupMass'][idx_halo_dark] < halo_mass_min: 
-                continue
-            
-            # if halo is above a maximum mass, exclude
-            if halo_mass_max is not None and self.halos_dark['GroupMass'][idx_halo_dark] > halo_mass_max: 
-                continue
-
-            # if dark halo and hydro halo masses differ significantly, likely a mismatch; exclude
-            if halo_mass_difference_factor is not None and self.halos_hydro['GroupMass'][idx_halo_hydro] > halo_mass_difference_factor*self.halos_dark['GroupMass'][idx_halo_dark]: 
-                continue
-            
-            # Construct halo, keep track of all the indices
-            halo = DarkHalo(idx_halo_dark, self.base_path_dark, self.snap_num, self.box_size)
-            halo.set_associated_halos(idx_largestsub_dark, idx_halo_hydro, idx_subhalo_hydro)
-            dark_halo_arr.append(halo)
-
-        rng = np.random.default_rng(seed=seed)
-        dark_halo_arr = np.array(dark_halo_arr)
-        print("N arr post loop", len(dark_halo_arr))
+        if halo_mass_difference_factor is not None:
+            # cleaner way to do this?
+            i_mdiff_abovemin = (tab_halos['m200m']/tab_halos['m200m_hydro'] <  halo_mass_difference_factor) & \
+                               (tab_halos['m200m']/tab_halos['m200m_hydro'] >  1/halo_mass_difference_factor) & \
+                               (tab_halos['m200m_hydro']/tab_halos['m200m'] <  halo_mass_difference_factor) & \
+                               (tab_halos['m200m_hydro']/tab_halos['m200m'] > 1/halo_mass_difference_factor)
+            i_select = i_select & i_mdiff_abovemin
 
         if must_have_SAM_match:
-            idxs_halo_dark = [halo.idx_halo_dark for halo in dark_halo_arr]
-            i_with_SAM_match = self.get_halos_with_SAM_match(idxs_halo_dark)
-            dark_halo_arr = dark_halo_arr[i_with_SAM_match]
-        print("N arr post must_have_SAM_match", len(dark_halo_arr))
+            i_with_SAM_match = self.get_halos_with_SAM_match(idxs_halos_dark)
+            i_select = i_select & i_with_SAM_match
 
         if must_have_halo_structure_info:
-            idxs_halo_dark = [halo.idx_halo_dark for halo in dark_halo_arr]
-            i_with_halo_structure_info = self.has_halo_structure_info(idxs_halo_dark)
-            dark_halo_arr = dark_halo_arr[i_with_halo_structure_info]
-        print("N arr post must_have_SAM_match", len(dark_halo_arr))
+            i_with_halo_structure_info = self.has_halo_structure_info(idxs_halos_dark)
+            i_select = i_select & i_with_halo_structure_info      
 
-        # Subsample the dark halos if we want (for testing purposes)
-        if subsample_frac is not None:
-            dark_halo_arr = rng.choice(dark_halo_arr, size=int(subsample_frac*len(dark_halo_arr)), replace=False)        
-            
-        self.dark_halo_arr = dark_halo_arr
-        self.N_halos = len(self.dark_halo_arr)
-        print("N halos:", self.N_halos)
+        N_halos = np.sum(i_select)
+        print(f"Selecting N={N_halos}")
 
         # Give each halo a random number; will be useful later, e.g. for splitting train/test consistently
-        random_ints = np.arange(self.N_halos)
+        rng = np.random.default_rng(seed)
+        random_ints = np.arange(N_halos)
         rng.shuffle(random_ints) #in-place
-        for i in range(self.N_halos):
-            dark_halo_arr[i].set_random_int(random_ints[i])
 
-        print(f'Selected {self.N_halos}')
+        indices_table = np.arange(len(tab_halos))
+
+        tab_select = Table([idxs_halos_dark[i_select], 
+                           idxs_table[i_select], 
+                           random_ints], 
+                    names=('idx_halo_dark', 'idx_table', 'rand_int'))
+        tab_select.write(fn_select, overwrite=overwrite)
+        print(f"Wrote table to {fn_select}")
+        return tab_select
 
 
     def add_catalog_property_to_halos(self, property_name, halo_tag=None):
@@ -365,7 +496,6 @@ class SimulationReader:
         if 'band' in property_name:
             phot_file = f'{self.tng_path_hydro}/postprocessing/stellar_photometry/Subhalo_StellarPhot_p07c_cf00dust_res_conv_ns1_rad30pkpc_{self.snap_num_str}.hdf5'
             f_phot = h5py.File(phot_file)
-            print(f_phot.keys())
             phot = f_phot['Subhalo_StellarPhot_p07c_cf00dust_res_conv_ns1_rad30pkpc']
 
         if property_name=='j_stellar':

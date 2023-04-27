@@ -9,9 +9,9 @@ def main():
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
 
-    #halo_config(sim_name)
+    halo_config(sim_name)
     #geo_config(sim_name)
-    scalar_config(sim_name)
+    #scalar_config(sim_name)
     #fit_config(sim_name)
 
 
@@ -28,8 +28,6 @@ def halo_config(sim_name):
     halo_logmass_min = 10.25
     halo_logmass_max = None
     halo_mass_difference_factor = 3
-    subsample_frac = None
-    subhalo_mode = 'twin_subhalo'
     must_have_SAM_match = True
     must_have_halo_structure_info = True
     if sim_name=='TNG50-4': # this sim doesnt have this data!
@@ -39,9 +37,9 @@ def halo_config(sim_name):
     seed = 42
 
     # save info
-    halo_dir = f'../data/halos/halos_{sim_name}'
-    halo_tag = '_Mmin10.25'
-    fn_dark_halo_arr = f'{halo_dir}/halos_{sim_name}{halo_tag}.npy'
+    halo_tag = ''
+    fn_halos = f'../data/halo_tables/halos_{sim_name}.fits'
+    fn_select = f'../data/halo_selections/halo_selection_{sim_name}{halo_tag}.fits'
 
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
@@ -51,14 +49,13 @@ def halo_config(sim_name):
                 'sim_name_dark': sim_name_dark,
                 }
     halo_config_dict = {'halo_tag': halo_tag,
-                        'fn_dark_halo_arr': fn_dark_halo_arr,
+                        'fn_halos': fn_halos,
+                        'fn_select': fn_select,
                         'num_star_particles_min': num_star_particles_min,
                         'num_gas_particles_min': num_gas_particles_min,
                         'halo_logmass_min': halo_logmass_min, 
                         'halo_logmass_max': halo_logmass_max, 
                         'halo_mass_difference_factor': halo_mass_difference_factor,
-                        'subsample_frac': subsample_frac, 
-                        'subhalo_mode': subhalo_mode,
                         'must_have_SAM_match': must_have_SAM_match, 
                         'must_have_halo_structure_info': must_have_halo_structure_info,
                         'seed': seed
