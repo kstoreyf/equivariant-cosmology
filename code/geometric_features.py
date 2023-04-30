@@ -1,12 +1,17 @@
 import numpy as np
 from collections import defaultdict
 import itertools
+from astropy.table import Table
+
+import utils
+from read_halos import DarkHalo
 
 
 class GeometricFeaturizer:
 
-    def featurize(self, sim_reader, r_edges, x_order_max, v_order_max, 
-                  center_halo='x_minPE', r_units='r200m'):
+    def featurize(self, sim_reader, fn_halos, 
+                  r_edges, x_order_max, v_order_max, 
+                  r_units='r200m_fof'):
         
         r_edges = np.array(r_edges)
         self.sim_reader = sim_reader
@@ -15,26 +20,19 @@ class GeometricFeaturizer:
         l_arr = np.arange(x_order_max+1)
         p_arr = np.arange(v_order_max+1)
 
-        if r_units is not None:
-            print(f"Adding property {r_units} for radial bins")
-            self.sim_reader.load_sim_dark_halos()
-            self.sim_reader.add_catalog_property_to_halos(r_units)
-
-        fn_halos = f'../data/halo_tables/halos_{sim_name}.fits'
         print(f"Loading halo table {fn_halos}")
-        tab_halos = Table.read(fn_halos)
-
-        for i, idx_halo_dark in enumerate(tab_halos['idx_halo_dark']):
-            halo = DarkHalo(idx_halo_dark, sim_reader.base_path_dark, sim_reader.snap_num, sim_reader.box_size)
-
+        tab_halos = utils.load_table(fn_halos)
+        self.idxs_halos_dark = tab_halos['idx_halo_dark']
 
         print("Computing geometric features for all dark halos")
-        for dark_halo in self.sim_reader.dark_halo_arr:
-            x_halo, v_halo = dark_halo.load_positions_and_velocities(shift=True, center_mode=center_halo)
+        for i, idx_halo_dark in enumerate(self.idxs_halos_dark):
+            halo = DarkHalo(idx_halo_dark, sim_reader.base_path_dark, sim_reader.snap_num, sim_reader.box_size)
+
+            x_halo, v_halo = halo.load_positions_and_velocities(shift=True, pos_center=tab_halos['x_minPE'][i])
 
             r_edges_scaled = r_edges
             if r_units is not None:
-                r_edges_scaled = r_edges * dark_halo.catalog_properties[r_units]
+                r_edges_scaled = r_edges * tab_halos[r_units][i]
             self.geo_feature_arr.append(self.get_geometric_features(x_halo, v_halo, 
                                 r_edges_scaled, l_arr, p_arr, self.sim_reader.m_dmpart_dark))
 
@@ -97,13 +95,10 @@ class GeometricFeaturizer:
 
         # get geo names from first halo; should be same for all halos
         # these are the columns; number N_geos
-        geo_names = [geo_name(g) for g in self.geo_feature_arr[0]]
-        # vals is a 2nd array of (N_halos, N_geos)
-        vals = [[g.value for g in geos] for geos in self.geo_feature_arr]
-        
-        tab_geos = Table(vals, names=geo_names)
-        tab_geos.write(fn_geo_features, overwrite=overwrite)
-        print(f"Wrote table to {fn_select}")
+        tab_geos = geo_objects_to_table(self.geo_feature_arr, self.idxs_halos_dark)
+
+        tab_geos.write(fn_geo_features, overwrite=overwrite, format='fits')
+        print(f"Wrote table to {fn_geo_features}")
         
         #np.save(fn_geo_features, self.geo_feature_arr)
         return tab_geos
@@ -113,26 +108,17 @@ class GeometricFeaturizer:
 
         # get geos for first halo; same for all halos
         geos = self.geo_feature_arr[0]
-        geo_names = [geo_name(g) for g in geos]        
-        m_orders = [g.m_order for g in geos]
-        x_orders = [g.x_order for g in geos]
-        v_orders = [g.v_order for g in geos]
-        ns = [g.n for g in self.geo_feature_arr]
-        hermitians = [g.hermitian for g in self.geo_feature_arr]
-        modifications = [g.modification for g in self.geo_feature_arr]
-        
-        tab_geos = Table([geo_names, m_orders, ],
-                          names=('geo_name', 'value'))
-        tab_geos.write(fn_geo_features, overwrite=overwrite)
-        print(f"Wrote table to {fn_select}")
+        tab_geo_info = geos_to_info_table(geos)
+        tab_geo_info.write(fn_geo_info, overwrite=overwrite, format='fits')
+        print(f"Wrote table to {fn_geo_info}")
         
         #np.save(fn_geo_features, self.geo_feature_arr)
-        return tab_geos
+        return tab_geo_info
 
 
     def load_features(self, fn_geo_features):
 
-        tab_geos = Table.read(fn_geo_features)
+        tab_geos = utils.load_table(fn_geo_features)
         #self.geo_feature_arr = np.load(fn_geo_features, allow_pickle=True)
         return tab_geos
 
@@ -195,7 +181,9 @@ def geo_name(geometric_feature, mode='readable'):
         # double curly braces escape f-string formatting, make single brace
         name = f"g_{{{geometric_feature.x_order}{geometric_feature.v_order}{n_str}}}"
         if not geometric_feature.hermitian:
-            name += '^A'
+            name += '_A'
+        if geometric_feature.modification is not None:
+            name += '_'+geometric_feature.modification
     elif mode=='readable':
         geo_name_dict = {(0,0): 'm',
                          (0,1): 'v',
@@ -203,6 +191,8 @@ def geo_name(geometric_feature, mode='readable'):
                          (1,0): 'x',
                          (1,1): 'C^{xv}',
                          (2,0): 'C^{xx}'}
+        # currently these are the only symm/antisymm features,
+        # so hardcoded; careful here if change!
         if geometric_feature.modification=='symmetrized':
             name = f'\\frac{{1}}{{2}} (C^{{xv}}_{n_str} + C^{{vx}}_{n_str})'  
         elif geometric_feature.modification=='antisymmetrized':          
@@ -210,3 +200,156 @@ def geo_name(geometric_feature, mode='readable'):
         else:
             name = geo_name_dict[(geometric_feature.x_order, geometric_feature.v_order)] + f'_{n_str}'
     return name
+
+### Cleaning functions
+
+### Rebinning is just summing over the features at that order! 
+# because the geo features are all sums; haven't divided out
+# anything yet
+# n_groups should be lists of the "n" to include in each group
+def rebin_geometric_features(geo_feature_arr, n_groups):
+    from geometric_features import GeometricFeature
+    print("Rebinning geometric features")
+    # TODO: implement check that bins listed in n_groups matches bins in the geo_feature_arr
+    n_vals = [g.n for g in geo_feature_arr[0]] # 0 because just check first halo, features should be same
+    n_groups_flat = [n for group in n_groups for n in group]
+    assert set(n_groups_flat).issubset(set(n_vals)), 'Groups passed in contain bins not in geometric features!'
+
+    geo_feature_arr_rebinned = []
+    number_of_groups = len(n_groups)
+    count = 0
+    for geo_features_halo in geo_feature_arr:
+        count += 1
+        # group geometric features into n groups
+        geo_feats_grouped = [[] for _ in range(number_of_groups)]
+        for geo_feat in geo_features_halo:
+            for i_n, n_group in enumerate(n_groups):
+                if geo_feat.n in n_group:
+                    geo_feats_grouped[i_n].append(geo_feat)
+
+        # sum over same features (matching orders) in each group
+        geo_features_halo_rebinned = []
+        # m order same for all geo features so don't need to worry bout it
+        x_order_highest = np.max([g.x_order for g in geo_features_halo])
+        v_order_highest = np.max([g.v_order for g in geo_features_halo])
+        for i_newn, geo_feat_group in enumerate(geo_feats_grouped):
+            # plus 1 because want to include that highest order!
+            for x_order in range(x_order_highest+1):
+                for v_order in range(v_order_highest+1):
+                    geo_feats_this_order = [g for g in geo_feat_group if g.x_order==x_order and g.v_order==v_order]
+                    # continue if there are no values at this order (e.g. none at x=2, v=1)
+                    if not geo_feats_this_order:
+                        continue
+                    geo_rebinned_value = np.sum([g.value for g in geo_feats_this_order], axis=0)
+                    hermitian = geo_feats_this_order[0].hermitian # if one is hermitian, all are at this order
+                    geo_rebinned = GeometricFeature(geo_rebinned_value, m_order=1, x_order=x_order, v_order=v_order, 
+                                                    n=i_newn, hermitian=hermitian)
+                    geo_features_halo_rebinned.append(geo_rebinned)
+        geo_feature_arr_rebinned.append(geo_features_halo_rebinned)
+
+    return geo_feature_arr_rebinned
+
+
+def rescale_geometric_features(geo_feature_arr, Ms, Rs, Vs):
+    print("Rescaling geometric features")
+    N_geo_arrs = len(geo_feature_arr)
+    assert len(Ms)==N_geo_arrs, "Length of Ms doesn't match geo feature arr!"
+    assert len(Rs)==N_geo_arrs, "Length of Rs doesn't match geo feature arr!"
+    assert len(Vs)==N_geo_arrs, "Length of Vs doesn't match geo feature arr!"
+    for i_g, geo_features_halo in enumerate(geo_feature_arr):
+        for geo_feat in geo_features_halo:
+            geo_feat.value /= Ms[i_g] # all geometric features have single m term
+            for _ in range(geo_feat.x_order):
+                geo_feat.value /= Rs[i_g]
+            for _ in range(geo_feat.v_order):
+                geo_feat.value /= Vs[i_g]
+    return geo_feature_arr
+
+
+def transform_pseudotensors(geo_feature_arr):
+    print("Transforming pseudotensors")
+    from geometric_features import GeometricFeature
+    geo_feature_arr = list(geo_feature_arr)
+    for i_halo, geo_features_halo in enumerate(geo_feature_arr):
+        gs_to_insert = []
+        idxs_to_insert = []
+        for i_feat, g in enumerate(geo_features_halo):
+
+            if not g.hermitian and g.modification is None:
+                g_value_symm = 0.5*(g.value + g.value.T)
+                g_value_antisymm =  0.5*(g.value - g.value.T)
+                g_symm = GeometricFeature(g_value_symm, m_order=g.m_order, x_order=g.x_order, v_order=g.v_order, 
+                                            n=g.n, hermitian=True, modification='symmetrized')
+                g_antisymm = GeometricFeature(g_value_antisymm, m_order=g.m_order, x_order=g.x_order, v_order=g.v_order, 
+                                                n=g.n, hermitian=False, modification='antisymmetrized')
+                # replace original with symmetric                
+                geo_feature_arr[i_halo][i_feat] = g_symm
+                # keep antisymmetric to insert right after symmetric, later
+                gs_to_insert.append(g_antisymm)
+                idxs_to_insert.append(i_feat+1)
+        
+        # inserting all at end to not mess up looping
+        # for now should only have one pseudotensor per halo (C^{xv}), but may not always be true
+        for idxs_to_insert, g_to_insert in zip(idxs_to_insert, gs_to_insert):
+            geo_feature_arr[i_halo] = np.insert(geo_feature_arr[i_halo], idxs_to_insert, g_to_insert)
+
+    return np.array(geo_feature_arr)
+
+
+### Data structure swappings
+
+def geo_table_to_objects(tab_geos, tab_geo_info):
+    print(tab_geos.columns)
+    geo_feature_arr = []
+    # i indexes halo
+    for i in range(len(tab_geos)):
+        geo_features_halo = []
+        # j indexes geo feature
+        for j in range(len(tab_geo_info)):
+            geo_key = tab_geo_info['geo_key'][j]
+            geo = GeometricFeature(tab_geos[i][geo_key], 
+                                   m_order=tab_geo_info['m_order'][j], 
+                                   x_order=tab_geo_info['x_order'][j], 
+                                   v_order=tab_geo_info['v_order'][j], 
+                                   n=tab_geo_info['n'][j],
+                                   hermitian=tab_geo_info['hermitian'][j],
+                                   modification=tab_geo_info['modification'][j])
+            geo_features_halo.append(geo)  
+        geo_feature_arr.append(geo_features_halo)
+
+    return geo_feature_arr
+
+def geo_objects_to_table(geo_feature_arr, idxs_halos_dark):
+
+    # get geo names from first halo; should be same for all halos
+    # these are the columns; number N_geos
+    geo_keys = [geo_name(g, mode='multipole') for g in geo_feature_arr[0]]
+    # vals is a 2nd array of (N_halos, N_geos)
+    geo_vals = np.array([[g.value for g in geos] for geos in geo_feature_arr])
+    
+    tab_geos = Table()
+    tab_geos['idx_halo_dark'] = np.array(idxs_halos_dark)
+
+    for j in range(geo_vals.shape[1]):
+        tab_geos[geo_keys[j]] = np.stack(geo_vals[:,j])
+
+    return tab_geos
+
+# input: single set of geo features
+def geos_to_info_table(geos):
+
+    geo_keys = [geo_name(g, mode='multipole') for g in geos]        
+    geo_names = [geo_name(g, mode='readable') for g in geos]        
+    m_orders = [g.m_order for g in geos]
+    x_orders = [g.x_order for g in geos]
+    v_orders = [g.v_order for g in geos]
+    ns = [g.n for g in geos]
+    hermitians = [g.hermitian for g in geos]
+    modifications = [g.modification for g in geos]
+    
+    tab_geo_info = Table([geo_keys, geo_names, m_orders, x_orders, v_orders,
+                        ns, hermitians, modifications],
+                        names=('geo_key', 'geo_name', 'm_order', 'x_order', 
+                                'v_order', 'n', 'hermitian', 'modification'),
+                        dtype=(str, str, int, int, int, int, bool, str))
+    return tab_geo_info

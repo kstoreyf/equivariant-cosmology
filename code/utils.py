@@ -3,6 +3,7 @@ import numpy as np
 import yaml
 from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
+from astropy.table import Table
 
 import sys
 sys.path.insert(1, '/home/ksf293/external')
@@ -200,50 +201,6 @@ def compute_error(y_true, y_pred, test_error_type='percentile'):
         return
         
 
-# n_groups should be lists of the "n" to include in each group
-def rebin_geometric_features(geo_feature_arr, n_groups):
-    from geometric_features import GeometricFeature
-    print("Rebinning geometric features")
-    # TODO: implement check that bins listed in n_groups matches bins in the geo_feature_arr
-    n_vals = [g.n for g in geo_feature_arr[0]] # 0 because just check first halo, features should be same
-    n_groups_flat = [n for group in n_groups for n in group]
-    assert set(n_groups_flat).issubset(set(n_vals)), 'Groups passed in contain bins not in geometric features!'
-
-    geo_feature_arr_rebinned = []
-    number_of_groups = len(n_groups)
-    count = 0
-    for geo_features_halo in geo_feature_arr:
-        count += 1
-        # group geometric features into n groups
-        geo_feats_grouped = [[] for _ in range(number_of_groups)]
-        for geo_feat in geo_features_halo:
-            for i_n, n_group in enumerate(n_groups):
-                if geo_feat.n in n_group:
-                    geo_feats_grouped[i_n].append(geo_feat)
-
-        # sum over same features (matching orders) in each group
-        geo_features_halo_rebinned = []
-        # m order same for all geo features so don't need to worry bout it
-        x_order_highest = np.max([g.x_order for g in geo_features_halo])
-        v_order_highest = np.max([g.v_order for g in geo_features_halo])
-        for i_newn, geo_feat_group in enumerate(geo_feats_grouped):
-            # plus 1 because want to include that highest order!
-            for x_order in range(x_order_highest+1):
-                for v_order in range(v_order_highest+1):
-                    geo_feats_this_order = [g for g in geo_feat_group if g.x_order==x_order and g.v_order==v_order]
-                    # continue if there are no values at this order (e.g. none at x=2, v=1)
-                    if not geo_feats_this_order:
-                        continue
-                    geo_rebinned_value = np.sum([g.value for g in geo_feats_this_order], axis=0)
-                    hermitian = geo_feats_this_order[0].hermitian # if one is hermitian, all are at this order
-                    geo_rebinned = GeometricFeature(geo_rebinned_value, m_order=1, x_order=x_order, v_order=v_order, 
-                                                    n=i_newn, hermitian=hermitian)
-                    geo_features_halo_rebinned.append(geo_rebinned)
-        geo_feature_arr_rebinned.append(geo_features_halo_rebinned)
-
-    return geo_feature_arr_rebinned
-
-
 def get_mrv_for_rescaling(sim_reader, mrv_names):
     mrv_for_rescaling = []
     for mrv_name in mrv_names:
@@ -254,51 +211,6 @@ def get_mrv_for_rescaling(sim_reader, mrv_names):
             mrv_for_rescaling.append( [halo.catalog_properties[mrv_name] for halo in sim_reader.dark_halo_arr] )
     return np.array(mrv_for_rescaling)
 
-
-def rescale_geometric_features(geo_feature_arr, Ms, Rs, Vs):
-    print("Rescaling geometric features")
-    N_geo_arrs = len(geo_feature_arr)
-    assert len(Ms)==N_geo_arrs, "Length of Ms doesn't match geo feature arr!"
-    assert len(Rs)==N_geo_arrs, "Length of Rs doesn't match geo feature arr!"
-    assert len(Vs)==N_geo_arrs, "Length of Vs doesn't match geo feature arr!"
-    for i_g, geo_features_halo in enumerate(geo_feature_arr):
-        for geo_feat in geo_features_halo:
-            geo_feat.value /= Ms[i_g] # all geometric features have single m term
-            for _ in range(geo_feat.x_order):
-                geo_feat.value /= Rs[i_g]
-            for _ in range(geo_feat.v_order):
-                geo_feat.value /= Vs[i_g]
-    return geo_feature_arr
-
-
-def transform_pseudotensors(geo_feature_arr):
-    print("Transforming pseudotensors")
-    from geometric_features import GeometricFeature
-    geo_feature_arr = list(geo_feature_arr)
-    for i_halo, geo_features_halo in enumerate(geo_feature_arr):
-        gs_to_insert = []
-        idxs_to_insert = []
-        for i_feat, g in enumerate(geo_features_halo):
-
-            if not g.hermitian and g.modification is None:
-                g_value_symm = 0.5*(g.value + g.value.T)
-                g_value_antisymm =  0.5*(g.value - g.value.T)
-                g_symm = GeometricFeature(g_value_symm, m_order=g.m_order, x_order=g.x_order, v_order=g.v_order, 
-                                            n=g.n, hermitian=True, modification='symmetrized')
-                g_antisymm = GeometricFeature(g_value_antisymm, m_order=g.m_order, x_order=g.x_order, v_order=g.v_order, 
-                                                n=g.n, hermitian=False, modification='antisymmetrized')
-                # replace original with symmetric                
-                geo_feature_arr[i_halo][i_feat] = g_symm
-                # keep antsymmetric to insert right after symmetric, later
-                gs_to_insert.append(g_antisymm)
-                idxs_to_insert.append(i_feat+1)
-        
-        # inserting all at end to not mess up looping
-        # for now should only have one pseudotensor per halo (C^{xv}), but may not always be true
-        for idxs_to_insert, g_to_insert in zip(idxs_to_insert, gs_to_insert):
-            geo_feature_arr[i_halo] = np.insert(geo_feature_arr[i_halo], idxs_to_insert, g_to_insert)
-
-    return np.array(geo_feature_arr)
 
 
 def split_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15):
@@ -876,3 +788,7 @@ def get_butterfly_error(x_label_name, y_label_name, halo_logmass_min=10.8, n_bin
         stdevs_binned.append(stdev_binned)
 
     return x_bins, stdevs_binned
+
+
+def load_table(fn_table):
+    return Table.read(fn_table)

@@ -2,34 +2,21 @@ import copy
 import itertools
 import numpy as np
 from collections import defaultdict
+from astropy.table import Table
 
 import utils
+import geometric_features as gf
 from geometric_features import GeometricFeature, geo_name
 
 
 
 class ScalarFeaturizer:
 
-    def __init__(self, geo_feature_arr=None, n_groups_rebin=None,
-                 transform_pseudotensors=False, mrv_for_rescaling=None):
+    def __init__(self, tab_geos, tab_geo_info):
 
-        if geo_feature_arr is not None:
-            self.geo_feature_arr_orig = geo_feature_arr
-            # must use deepcopy because our array has opjects! np.copy doesn't work
-            geo_feature_arr = copy.deepcopy(geo_feature_arr)
-
-        if n_groups_rebin is not None:
-            geo_feature_arr = utils.rebin_geometric_features(
-                                    geo_feature_arr, n_groups_rebin)
-        if transform_pseudotensors:
-            geo_feature_arr = utils.transform_pseudotensors(geo_feature_arr)
-            
-        if mrv_for_rescaling is not None:
-            geo_feature_arr = utils.rescale_geometric_features(geo_feature_arr, *mrv_for_rescaling)
-    
-        if geo_feature_arr is not None:
-            self.geo_feature_arr = geo_feature_arr
-            self.N_halos = len(self.geo_feature_arr)
+        self.geo_feature_arr = gf.geo_table_to_objects(tab_geos, tab_geo_info)
+        self.idxs_halos_dark = tab_geos['idx_halo_dark']
+        self.N_halos = len(self.geo_feature_arr)
 
 
 
@@ -53,15 +40,12 @@ class ScalarFeaturizer:
             scalar_vals = np.array([s.value for s in scalar_arr_i])
             self.scalar_feature_arr.append(scalar_arr_i)
             self.scalar_features.append(scalar_vals)
-            # print("BREAKING for now")
-            # break
 
         self.scalar_feature_arr = np.array(self.scalar_feature_arr, dtype=object)
         self.scalar_features = np.array(self.scalar_features)
         self.scalar_features, self.scalar_feature_arr = self.sort_scalar_features(
                                                         self.scalar_features, self.scalar_feature_arr)
-        # for s in self.scalar_feature_arr[0]:
-        #     print(scalar_name(s, self.geo_feature_arr))
+
         self.n_features = self.scalar_features.shape[1]
 
 
@@ -86,7 +70,9 @@ class ScalarFeaturizer:
             if g1.x_order + g1.v_order == 0:
                 value = g1.value
                 operations = ['']
-                scalar_features_single.append( ScalarFeature(value, [i_geo_term], 
+                scalar_features_single.append( ScalarFeature(value, 
+                                                            [geo_name(g1, mode='multipole')],
+                                                            [geo_name(g1, mode='readable')], 
                                                              g1.m_order, g1.x_order, g1.v_order, [g1.n], operations) )
 
             # Tensor: contraction OR eigenvalues
@@ -98,12 +84,16 @@ class ScalarFeaturizer:
                     for i_e, value in enumerate(eigenvalues):
                         eig_num = 3 - i_e  # this makes lambda_1 = max, lambda_3 = min
                         operations = [f'\lambda_{eig_num}']
-                        scalar_features_single.append( ScalarFeature(value, [i_geo_term], 
+                        scalar_features_single.append( ScalarFeature(value, 
+                                                             [geo_name(g1, mode='multipole')],
+                                                             [geo_name(g1, mode='readable')] , 
                                                              g1.m_order, g1.x_order, g1.v_order, [g1.n], operations) )
                 else:
                     value = np.einsum('jj', g1.value)
                     operations = ['jj']
-                    scalar_features_single.append( ScalarFeature(value, [i_geo_term], 
+                    scalar_features_single.append( ScalarFeature(value, 
+                                                             [geo_name(g1, mode='multipole')],
+                                                             [geo_name(g1, mode='readable')],
                                                              g1.m_order, g1.x_order, g1.v_order, [g1.n], operations) )
                 
         if m_order_max >= 2:
@@ -139,7 +129,9 @@ class ScalarFeaturizer:
                     if value is not None:
                         m_order = g1.m_order + g2.m_order
                         ns = [g1.n, g2.n]
-                        scalar_features.append( ScalarFeature(value, [i_geo_term, j_geo_term], 
+                        scalar_features.append( ScalarFeature(value, 
+                                                            [geo_name(g, mode='multipole') for g in [g1, g2]],
+                                                            [geo_name(g, mode='readable') for g in [g1, g2]], 
                                                             m_order, x_order, v_order, ns, operations) )
 
         # Combine single-term features into two-term features
@@ -150,7 +142,8 @@ class ScalarFeaturizer:
                     s2 = scalar_features_single[j_s]
 
                     value = s1.value * s2.value
-                    idxs_geo_terms = np.concatenate((s1.idxs_geo_terms, s2.idxs_geo_terms))
+                    geo_keys = np.concatenate((s1.geo_key, s2.geo_key))
+                    geo_names = np.concatenate((s1.geo_name, s2.geo_name))
                     m_order = s1.m_order + s2.m_order
                     x_order = s1.x_order + s2.x_order
                     v_order = s1.v_order + s2.v_order
@@ -158,7 +151,7 @@ class ScalarFeaturizer:
                     
                     operations = np.concatenate((s1.operations, s2.operations))
 
-                    scalar_features.append( ScalarFeature(value, idxs_geo_terms, 
+                    scalar_features.append( ScalarFeature(value, geo_key, geo_name, 
                                                             m_order, x_order, v_order, ns, operations) )
 
         # Add in single-term features on their own
@@ -176,7 +169,7 @@ class ScalarFeaturizer:
         dtypes.extend([(n_col_name, int) for n_col_name in n_col_names])
         scalar_feature_table = np.empty(len(scalar_features_single), dtype=dtypes)
 
-        scalar_feature_table['name'] = [scalar_name(s, self.geo_feature_arr) for s in scalar_features_single]
+        scalar_feature_table['name'] = [scalar_name(s, mode='readable') for s in scalar_features_single]
         scalar_feature_table['m_order'] = [s.m_order for s in scalar_features_single]
         scalar_feature_table['x_order'] = [s.x_order for s in scalar_features_single]
         scalar_feature_table['v_order'] = [s.v_order for s in scalar_features_single]
@@ -223,26 +216,34 @@ class ScalarFeaturizer:
             v_tensor_traces[i_g] = np.einsum('jj', v_tensors[0])
         self.V_rms = np.sqrt( v_tensor_traces / self.M_tot )
 
-
-    # does rescaling in-place in self.geo_feature_arr!
-    def rescale_geometric_features(self, Ms, Rs, Vs):
-        for i_g, geo_features_halo in enumerate(self.geo_feature_arr):
-            for geo_feat in geo_features_halo:
-                geo_feat.value /= Ms[i_g] # all geometric features have single m term
-                for _ in range(geo_feat.x_order):
-                    geo_feat.value /= Rs[i_g]
-                for _ in range(geo_feat.v_order):
-                    geo_feat.value /= Vs[i_g]
     
 
-    def save_features(self, fn_scalar_features, save_format='numpy'):
-        if save_format=='numpy':
+    def save_features(self, fn_scalar_features, save_format='table', overwrite=True):
+        if save_format=='table':
+            tab_scalars = scalar_objects_to_table(self.scalar_feature_arr, self.idxs_halos_dark)
+            tab_scalars.write(fn_scalar_features, overwrite=overwrite, format='fits')
+            print(f"Wrote table to {fn_scalar_features}")
+        elif save_format=='numpy':
             np.save(fn_scalar_features, self.scalar_feature_arr)
         else:
             raise ValueError(f'Save format {save_format} not recognized!')
 
+    def save_scalar_info(self, fn_scalar_info, overwrite=True):
+
+        # get geos for first halo; same for all halos
+        scalars = self.scalar_feature_arr[0]
+        tab_scalar_info = scalars_to_info_table(scalars)
+        tab_scalar_info.write(fn_scalar_info, overwrite=overwrite, format='fits')
+        print(f"Wrote table to {fn_scalar_info}")
+        
+        #np.save(fn_geo_features, self.geo_feature_arr)
+        return tab_scalar_info
+
 
     def load_features(self, fn_scalar_features, save_format='numpy'):
+        if save_format=='fits':
+            tab_scalars = utils.load_table(fn_scalar_features)
+            return tab_scalars
         if save_format=='numpy':
             self.scalar_feature_arr = np.load(fn_scalar_features, allow_pickle=True)
             scalar_features = []
@@ -256,10 +257,11 @@ class ScalarFeaturizer:
 
 class ScalarFeature:
 
-    def __init__(self, value, idxs_geo_terms, m_order, x_order, v_order, ns, 
+    def __init__(self, value, geo_keys, geo_names, m_order, x_order, v_order, ns, 
                 operations, modification=None):
         self.value = value
-        self.idxs_geo_terms = idxs_geo_terms
+        self.geo_keys = geo_keys
+        self.geo_names = geo_names
         self.m_order = m_order
         self.x_order = x_order
         self.v_order = v_order
@@ -267,12 +269,16 @@ class ScalarFeature:
         self.operations = operations
 
 
-def scalar_name(scalar_feature, geo_feature_arr, mode='readable'):
+def scalar_name(scalar_feature, mode='readable'):
     name_parts = []
-    for i, idx_geo_term in enumerate(scalar_feature.idxs_geo_terms):
-        # the 0 just gets the first halo, should all be same features
-        g = geo_feature_arr[0][idx_geo_term] 
-        g_name = geo_name(g, mode=mode)
+    if mode=='readable':
+        g_names = scalar_feature.geo_names
+    elif mode=='multipole':
+        g_names = scalar_feature.geo_keys
+    else:
+        raise KeyError("Mode not recgonized!")
+
+    for i, g_name in enumerate(g_names):
         if scalar_feature.operations[i]=='':
             name_parts.append(f'{g_name}')
         elif scalar_feature.operations[i]=='j':
@@ -285,5 +291,88 @@ def scalar_name(scalar_feature, geo_feature_arr, mode='readable'):
             name_parts.append(f'{scalar_feature.operations[i]}\\left({g_name}\\right)')
         
     name = ' \, '.join(name_parts)
-    return '$'+name+'$'
+    return name
     
+
+### Data structure swappings
+
+def scalar_table_to_objects(tab_scalars, tab_scalar_info):
+
+    scalar_feature_arr = []
+    # i indexes halo
+    for i in range(len(tab_geos)):
+        scalar_features_halo = []
+        # j indexes scalar feature
+        for j in range(len(tab_geo_info)):
+            scalar_key = tab_scalar_info['scalar_key'][j]
+            geo_keys = tab_scalar_info['geo_keys'][j]
+            geo_keys = geo_keys[geo_keys!='']
+            geo_names = tab_scalar_info['geo_names'][j]
+            geo_names = geo_names[geo_names!='']
+            ns = tab_scalar_info['ns'][j]
+            ns = ns[~np.isnan(ns)]
+            operations = tab_scalar_info['operations'][j]
+            operations = operations[operations!='']
+            scalar = ScalarFeature(value=tab_scalars[i][scalar_key], 
+                                geo_keys=geo_keys,
+                                geo_names=geo_names,
+                                m_order=tab_scalar_info['m_order'][j], 
+                                x_order=tab_scalar_info['x_order'][j], 
+                                v_order=tab_scalar_info['v_order'][j], 
+                                ns=ns,
+                                operations=operations,
+                                )
+            scalar_features_halo.append(scalar)  
+        scalar_feature_arr.append(scalar_features_halo)
+
+    return scalar_feature_arr
+
+
+def scalar_objects_to_table(scalar_feature_arr, idxs_halos_dark):
+
+    # get geo names from first halo; should be same for all halos
+    # these are the columns; number N_geos
+    scalar_keys = [scalar_name(s, mode='multipole') for s in scalar_feature_arr[0]]
+    # vals is a 2nd array of (N_halos, N_geos)
+    scalar_vals = np.array([[s.value for s in scalars] for scalars in scalar_feature_arr])
+    
+    tab_scalars = Table()
+    tab_scalars['idx_halo_dark'] = np.array(idxs_halos_dark)
+
+    for j in range(scalar_vals.shape[1]):
+        tab_scalars[scalar_keys[j]] = np.stack(scalar_vals[:,j])
+
+    return tab_scalars
+
+
+# input: single set of geo features
+def scalars_to_info_table(scalars):
+
+    scalar_keys = [scalar_name(s, mode='multipole') for s in scalars]        
+    scalar_names = [scalar_name(g, mode='readable') for g in scalars]        
+    geo_keys = [s.geo_keys for s in scalars]
+    geo_names = [s.geo_names for s in scalars]
+    m_orders = [s.m_order for s in scalars]
+    x_orders = [s.x_order for s in scalars]
+    v_orders = [s.v_order for s in scalars]
+    ns = [s.ns for s in scalars]
+    operations = [s.operations for s in scalars]
+
+    # handle ragged arrays; assumes number of geos is consistent
+    num_ns = [len(nvals) for nvals in ns]
+    num_ns_max = np.max(num_ns)
+    geo_keys_nonragged = np.full((len(ns), num_ns_max), '')
+    geo_names_nonragged = np.full((len(ns), num_ns_max), '')
+    ns_nonragged = np.full((len(ns), num_ns_max), np.nan)
+    operations_nonragged = np.full((len(ns), num_ns_max), '')
+    for i in range(len(ns)):
+        ns_nonragged[i,:num_ns[i]] = ns[i]
+    tab_scalar_info = Table([scalar_keys, scalar_names, 
+                          geo_keys_nonragged, geo_names_nonragged, 
+                          m_orders, x_orders, v_orders,
+                          ns_nonragged, operations_nonragged],
+                          names=('scalar_key', 'scalar_name', 'geo_key', 'geo_name', 
+                          'm_order', 'x_order', 'v_order', 
+                          'ns', 'operations'),
+                        dtype=(str, str, str, str, int, int, int, int, str))
+    return tab_scalar_info

@@ -8,29 +8,36 @@ from read_halos import SimulationReader
 
 def run():
 
-    base_dir = '/scratch/ksf293/equivariant-cosmology/data'
     sim_name = 'TNG100-1'
-    sim_name_dark = 'TNG100-1-Dark'
-    snap_num_str = '099'
-    
-    overwrite = False
-    fn_halos = f'../data/halo_tables/halos_{sim_name}.fits'
+    #halo_tag = '_mini10'
+    halo_tag = ''
+    fn_halo_config = f'../configs/halos_{sim_name}{halo_tag}.yaml'
+
+    with open(fn_halo_config, 'r') as file:
+        halo_params = yaml.safe_load(file)
+    sp = halo_params['sim']
+    hp = halo_params['halo']
+
+    overwrite_table = False
+    fn_halos = hp['fn_halos']
 
     # Go!
     start = time.time()
 
-    sim_reader = SimulationReader(base_dir, sim_name, 
-                                  sim_name_dark, snap_num_str)
+    sim_reader = SimulationReader(sp['base_dir'], sp['sim_name'], 
+                                  sp['sim_name_dark'], sp['snap_num_str'])
     sim_reader.read_simulations()
     sim_reader.match_twins()
 
-    if not os.path.exists(fn_halos) or overwrite:
-        sim_reader.construct_halo_table(fn_halos, overwrite=overwrite)
+    if not os.path.exists(fn_halos) or overwrite_table:
+        sim_reader.construct_halo_table(fn_halos, overwrite=overwrite_table,
+                                        N=hp['N'],
+                                        )
 
-    #sim_reader.add_properties_dark(fn_halos)
-    #sim_reader.add_properties_hydro(fn_halos)
-    #sim_reader.add_MRV_dark(fn_halos, overwrite=False)
-    sim_reader.add_MRV_dark(fn_halos)
+    sim_reader.add_properties_dark(fn_halos)
+    sim_reader.add_properties_hydro(fn_halos)
+    sim_reader.add_mv200m_fof_dark(fn_halos)
+    sim_reader.transform_properties(fn_halos)
 
     end = time.time()
     print(f"Time: {end-start} s ({(end-start)/60} min)")

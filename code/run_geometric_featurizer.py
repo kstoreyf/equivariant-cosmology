@@ -12,7 +12,8 @@ def run():
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
-    halo_tag = '_Mmin10.25'
+    #halo_tag = '_mini10'
+    halo_tag = ''
     #geo_tag = '_gx1_gv1'
     #geo_tag = '_gx1_gv1'
     geo_tag = ''
@@ -26,26 +27,26 @@ def run():
     with open(fn_halo_config, 'r') as file:
         halo_params = yaml.safe_load(file)
     sp = halo_params['sim']
+    hp = halo_params['halo']
 
+    fn_halos = hp['fn_halos']
     fn_geo_features = gp['fn_geo_features']
-    Path(os.path.dirname(fn_geo_features)).mkdir(parents=True, exist_ok=True)
+    fn_geo_info = gp['fn_geo_info']
 
     # Go!
     start = time.time()
 
     sim_reader = SimulationReader(sp['base_dir'], sp['sim_name'], 
                                   sp['sim_name_dark'], sp['snap_num_str'])
-    sim_reader.read_simulations()
-    sim_reader.load_dark_halo_arr(halo_params['halo']['fn_dark_halo_arr'])
-    if gp['center_halo']=='x_minPE':
-        sim_reader.add_catalog_property_to_halos('x_minPE')
 
     geo_featurizer = GeometricFeaturizer()
-    geo_featurizer.featurize(sim_reader, gp['r_edges'],
+    geo_featurizer.featurize(sim_reader, fn_halos,
+                             gp['r_edges'],
                              gp['x_order_max'], gp['v_order_max'],
-                             center_halo=gp['center_halo'], r_units=gp['r_units'])
+                            r_units=gp['r_units'])
     geo_featurizer.save_features(fn_geo_features)
-    print(f'Saved geometric features to {fn_geo_features}')
+    geo_featurizer.save_geo_info(fn_geo_info)
+    print(f'Saved geometric features to {fn_geo_features} and {fn_geo_info}')
 
     end = time.time()
     print("Time:", end-start, 'sec')

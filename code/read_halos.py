@@ -59,7 +59,15 @@ class DarkHalo:
     def set_catalog_property(self, property_name, value):
         self.catalog_properties[property_name] = value
 
-    # don't actually use! was for checks
+
+    def compute_m200m_fof(self, r200m, pos_center, m_dmpart_dark):
+        x_data_halo, v_data_halo = self.load_positions_and_velocities(shift=True, pos_center=pos_center)
+        dists_from_center = np.linalg.norm(x_data_halo, axis=1)
+        n_part_200m = np.sum(dists_from_center < r200m)
+        m200m_fof = n_part_200m * m_dmpart_dark
+        return m200m_fof
+
+
     def compute_mrv_200m_fof(self, density_mean, m_dmpart_dark, log_mass_shift, pos_center, r_max=None):
         number_density_mean = density_mean / m_dmpart_dark
         factor = 200
@@ -249,7 +257,7 @@ class SimulationReader:
 
 
 
-    def construct_halo_table(self, fn_halos, overwrite=False):
+    def construct_halo_table(self, fn_halos, overwrite=False, N=None):
 
         # Construct main halo table, above a conservative mass cut for M200_mean
         # Only require that dark halos have >=1 subhalo, and a hydro halo match
@@ -269,13 +277,7 @@ class SimulationReader:
         print(f"After no-subhalos cut: N = {np.sum(i_select)}")
 
         # Cut out halos with no match in hydro 
-        #print(self.halos_dark['GroupFirstSub'])
-        print(len(self.halos_dark['GroupFirstSub']))
-        print(len(self.subhalo_dark_to_full_dict.keys()))
-        print(self.halos_dark['GroupFirstSub'][:10])
-        print(list(self.subhalo_dark_to_full_dict.keys())[:10])
         i_has_hydro_match = np.isin(self.halos_dark['GroupFirstSub'], list(self.subhalo_dark_to_full_dict.keys()))
-        print(np.sum(i_has_hydro_match))
         i_select = i_select & i_has_hydro_match
         print(f"After no-hydro-match cut: N = {np.sum(i_select)}")
 
@@ -291,14 +293,29 @@ class SimulationReader:
 
         tab_halos = Table([idxs_halos_dark, idxs_subhalos_dark, idxs_subtwins_hydro, idxs_halos_hydro], 
                     names=('idx_halo_dark', 'idx_subhalo_dark', 'idx_subhalo_hydro', 'idx_halo_hydro'))
+
+        # for mini halo table, only for testing
+        if N is not None:
+            rng = np.random.default_rng(42)
+            i_keep = rng.choice(np.arange(len(tab_halos)), size=N)
+            tab_halos = tab_halos[i_keep]
+
         tab_halos.write(fn_halos, overwrite=overwrite)
-        print(f"Wrote table to {fn_halos}")
+        print(f"Wrote table to {fn_halos} with N={len(tab_halos)}")
         return tab_halos
 
 
     def log_m(self, m_tng_units):
         return np.log10(m_tng_units) + self.log_mass_shift
 
+
+    def compute_velocity(self, mass_msunperh, radius_ckpcperh):
+        # m200m in Msun/h and r200m in ckpc/h; the h's cancel out, and the c is comoving meaning
+        # we need a factor of the scale factor, but here at z=0 just 1. if go to diff z need to 
+        # make sure to include!
+        G = const.G.to('(kpc * km**2)/(Msun * s**2)')
+        velocity_kpcpers = np.sqrt(G * (mass_msunperh*u.Msun) / (radius_ckpcperh*u.kpc))
+        return velocity_kpcpers.value
 
     def add_properties_dark(self, fn_halos, overwrite=True):
 
@@ -310,14 +327,9 @@ class SimulationReader:
         idxs_subhalos_dark = tab_halos['idx_subhalo_dark']
 
         ### M, R, V 200 mean
-        tab_halos['m200m'] = self.log_m(self.halos_dark['Group_M_Mean200'][idxs_halos_dark])
+        tab_halos['m200m'] = self.halos_dark['Group_M_Mean200'][idxs_halos_dark]
         tab_halos['r200m'] = self.halos_dark['Group_R_Mean200'][idxs_halos_dark]
-        G = const.G.to('(kpc * km**2)/(Msun * s**2)')
-        # m200m in Msun/h and r200m in ckpc/h; the h's cancel out, and the c is comoving meaning
-        # we need a factor of the scale factor, but here at z=0 just 1. if go to diff z need to 
-        # make sure to include!
-        v200m = np.sqrt(G * ((self.mass_multiplier * self.halos_dark['Group_M_Mean200'][idxs_halos_dark])*u.Msun) / (self.halos_dark['Group_R_Mean200'][idxs_halos_dark]*u.kpc))
-        tab_halos['v200m'] = v200m.value
+        tab_halos['v200m'] = self.compute_velocity(self.mass_multiplier * self.halos_dark['Group_M_Mean200'][idxs_halos_dark], self.halos_dark['Group_R_Mean200'][idxs_halos_dark])
 
         ### positions
         tab_halos['x_com'] = self.halos_dark['GroupCM'][idxs_halos_dark]
@@ -342,12 +354,13 @@ class SimulationReader:
 
         ### Masses, radii, number
         # TODO: what to do about zeros?? letting them fail for now, get -infs.
-        tab_halos['m200m_hydro'] = self.log_m(self.halos_hydro['Group_M_Mean200'][idxs_halos_hydro])
-        tab_halos['mstellar'] = self.log_m(self.subhalos_hydro['SubhaloMassType'][:,self.ipart_star][idxs_subhalos_hydro])
+        tab_halos['m200m_hydro'] = self.halos_hydro['Group_M_Mean200'][idxs_halos_hydro]
+        tab_halos['mstellar'] = self.subhalos_hydro['SubhaloMassType'][:,self.ipart_star][idxs_subhalos_hydro]
         tab_halos['rstellar'] = self.subhalos_hydro['SubhaloHalfmassRadType'][:,self.ipart_star][idxs_subhalos_hydro]
-        tab_halos['mgas'] = self.log_m(self.subhalos_hydro['SubhaloMassType'][:,self.ipart_gas][idxs_subhalos_hydro])
-        tab_halos['mbh'] = self.log_m(self.subhalos_hydro['SubhaloBHMass'][idxs_subhalos_hydro])
-        tab_halos['mbh_per_mstellar'] = tab_halos['mbh'] - tab_halos['mstellar']
+        tab_halos['mgas'] = self.subhalos_hydro['SubhaloMassType'][:,self.ipart_gas][idxs_subhalos_hydro]
+        tab_halos['mbh'] = self.subhalos_hydro['SubhaloBHMass'][idxs_subhalos_hydro]
+        # don't need to deal with 10^10 units bc they divide out
+        tab_halos['mbh_per_mstellar'] = self.subhalos_hydro['SubhaloBHMass'][idxs_subhalos_hydro]/self.subhalos_hydro['SubhaloMassType'][:,self.ipart_star][idxs_subhalos_hydro]
         tab_halos['npartstellar'] = self.subhalos_hydro['SubhaloLenType'][:,self.ipart_star][idxs_subhalos_hydro]
         tab_halos['npartgas'] = self.subhalos_hydro['SubhaloLenType'][:,self.ipart_gas][idxs_subhalos_hydro]
 
@@ -378,41 +391,55 @@ class SimulationReader:
 
 
 
-    def add_MRV_dark(self, fn_halos, overwrite=True):
+    def add_mv200m_fof_dark(self, fn_halos, overwrite=True):
 
         print(f"Loading halo table {fn_halos}")
-        tab_halos = Table.read(fn_halos)
+        tab_halos = utils.load_table(fn_halos)
 
-        print("Adding dark halo MRV mean 200 properties")
+        print("Adding dark halo M & V 200_mean_fof properties")
         idxs_halos_dark = tab_halos['idx_halo_dark']
 
-        mean_density = self.get_mean_density_from_header()
-
         m200m_fof = np.empty(len(idxs_halos_dark))
-        r200m_fof = np.empty(len(idxs_halos_dark))
         v200m_fof = np.empty(len(idxs_halos_dark))
-        count = 0
 
         # so can see how long will take better
         rng = np.random.default_rng(42)
         i_shuffle = np.arange(len(tab_halos))
         rng.shuffle(i_shuffle)
         #for i, idx_halo_dark in enumerate(idxs_halos_dark[i_shuffle]):
+        count = 0
         for i in i_shuffle:
         #for i in range(len(idxs_halos_dark)-1, 0, -1):
             idx_halo_dark = idxs_halos_dark[i]
-            #print(idx_halo_dark, tab_halos['m200m'][i])
             halo = DarkHalo(idx_halo_dark, self.base_path_dark, self.snap_num, self.box_size)
-            m200m_fof[i], r200m_fof[i], v200m_fof[i] = halo.compute_mrv_200m_fof(mean_density, self.m_dmpart_dark, self.log_mass_shift, 
-                                tab_halos['x_minPE'][i], r_max=tab_halos['r200m'][i])
+            # units of 10^10 msun bc that's what m_dmpart_dark is in
+            m200m_fof[i] = halo.compute_m200m_fof(tab_halos['r200m'][i], tab_halos['x_minPE'][i], self.m_dmpart_dark)
             if count % 1000 == 0:
                 print("count", count, flush=True)
-                print(tab_halos['m200m'][i], m200m_fof[i], tab_halos['r200m'][i], r200m_fof[i], flush=True)
+                print(tab_halos['m200m'][i], m200m_fof[i], tab_halos['r200m'][i], flush=True)
             count += 1
 
-        tab_halos['m200m_fof_rmax'] = m200m_fof
-        tab_halos['r200m_fof_rmax'] = r200m_fof
-        tab_halos['v200m_fof_rmax'] = v200m_fof
+        tab_halos['m200m_fof'] = m200m_fof
+        tab_halos['v200m_fof'] = self.compute_velocity(self.mass_multiplier * m200m_fof, tab_halos['r200m'])
+
+        tab_halos.write(fn_halos, overwrite=overwrite)
+        print(f"Wrote m200m_fof and v200m_fof to {fn_halos}")
+
+
+    def transform_properties(self, fn_halos, overwrite=True):
+
+        print(f"Loading halo table {fn_halos}")
+        tab_halos = utils.load_table(fn_halos)
+        
+        names_mass = ['m200m', 'm200m_fof', 'm200m_hydro',
+                           'mstellar', 'mgas', 'mbh']
+        for name_mass in names_mass:
+            tab_halos['log_'+name_mass] = self.log_m(tab_halos[name_mass])
+
+        # TODO: add to this!
+        names_to_log = ['mbh_per_mstellar', 'rstellar', 'r200m']
+        for name_to_log in names_to_log:
+            tab_halos['log_'+name_to_log] = np.log10(tab_halos[name_to_log])
 
         tab_halos.write(fn_halos, overwrite=overwrite)
 
