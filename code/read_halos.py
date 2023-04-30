@@ -252,7 +252,7 @@ class SimulationReader:
         halos_sam = ilsam.groupcat.load_snapshot_halos(self.base_path_sam, self.snap_num, subvolume_list, fields, matches)
         idxs_halo_dark_SAM = halos_sam['HalopropFoFIndex_DM']
         i_with_SAM_match = np.in1d(idxs_halo_dark, idxs_halo_dark_SAM)
-        print(f'Keeping {np.sum(i_with_SAM_match)}/{len(i_with_SAM_match)} halos with SAM matches')
+        print(f'{np.sum(i_with_SAM_match)}/{len(i_with_SAM_match)} halos have with SAM matches')
         return i_with_SAM_match
 
 
@@ -326,10 +326,11 @@ class SimulationReader:
         idxs_halos_dark = tab_halos['idx_halo_dark']
         idxs_subhalos_dark = tab_halos['idx_subhalo_dark']
 
-        ### M, R, V 200 mean
+        ### M, R, V 200 mean; M200crit
         tab_halos['m200m'] = self.halos_dark['Group_M_Mean200'][idxs_halos_dark]
         tab_halos['r200m'] = self.halos_dark['Group_R_Mean200'][idxs_halos_dark]
         tab_halos['v200m'] = self.compute_velocity(self.mass_multiplier * self.halos_dark['Group_M_Mean200'][idxs_halos_dark], self.halos_dark['Group_R_Mean200'][idxs_halos_dark])
+        tab_halos['m200c'] = self.halos_dark['Group_M_Crit200'][idxs_halos_dark]
 
         ### positions
         tab_halos['x_com'] = self.halos_dark['GroupCM'][idxs_halos_dark]
@@ -339,6 +340,9 @@ class SimulationReader:
         ### subhalo spin 
         spin_x, spin_y, spin_z = self.subhalos_dark['SubhaloSpin'][idxs_subhalos_dark].T
         tab_halos['spin_subhalo'] = np.sqrt(spin_x**2 + spin_y**2 + spin_z**2)
+
+        ### velocity dispersion
+        tab_halos['veldisp_subhalo'] = self.subhalos_dark['SubhaloVelDisp'][idxs_subhalos_dark]
 
         tab_halos.write(fn_halos, overwrite=overwrite)
 
@@ -426,30 +430,89 @@ class SimulationReader:
         print(f"Wrote m200m_fof and v200m_fof to {fn_halos}")
 
 
+    def add_properties_structure(self, fn_halos, overwrite=True):
+
+        print(f"Loading halo table {fn_halos}")
+        tab_halos = utils.load_table(fn_halos)
+
+        catalog_feature_names = ['c200c', 'a_form', 'M200c']
+        self.x_catalog_features = []
+        with h5py.File(f'{self.tng_path_dark}/postprocessing/halo_structure_{self.snap_num_str}.hdf5','r') as f:
+            x_catalog_features_all = []
+            for i, name_feat in enumerate(catalog_feature_names):
+                vals_feature = f[name_feat][:]
+                # index the catalog features with the dark halo index (checked this by comparing M200c)
+                name_table = name_feat
+                if name_feat=='M200c':
+                    name_table = 'log_M200c_Msun_structure'
+                tab_halos[name_table] = vals_feature[tab_halos['idx_halo_dark']]
+
+        tab_halos.write(fn_halos, overwrite=overwrite)
+        print(f"Wrote structure properties to {fn_halos}")
+
+
+
     def transform_properties(self, fn_halos, overwrite=True):
 
         print(f"Loading halo table {fn_halos}")
         tab_halos = utils.load_table(fn_halos)
         
         names_mass = ['m200m', 'm200m_fof', 'm200m_hydro',
-                           'mstellar', 'mgas', 'mbh']
+                           'mstellar', 'mgas']
         for name_mass in names_mass:
             tab_halos['log_'+name_mass] = self.log_m(tab_halos[name_mass])
 
-        # TODO: add to this!
-        names_to_log = ['mbh_per_mstellar', 'rstellar', 'r200m']
+        names_to_log = ['rstellar', 'r200m', 'jstellar']
         for name_to_log in names_to_log:
             tab_halos['log_'+name_to_log] = np.log10(tab_halos[name_to_log])
+
+        # Note that the master table still includes some 
+        # mstellar == 0, so will have infinities etc in here!
+
+        # SFR -> ssfr, log and handle zeros
+        names_sfr = ['sfr', 'sfr1']
+        # sfr is in msun/yr
+        # to estimate "zero": avg mass gas cell: 10^6 Msun, divided by 1 Gyr (longest sfr timescale) = 10^9 yr
+        # 10^6 / 10^9 yr = 10^-3 Msun/yr
+        sfr_zero = 1e-3 #msun/yr
+        tol = 1e-10
+        for name_sfr in names_sfr:
+            i_zerosfr = np.abs(tab_halos[name_sfr])<tol
+            sfr = tab_halos[name_sfr].copy()
+            sfr[i_zerosfr] = sfr_zero
+            tab_halos['log_s'+name_sfr] = self.log_sfr_to_log_ssfr(np.log10(sfr), tab_halos['mstellar']*self.mass_multiplier)
+
+        # Black hole masses and ratios
+        # make zero min/2, bc that's where might just hit resolution issues (aka rounding)
+        i_zerombh = tab_halos['mbh']==0
+        mbh_zero = np.min(tab_halos['mbh'])/2.0  
+        mbh = tab_halos['mbh'].copy()
+        mbh[i_zerombh] = mbh_zero
+        tab_halos['log_mbh'] = self.log_m(mbh)
+        # use the fixed-zero bh masses for mbh_per_mstellar
+        tab_halos['log_mbh_per_mstellar'] = tab_halos['log_mbh'] - tab_halos['log_mstellar']
+
 
         tab_halos.write(fn_halos, overwrite=overwrite)
 
 
+    # little h via https://www.tng-project.org/data/downloads/TNG100-1/
+    def log_sfr_to_log_ssfr(self, log_sfr_arr, m_stellar_Msunperh_arr):
+        h = 0.6774  
+        m_stellar_Msun_arr = (m_stellar_Msunperh_arr)/h
+        return log_sfr_arr - np.log10(m_stellar_Msun_arr)
+
 
     def select_halos(self, fn_halos, fn_select, 
-                     num_star_particles_min=0, num_gas_particles_min=0, halo_logmass_min=0, 
-                     halo_logmass_max=20, halo_mass_difference_factor=None,
+                     num_star_particles_min=0, num_gas_particles_min=0, halo_logmass_min=None, 
+                     halo_logmass_max=None, halo_mass_difference_factor=None,
                      must_have_SAM_match=True,
                      must_have_halo_structure_info=True, seed=42):
+
+        if halo_logmass_min is None:
+            halo_logmass_min = -np.inf
+        if halo_logmass_max is None:
+            halo_logmass_max = np.inf
 
         print(f"Loading halo table {fn_halos}")
         tab_halos = Table.read(fn_halos)
@@ -459,24 +522,28 @@ class SimulationReader:
         i_Nstellar_abovemin = tab_halos['npartstellar'] >= num_star_particles_min
         i_select = i_select & i_Nstellar_abovemin
 
-        i_mhalo_inbounds = (tab_halos['m200m_fof'] >= halo_logmass_min) & \
-                           (tab_halos['m200m_fof'] < halo_logmass_max)
+        i_mhalo_inbounds = (tab_halos['log_m200m_fof'] >= halo_logmass_min) & \
+                           (tab_halos['log_m200m_fof'] < halo_logmass_max)
         i_select = i_select & i_mhalo_inbounds
 
         if halo_mass_difference_factor is not None:
             # cleaner way to do this?
-            i_mdiff_abovemin = (tab_halos['m200m']/tab_halos['m200m_hydro'] <  halo_mass_difference_factor) & \
-                               (tab_halos['m200m']/tab_halos['m200m_hydro'] >  1/halo_mass_difference_factor) & \
-                               (tab_halos['m200m_hydro']/tab_halos['m200m'] <  halo_mass_difference_factor) & \
-                               (tab_halos['m200m_hydro']/tab_halos['m200m'] > 1/halo_mass_difference_factor)
+            # here we don't use fof, because we don't have for hydro,
+            # and it's just a way to get an idea of if there's a bad mismatch
+            mhalo_dark = tab_halos['m200m']*self.mass_multiplier
+            mhalo_hydro = tab_halos['m200m_hydro']*self.mass_multiplier
+            i_mdiff_abovemin = (mhalo_dark/mhalo_hydro <  halo_mass_difference_factor) & \
+                               (mhalo_dark/mhalo_hydro >  1/halo_mass_difference_factor) & \
+                               (mhalo_hydro/mhalo_dark <  halo_mass_difference_factor) & \
+                               (mhalo_hydro/mhalo_dark > 1/halo_mass_difference_factor)
             i_select = i_select & i_mdiff_abovemin
 
         if must_have_SAM_match:
-            i_with_SAM_match = self.get_halos_with_SAM_match(idxs_halos_dark)
+            i_with_SAM_match = self.get_halos_with_SAM_match(tab_halos['idx_halo_dark'])
             i_select = i_select & i_with_SAM_match
 
         if must_have_halo_structure_info:
-            i_with_halo_structure_info = self.has_halo_structure_info(idxs_halos_dark)
+            i_with_halo_structure_info = self.get_halos_with_structure_info(tab_halos['idx_halo_dark'])
             i_select = i_select & i_with_halo_structure_info      
 
         N_halos = np.sum(i_select)
@@ -487,14 +554,14 @@ class SimulationReader:
         random_ints = np.arange(N_halos)
         rng.shuffle(random_ints) #in-place
 
-        indices_table = np.arange(len(tab_halos))
+        idxs_table = np.arange(len(tab_halos))
 
-        tab_select = Table([idxs_halos_dark[i_select], 
-                           idxs_table[i_select], 
-                           random_ints], 
+        tab_select = Table([tab_halos['idx_halo_dark'][i_select], 
+                            idxs_table[i_select], 
+                            random_ints], 
                     names=('idx_halo_dark', 'idx_table', 'rand_int'))
-        tab_select.write(fn_select, overwrite=overwrite)
-        print(f"Wrote table to {fn_select}")
+        tab_select.write(fn_select, overwrite=True)
+        print(f"Wrote table to {fn_select} with N={len(tab_select)} halos")
         return tab_select
 
 
@@ -655,8 +722,8 @@ class SimulationReader:
         self.dark_halo_arr = np.load(fn_dark_halo_arr, allow_pickle=True)
 
 
-    def has_halo_structure_info(self, idxs_halo_dark):
-        catalog_feature_names_all = ['M200c', 'c200c', 'a_form']
+    def get_halos_with_structure_info(self, idxs_halo_dark):
+        catalog_feature_names_all = ['c200c', 'a_form']
         with h5py.File(f'{self.tng_path_dark}/postprocessing/halo_structure_{self.snap_num_str}.hdf5','r') as f:
             x_catalog_features_all = []
             for i, c_feat in enumerate(catalog_feature_names_all):
@@ -665,7 +732,7 @@ class SimulationReader:
         x_catalog_features = x_catalog_features_all[idxs_halo_dark]
 
         i_has_halo_structure_info = ~np.isnan(x_catalog_features).any(axis=1)
-        print(f'Keeping {np.sum(i_has_halo_structure_info)}/{len(i_has_halo_structure_info)} halos with halo structure info')
+        print(f'{np.sum(i_has_halo_structure_info)}/{len(i_has_halo_structure_info)} halos have halo structure info')
         return i_has_halo_structure_info
 
 

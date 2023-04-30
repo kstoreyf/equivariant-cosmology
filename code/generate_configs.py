@@ -11,8 +11,9 @@ def main():
 
     #halo_config(sim_name)
     #geo_config(sim_name)
-    geo_clean_config(sim_name)
-    scalar_config(sim_name)
+    #geo_clean_config(sim_name)
+    #scalar_config(sim_name)
+    select_config(sim_name)
     #fit_config(sim_name)
 
 
@@ -105,7 +106,8 @@ def geo_config(sim_name):
 def geo_clean_config(sim_name):
 
     # halo info
-    halo_tag = '_mini10'
+    #halo_tag = '_mini10'
+    halo_tag = ''
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
     # geo info
@@ -153,7 +155,8 @@ def geo_clean_config(sim_name):
 def scalar_config(sim_name):
 
     # halo info
-    halo_tag = '_mini10'
+    #halo_tag = '_mini10'
+    halo_tag = ''
     fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
     # geo info
@@ -209,12 +212,12 @@ def scalar_config(sim_name):
     print(f"Generated scalar config file {fn_scalar_config}")
    
 
-def halo_select_config(sim_name):
-    
-    # sim info
-    base_dir = '/scratch/ksf293/equivariant-cosmology/data'
-    snap_num_str = '099' # z = 0
-    sim_name_dark = f'{sim_name}-Dark'
+def select_config(sim_name):
+
+    # halo info
+    #halo_tag = '_mini10'
+    halo_tag = ''
+    fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
 
     # halo params 
     num_star_particles_min = 50
@@ -231,19 +234,16 @@ def halo_select_config(sim_name):
     seed = 42
 
     # save info
-    halo_tag = ''
-    fn_halos = f'../data/halo_tables/halos_{sim_name}.fits'
-    fn_select = f'../data/halo_selections/halo_selection_{sim_name}{halo_tag}.fits'
+    select_tag = ''
+    fn_select = f'../data/halo_selections/halo_selection_{sim_name}{halo_tag}{select_tag}.fits'
 
-    fn_halo_config = f'{config_dir}/halos_{sim_name}{halo_tag}.yaml'
+    fn_select_config = f'{config_dir}/halo_selection_{sim_name}{halo_tag}{select_tag}.yaml'
 
-    sim_config_dict = {'base_dir': base_dir,
-                'snap_num_str': snap_num_str,
-                'sim_name': sim_name,
-                'sim_name_dark': sim_name_dark,
-                }
     halo_config_dict = {'halo_tag': halo_tag,
-                        'fn_halos': fn_halos,
+                        'fn_halo_config': fn_halo_config,
+                        }
+
+    select_config_dict = {'select_tag': select_tag,
                         'fn_select': fn_select,
                         'num_star_particles_min': num_star_particles_min,
                         'num_gas_particles_min': num_gas_particles_min,
@@ -254,11 +254,12 @@ def halo_select_config(sim_name):
                         'must_have_halo_structure_info': must_have_halo_structure_info,
                         'seed': seed
                         }
-    dicts = {'sim': sim_config_dict, 'halo': halo_config_dict}
+    dicts = {'halo': halo_config_dict,
+             'select': select_config_dict}
 
-    with open(fn_halo_config, 'w') as file:
+    with open(fn_select_config, 'w') as file:
         documents = yaml.safe_dump(dicts, file, sort_keys=False)
-    print(f"Generated halo config file {fn_halo_config}")
+    print(f"Generated halo config file {fn_select_config}")
 
 
 

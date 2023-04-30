@@ -201,15 +201,15 @@ def compute_error(y_true, y_pred, test_error_type='percentile'):
         return
         
 
-def get_mrv_for_rescaling(sim_reader, mrv_names):
-    mrv_for_rescaling = []
-    for mrv_name in mrv_names:
-        if mrv_name is None:
-            mrv_for_rescaling.append(np.ones(len(sim_reader.dark_halo_arr)))
-        else:
-            sim_reader.add_catalog_property_to_halos(mrv_name)
-            mrv_for_rescaling.append( [halo.catalog_properties[mrv_name] for halo in sim_reader.dark_halo_arr] )
-    return np.array(mrv_for_rescaling)
+# def get_mrv_for_rescaling(sim_reader, mrv_names):
+#     mrv_for_rescaling = []
+#     for mrv_name in mrv_names:
+#         if mrv_name is None:
+#             mrv_for_rescaling.append(np.ones(len(sim_reader.dark_halo_arr)))
+#         else:
+#             sim_reader.add_catalog_property_to_halos(mrv_name)
+#             mrv_for_rescaling.append( [halo.catalog_properties[mrv_name] for halo in sim_reader.dark_halo_arr] )
+#     return np.array(mrv_for_rescaling)
 
 
 
@@ -626,103 +626,120 @@ def num_mergers_mpb(tree, minMassRatio=1e-10, massPartType='dm', index=0):
     return numMergers
 
 
-def load_features(feature_mode, sim_reader, fn_geo_config=None,
-                  fn_scalar_config=None):
+def get_mrv_for_rescaling(tab_halos, fn_geo_clean_config,
+                          use_logs=True):
+    # Get MRV rescaling
+    # Need halo table and MRV rescaling names for x_extra
+    with open(fn_geo_clean_config, 'r') as file:
+        geo_clean_params = yaml.safe_load(file)
+    gcp = geo_clean_params['geo_clean']
 
-    assert feature_mode in ['scalars', 'geos', 'catalog', 'catalog_z0', 'catalog_mergers', 'catalog_mergers_noaform', 'mrv', 'mrvc'], "Feature mode not recognized!"
+    mrv = []
+    for name in gcp['mrv_names_for_rescaling']:
+        if use_logs and 'log_'+name in tab_halos.columns:
+            name = 'log_'+name
+        print(name)
+        mrv.append(tab_halos[name])   
+    return np.array(mrv).T
 
-    if feature_mode=='scalars' or feature_mode=='geos':
+
+def load_features(feature_mode, tab_halos,
+                  tab_select,
+                  fn_geo_clean_config=None, fn_scalar_config=None,
+                  ):
+
+    assert feature_mode in ['scalars', 'geos', 'catalogz0', 'mrv'], f"Feature mode {feature_mode} not recognized!"
+
+    # with open(fn_select_config, 'r') as file:
+    #     select_params = yaml.safe_load(file)
+
+    # fn_halo_config = select_params['halo']['fn_halo_config']
+    # with open(fn_halo_config, 'r') as file:
+    #     halo_params = yaml.safe_load(file)
+
+    # tab_halos = load_table(halo_params['halo']['fn_halos'])
+    # tab_select = load_table(select_params['select']['fn_select'])
+    idxs_table = np.array(tab_select['idx_table'])
+
+    if feature_mode=='scalars':
 
         assert fn_scalar_config is not None, "Must pass fn_scalar_config!"
-        from scalar_features import ScalarFeaturizer
+
         with open(fn_scalar_config, 'r') as file:
             scalar_params = yaml.safe_load(file)
         scp = scalar_params['scalar']
 
-        if feature_mode=='scalars':
-            fn_geo_config = scalar_params['geo']['fn_geo_config']       
+        fn_scalar_features = scp['fn_scalar_features']
+        tab_scalars = load_table(fn_scalar_features)
+        #print(np.array(tab_scalars))
+        #print(tab_scalars)
+        # as_array converts to structured array
+        # view converts to regular numpy array
+        # https://stackoverflow.com/a/10171321
+        x = tab_scalars.as_array()
+        x = x.view((float, len(x.dtype.names)))
 
-        assert fn_geo_config is not None, "Must pass either fn_scalar_config or fn_geo_config for scalars/geos!"
-
-        from geometric_features import GeometricFeaturizer
-        with open(fn_geo_config, 'r') as file:
-            geo_params = yaml.safe_load(file)
-
-        geo_featurizer = GeometricFeaturizer()
-        geo_featurizer.load_features(geo_params['geo']['fn_geo_features'])
-
-        mrv_for_rescaling = get_mrv_for_rescaling(sim_reader, scp['mrv_names_for_rescaling'])
-        scalar_featurizer = ScalarFeaturizer(geo_featurizer.geo_feature_arr,
-                                n_groups_rebin=scp['n_groups_rebin'], 
-                                transform_pseudotensors=scp['transform_pseudotensors'], 
-                                mrv_for_rescaling=mrv_for_rescaling)
-        x_extra = np.log10(mrv_for_rescaling).T
+        fn_halo_config = scalar_params['halo']['fn_halo_config']
+        fn_geo_clean_config = scalar_params['geo_clean']['fn_geo_clean_config']
+        x_extra = get_mrv_for_rescaling(tab_halos, fn_geo_clean_config,
+                                        use_logs=True)
         
-        if feature_mode=='geos':
-            # need to grab from scalar featurizer bc its doing the rebinning, rescaling 
-            # and transforming for us (TODO: check if should be doing transforming here)
-            x = geo_feature_arr_to_values(scalar_featurizer.geo_feature_arr)
+    if feature_mode=='geos':
 
-        elif feature_mode=='scalars':
-            print('loading scalar features')
-            scalar_featurizer.load_features(scp['fn_scalar_features'])
-            print('loaded')
-            x = scalar_featurizer.scalar_features
 
+        assert fn_geo_clean_config is not None, "Must pass fn_geo_clean_config!"
+
+        with open(fn_geo_clean_config, 'r') as file:
+            geo_clean_params = yaml.safe_load(file)
+        gcp = geo_clean_params['geo_clean']
+
+        fn_geo_clean_features = gcp['fn_geo_clean_features']
+        tab_geos = load_table(fn_geo_clean_features)
+
+        # need to flatten geo features into list of components,
+        # bc many are vectors or tensors
+        # via https://stackoverflow.com/a/2158522
+        import collections
+        def _flatten(vals):
+            if isinstance(vals, collections.abc.Iterable):
+                return [a for i in vals for a in _flatten(i)]
+            else:
+                return [vals]
+
+        x = np.array([np.array(_flatten(tab_geos[i])) for i in range(len(tab_geos))])
+        fn_halo_config = geo_clean_params['halo']['fn_halo_config']
+        x_extra = get_mrv_for_rescaling(tab_halos, fn_geo_clean_config,
+                                        use_logs=True)
+        
     elif feature_mode=='mrv':
-        #mrv_for_rescaling = get_mrv_for_rescaling(sim_reader, scp['mrv_names_for_rescaling'])
-        #feature_names = ['m200mean', 'r200mean', 'v200mean']
-        sim_reader.add_catalog_property_to_halos('x_minPE')
-        #sim_reader.add_catalog_property_to_halos('m200mean') # this will also add r200mean, v200mean
-
-        feature_names = ['m200m', 'r200m', 'v200m']
-        x = []
-        for name in feature_names:
-            x_feat = []
-            sim_reader.add_catalog_property_to_halos(name)
-            for halo in sim_reader.dark_halo_arr:
-                x_feat.append(halo.catalog_properties[name])
-            x.append(x_feat)
-        x = np.array(x).T
-        x = np.log10(x)
+        feature_names = ['log_m200m_fof', 'log_r200m', 'v200m_fof']
+        x = np.array([tab_halos[name] for name in feature_names]).T
         x_extra = None
 
-    elif 'catalog' in feature_mode:
-        #sim_reader.add_catalog_property_to_halos('veldisp_dm')
-        #sim_reader.add_catalog_property_to_halos('spin_dm')
-        catalog_feature_names = ['M200c', 'c200c', 'veldisp_dm', 'spin_dm', 'a_form']
-        if feature_mode=='catalog_z0' or feature_mode=='catalog_mergers_noaform':
-            catalog_feature_names = ['M200c', 'c200c', 'veldisp_dm', 'spin_dm']
-        # sim_reader.get_structure_catalog_features(catalog_feature_names)
-        # x = sim_reader.x_catalog_features
+    elif feature_mode=='catalogz0':
+        feature_names = ['c200c', 'veldisp_subhalo', 'spin_subhalo']
+        x = np.array([tab_halos[name] for name in feature_names]).T
 
-        x = []
-        for name in catalog_feature_names:
-            x_feat = []
-            sim_reader.add_catalog_property_to_halos(name)
-            for halo in sim_reader.dark_halo_arr:
-                x_feat.append(halo.catalog_properties[name])
-            x.append(x_feat)
-        x = np.array(x).T
+        extra_feature_names = ['log_m200m_fof', 'log_r200m', 'v200m_fof']
+        x_extra = np.array([tab_halos[name] for name in feature_names]).T
+        print("TODO: check shape - should be transposing extra?")
 
-        if 'mergers' in feature_mode:
-            properties_merger = ['num_mergers', 'num_major_mergers', 'ratio_last_major_merger']
-            for prop in properties_merger:
-                vals = get_y_vals(prop, sim_reader)
-                vals = np.atleast_2d(vals).T
-                x = np.concatenate((x, vals), axis=1)
-        x_extra = None
+    x = np.array(x)
+    if x_extra is None:
+        return x[idxs_table], None
+    x_extra = np.array(x_extra)
 
-    elif feature_mode=='mrvc':
-        mrv_for_rescaling = get_mrv_for_rescaling(sim_reader, scp['mrv_names_for_rescaling'])
-        mrv = np.log10(mrv_for_rescaling).T
-        x_extra = mrv
+    return x[idxs_table], x_extra[idxs_table]
 
-        catalog_feature_names = ['c200c']
-        sim_reader.get_structure_catalog_features(catalog_feature_names)
-        x = sim_reader.x_catalog_features
 
-    return np.array(x), x_extra
+def load_labels(label_names, tab_halos,
+                tab_select,
+                fn_geo_clean_config=None, fn_scalar_config=None,
+                ):
+    idxs_table = tab_select['idx_table']
+    labels = [tab_halos[ln] for ln in label_names]
+    labels = np.array(labels).T
+    return labels[idxs_table]
 
 
 def get_butterfly_error(x_label_name, y_label_name, halo_logmass_min=10.8, n_bins=10):

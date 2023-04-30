@@ -21,11 +21,11 @@ def seed_torch(seed=1029):
 
 
 def main():
-    #y_label_names = ['m_stellar']
+    y_label_names = ['mstellar']
     #y_label_names = ['j_stellar']
     #y_label_names = ['gband']
     #y_label_names = ['num_mergers']
-    y_label_names = ['m_stellar', 'ssfr1', 'r_stellar', 'gband_minus_iband', 'bhmass_per_mstellar', 'j_stellar']
+    #y_label_names = ['m_stellar', 'ssfr1', 'r_stellar', 'gband_minus_iband', 'bhmass_per_mstellar', 'j_stellar']
     #y_label_names = ['m_stellar', 'ssfr1', 'r_stellar', 'bhmass_per_mstellar']
     #y_label_names = ['a_mfrac_n19']
     #y_label_names = ['a_mfrac_0.75']
@@ -42,16 +42,13 @@ def run(y_label_names, n_top_features=None):
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
     #halo_tag = '_Mmin10_nstar1'
-    halo_tag = '_Mmin10.25'
+    halo_tag = '_mini10'
     geo_tag = ''
-    scalar_tag = '_n3'
-    # geo_tag = None
-    # scalar_tag = None
-    #scalar_tag = '_gx1_gv1_n5'
+    geo_clean_tag = '_n3'
+    scalar_tag = ''
+    select_tag = ''
+
     frac_subset = 1.0
-    #n_top_features = 1
-    #info_metric = 'spearman'
-    #info_metric = 'pca_top50'
     info_metric = None
 
     # fit parameters
@@ -70,11 +67,8 @@ def run(y_label_names, n_top_features=None):
 
     feature_mode = 'scalars'
     #feature_mode = 'geos'
-    #feature_mode = 'catalog'
-    #feature_mode = 'catalog_z0'
-    #feature_mode = 'catalog_mergers_noaform'
+    #feature_mode = 'catalogz0'
     #feature_mode = 'mrv'
-    #feature_mode = 'mrvc'
 
     y_str = '_'.join(y_label_names)
     frac_tag, info_tag = '', ''
@@ -83,65 +77,66 @@ def run(y_label_names, n_top_features=None):
     # if info_metric is not None:
     #     info_tag = f'_{info_metric}_n{n_top_features}'
     #fit_tag = '_list_nl9_bn'
-    model_tag = 'nn'
-    #model_tag = 'hgboost'
-    #model_tag = 'gboost'
-    #model_tag = 'rf'
-    #model_tag = 'xgboost'
-    #model_tag = 'tabnet'
+    #model_name = 'nn'
+    model_name = 'hgboost'
+    #model_name = 'gboost'
+    #model_name = 'rf'
+    #model_name = 'xgboost'
+    #model_name = 'tabnet'
+    model_tag = f'_{model_name}_yerrnan'
     #fit_tag = '_nest300'
     #fit_tag = '_scaleqt100normal'
-    fit_tag = '_yerr0.05'
+    #fit_tag = '_yerrnan'
     #fit_tag = '_unweighted'
     #fit_tag = '_list_nl6'
+    fit_tag = f'_{feature_mode}'
     if feature_mode=='scalars':
         fit_tag += geo_tag
         fit_tag += scalar_tag
     if feature_mode=='geos':
          fit_tag += geo_tag       
 
-    fit_tag += f'_{y_str}_{model_tag}_{feature_mode}'
-    if model_tag=='nn' or model_tag=='hgboost':
-        fit_tag += f'_epochs{max_epochs}_lr{lr}'
-    if model_tag=='nn':
-        fit_tag += f'_hs{hidden_size}'
-    if model_tag=='xgboost':
-        fit_tag += f'_lr{lr}'
+    if model_name=='nn' or model_name=='hgboost':
+        model_tag += f'_epochs{max_epochs}_lr{lr}'
+    if model_name=='nn':
+        model_tag += f'_hs{hidden_size}'
+    if model_name=='xgboost':
+        model_tag += f'_lr{lr}'
+
+    fit_tag += model_tag
 
     if frac_subset != 1.0:
         fit_tag += f'_f{frac_subset}'
     if info_metric is not None:
         fit_tag += f'_{info_metric}_n{n_top_features}'    
     
-    fn_model = f'../models/models_{sim_name}/model_{sim_name}{halo_tag}{fit_tag}.pt'
-    fn_pred = f'../predictions/predictions_{sim_name}/predictions_{sim_name}{halo_tag}{fit_tag}.npy'
+    fn_model = f'../models/model_{sim_name}{halo_tag}{fit_tag}.pt'
+    fn_pred = f'../predictions/predictions_{sim_name}{halo_tag}{fit_tag}.npy'
 
     # Load config
-    fn_halo_config = f'../configs/halos_{sim_name}{halo_tag}.yaml'
+    fn_select_config = f'../configs/halo_selection_{sim_name}{halo_tag}.yaml'
+    with open(fn_select_config, 'r') as file:
+        select_params = yaml.safe_load(file)
+    tab_select = utils.load_table(select_params['select']['fn_select'])
+
+    fn_halo_config = select_params['halo']['fn_halo_config']
     with open(fn_halo_config, 'r') as file:
         halo_params = yaml.safe_load(file)
-    sp = halo_params['sim']
-
-    # Load in objects
-    print("Setting up SimulationReader")
-    sim_reader = SimulationReader(sp['base_dir'], sp['sim_name'], sp['sim_name_dark'], 
-                                  sp['snap_num_str'])
-    sim_reader.load_dark_halo_arr(halo_params['halo']['fn_dark_halo_arr'])
-    sim_reader.read_simulations()
+    tab_halos = utils.load_table(halo_params['halo']['fn_halos'])
 
     print("Loading features")
-    fn_scalar_config, fn_geo_config = None, None
+    fn_scalar_config, fn_geo_clean_config = None, None
     if feature_mode=='scalars':
-        fn_scalar_config = f'../configs/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
+        fn_scalar_config = f'../configs/scalar_{sim_name}{halo_tag}{geo_tag}{geo_clean_tag}{scalar_tag}.yaml'
+        print('fn_scalar_config:', fn_scalar_config)
     elif feature_mode=='geos':
-        fn_geo_config = f'../configs/geo_{sim_name}{halo_tag}{geo_tag}.yaml'
-        # geos needs scalar config too bc that's what tells it the bins and transformations!
-        # bad design but not a clear/straightforward better way to do this
-        fn_scalar_config = f'../configs/scalar_{sim_name}{halo_tag}{geo_tag}{scalar_tag}.yaml'
-    x, x_extra = utils.load_features(feature_mode, sim_reader,
-                                     fn_geo_config=fn_geo_config,
-                                     fn_scalar_config=fn_scalar_config)
+        fn_geo_clean_config = f'../configs/geo_clean_{sim_name}{halo_tag}{geo_tag}{geo_clean_tag}.yaml'
+        print('fn_geo_clean_config:', fn_geo_clean_config)
 
+    x, x_extra = utils.load_features(feature_mode,
+                                     tab_halos, tab_select,
+                                     fn_geo_clean_config=fn_geo_clean_config,
+                                     fn_scalar_config=fn_scalar_config)
 
     if info_metric is not None:
         print("Loading feature info")
@@ -165,7 +160,7 @@ def run(y_label_names, n_top_features=None):
 
     # Split data into train, validation, and test
     frac_train, frac_val, frac_test = 0.7, 0.15, 0.15
-    random_ints = np.array([halo.random_int for halo in sim_reader.dark_halo_arr])
+    random_ints = tab_select['rand_int']
     idx_train, idx_valid, idx_test = utils.split_train_val_test(random_ints, 
                         frac_train=frac_train, frac_val=frac_val, frac_test=frac_test)
     if frac_subset != 1.0: 
@@ -175,29 +170,29 @@ def run(y_label_names, n_top_features=None):
         idx_test = rng.choice(idx_valid, size=int(frac_subset*len(idx_valid)))
     print("N_train:", len(idx_train), "N_valid:", len(idx_valid))
 
-    y = [] 
-    y_uncertainties = []
-    for i in range(len(y_label_names)):
-        y_single = utils.get_y_vals(y_label_names[i], sim_reader, halo_tag=halo_tag)
-        y_single = np.array(y_single)
-        y_uncertainties_single = utils.get_y_uncertainties(y_label_names[i], sim_reader=sim_reader, y_vals=y_single,
-                                                           idx_train=idx_train)
-        if y_single.ndim>1:
-            y.extend(y_single.T)
-            y_uncertainties_single = np.array(y_uncertainties_single)
-            y_uncertainties.extend(y_uncertainties_single.T)
-        else:
-            y.append(y_single)
-            y_uncertainties.append(y_uncertainties_single)
+    y = utils.load_labels(y_label_names,
+                            tab_halos, tab_select)
 
-    y = np.array(y).T
-    y_uncertainties = np.array(y_uncertainties).T
+    # For now!
+    y_uncertainties = np.full(y.shape, 1)
+    #y = [] 
+    # y_uncertainties = []
+    # for i, y_label_name in enumerate(y_label_names):
+    #     #y_single = np.array(tab_halos[y_label_name])
+    #     # TODO add uncertainties to table!
+    #     y_uncertainties_single = np.full(y.shape, np.nan)
+    #     if y_single.ndim>1:
+    #         #y.extend(y_single.T)
+    #         y_uncertainties.extend(y_uncertainties_single.T)
+    #     else:
+    #         #y.append(y_single)
+    #         y_uncertainties.append(y_uncertainties_single)
+   # y_uncertainties = np.array(y_uncertainties).T
+
+
+    #y = np.array(y).T
     print('Label (y) shape:', y.shape)
     print('Uncertainty (y_uncertainties) shape:', y_uncertainties.shape)
-
-    # print("SETTING FEATURES = LABELS AS TEST, CAREFUL")
-    # x = y
-    # print("Feature (x) shape:", x.shape)
 
 
     # training
@@ -223,15 +218,15 @@ def run(y_label_names, n_top_features=None):
         x_extra_valid = x_extra[idx_valid]
         x_extra_test = x_extra[idx_test]
 
-    if model_tag=='nn':
+    if model_name=='nn':
         nnfitter = NNFitter()
-    elif model_tag=='hgboost' or model_tag=='gboost':
+    elif model_name=='hgboost' or model_name=='gboost':
         nnfitter = BoosterFitter()
-    elif model_tag=='xgboost':
+    elif model_name=='xgboost':
         nnfitter = XGBoosterFitter()
-    elif model_tag=='rf':
+    elif model_name=='rf':
         nnfitter = RFFitter()
-    elif model_tag=='tabnet':
+    elif model_name=='tabnet':
         nnfitter = TabNetFitter()
     else:
         raise ValueError(f"Model {model} not recognized!")
