@@ -266,7 +266,7 @@ class SimulationReader:
         print(f"Starting with all {len(self.halos_dark)} halos in {self.sim_name}")
 
         # Make mass cut
-        i_select = np.log10(self.halos_dark['Group_M_Mean200']) + self.log_mass_shift >= halo_logmass_min 
+        i_select = self.log_m(self.halos_dark['Group_M_Mean200']) >= halo_logmass_min 
         print(f"After mass cut: N = {np.sum(i_select)}")
 
         # Cut out halos with no subhalos
