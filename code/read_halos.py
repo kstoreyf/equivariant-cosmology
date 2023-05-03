@@ -333,8 +333,11 @@ class SimulationReader:
         tab_halos['m200c'] = self.halos_dark['Group_M_Crit200'][idxs_halos_dark]
 
         ### positions
+        #TODO: if do an update, update to x_minPE=GroupPos of halo, which same as minPE of central dark subhalo,
+        # and x_minPE_subhalo for SubhaloPos, na
+        # and also update what i pass to compute m200m_fof
         tab_halos['x_com'] = self.halos_dark['GroupCM'][idxs_halos_dark]
-        tab_halos['x_grouppos'] = self.halos_dark['GroupCM'][idxs_halos_dark]
+        tab_halos['x_grouppos'] = self.halos_dark['GroupPos'][idxs_halos_dark]
         tab_halos['x_minPE'] = self.subhalos_dark['SubhaloPos'][idxs_subhalos_dark]
 
         ### subhalo spin 

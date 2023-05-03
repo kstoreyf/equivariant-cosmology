@@ -12,8 +12,8 @@ def main():
     #halo_config(sim_name)
     #geo_config(sim_name)
     #geo_clean_config(sim_name)
-    #scalar_config(sim_name)
-    select_config(sim_name)
+    scalar_config(sim_name)
+    #select_config(sim_name)
     #fit_config(sim_name)
 
 
@@ -169,8 +169,8 @@ def scalar_config(sim_name):
 
     # scalar parameters
     m_order_max = 2
-    x_order_max = 2
-    v_order_max = 2
+    x_order_max = 4
+    v_order_max = 4
     eigenvalues_not_trace = True
     elementary_scalars_only = True
 

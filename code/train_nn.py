@@ -21,7 +21,7 @@ def seed_torch(seed=1029):
 
 
 def main():
-    y_label_names = ['mstellar']
+    y_label_names = ['log_mstellar']
     #y_label_names = ['j_stellar']
     #y_label_names = ['gband']
     #y_label_names = ['num_mergers']
@@ -41,8 +41,8 @@ def run(y_label_names, n_top_features=None):
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
-    #halo_tag = '_Mmin10_nstar1'
-    halo_tag = '_mini10'
+    halo_tag = ''
+    #halo_tag = '_mini10'
     geo_tag = ''
     geo_clean_tag = '_n3'
     scalar_tag = ''
@@ -52,12 +52,12 @@ def run(y_label_names, n_top_features=None):
     info_metric = None
 
     # fit parameters
-    max_epochs = 1000
-    lr = 5e-5
-    hidden_size = 128
-    # max_epochs = 300
-    # lr = 0.1
-    # hidden_size = None
+    # max_epochs = 1000
+    # lr = 5e-5
+    # hidden_size = 128
+    max_epochs = 300
+    lr = 0.1
+    hidden_size = None
     # max_epochs = 1000
     # lr = 0.02
     # hidden_size = None
@@ -65,10 +65,10 @@ def run(y_label_names, n_top_features=None):
     # lr = 0.02
     # hidden_size = None
 
-    feature_mode = 'scalars'
+    #feature_mode = 'scalars'
     #feature_mode = 'geos'
     #feature_mode = 'catalogz0'
-    #feature_mode = 'mrv'
+    feature_mode = 'mrv'
 
     y_str = '_'.join(y_label_names)
     frac_tag, info_tag = '', ''
@@ -91,10 +91,10 @@ def run(y_label_names, n_top_features=None):
     #fit_tag = '_list_nl6'
     fit_tag = f'_{feature_mode}'
     if feature_mode=='scalars':
-        fit_tag += geo_tag
+        fit_tag += f'{geo_tag}{geo_clean_tag}{scalar_tag}'
         fit_tag += scalar_tag
     if feature_mode=='geos':
-         fit_tag += geo_tag       
+        fit_tag += f'{geo_tag}{geo_clean_tag}'       
 
     if model_name=='nn' or model_name=='hgboost':
         model_tag += f'_epochs{max_epochs}_lr{lr}'
@@ -103,7 +103,7 @@ def run(y_label_names, n_top_features=None):
     if model_name=='xgboost':
         model_tag += f'_lr{lr}'
 
-    fit_tag += model_tag
+    fit_tag += f'_{y_str}{model_tag}'
 
     if frac_subset != 1.0:
         fit_tag += f'_f{frac_subset}'
@@ -113,6 +113,7 @@ def run(y_label_names, n_top_features=None):
     fn_model = f'../models/model_{sim_name}{halo_tag}{fit_tag}.pt'
     fn_pred = f'../predictions/predictions_{sim_name}{halo_tag}{fit_tag}.npy'
 
+    print("Loading configs and tables")
     # Load config
     fn_select_config = f'../configs/halo_selection_{sim_name}{halo_tag}.yaml'
     with open(fn_select_config, 'r') as file:

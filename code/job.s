@@ -15,8 +15,8 @@
 ##SBATCH --job-name=feature_info_MI
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=24
-#SBATCH --mem=10GB
+#SBATCH --cpus-per-task=48
+#SBATCH --mem=60GB
 #SBATCH --time=24:00:00
 
 # need somewhere >30 and <60 GB for train_nn.py

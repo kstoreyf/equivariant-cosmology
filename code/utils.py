@@ -13,39 +13,40 @@ sys.path.insert(1, '../code')
 
 
 
-label_dict = {'m_200m': r'log($M_\mathrm{halo} \: [h^{-1} \, M_\odot]$)',
-              'm_stellar': r'log($m_\mathrm{*} \: [h^{-1} \, M_\odot]$)',
-              'r_200m': r'log($R_\mathrm{halo} \: [h^{-1} \, \mathrm{kpc}]$)',
-              'r_stellar': r'log($r_\mathrm{*} \: [h^{-1} \, \mathrm{kpc}]$)',
-              'ssfr': r'log(sSFR $\: [\mathrm{yr}^{-1}]$)',
+label_dict = {'log_m200m_fof': r'log($M_\mathrm{200m,FoF}) \: [h^{-1} \, M_\odot]$)',
+              'log_mstellar': r'log($m_\mathrm{*} \: [h^{-1} \, M_\odot]$)',
+              'log_r200m': r'log($R_\mathrm{200m} \: [h^{-1} \, \mathrm{kpc}]$)',
+              'v200m_fof': r'$V_\mathrm{200m,FoF}) \: [km s^{-1}]$',
+              'log_rstellar': r'log($r_\mathrm{*} \: [h^{-1} \, \mathrm{kpc}]$)',
+              'log_ssfr': r'log(sSFR $\: [\mathrm{yr}^{-1}]$)',
               'sfr': r'log(SFR $\: [M_\odot \, \mathrm{yr}^{-1}]$)',
-              'ssfr1': r'log(sSFR$_\mathrm{1\,Gyr}$ $\: [\mathrm{yr}^{-1}]$)',
+              'log_ssfr1': r'log(sSFR$_\mathrm{1\,Gyr}$ $\: [\mathrm{yr}^{-1}]$)',
               'sfr1': r'log(SFR$_\mathrm{1\,Gyr}$ $\: [M_\odot \, \mathrm{yr}^{-1}]$)',
               'a_form': r'$a_\mathrm{form}$',
-              'c_200c': r'$log(c_\mathrm{200c})$',
+              'c200c': r'$log(c_\mathrm{200c})$',
               'M_acc': r'$M_\mathrm{acc,dyn}$',
               'm_vir': r'$M_\mathrm{vir} [h^{-1} \, M_\odot]$',
               'gband': r'$g$-band magnitude',
               'gband_minus_iband': r'$g-i$ color',
-              'j_stellar': r'log($j_*$ [km/s kpc])',
-              'bhmass': r'log($M_\cdot [h^{-1} \, M_\odot]$)',
-              'bhmass_per_mstellar': r'log($M_{\cdot}/m_*$)',
+              'log_jstellar': r'log($j_*$ [km/s kpc])',
+              'log_mbh': r'log($M_\cdot [h^{-1} \, M_\odot]$)',
+              'log_mbh_per_mstellar': r'log($M_{\cdot}/m_*$)',
               'num_mergers': 'log(number of mergers)',
               }
 
-lim_dict = {'m_200m': (10, 14),
-            'm_stellar': (7, 12),
-            'ssfr1': (-15,-8),
-            'r_stellar': (-1,2),
+lim_dict = {'log_m200m_fof': (10, 14),
+            'log_mstellar': (7, 12),
+            'log_ssfr1': (-15,-8),
+            'log_stellar': (-1,2),
             'gband': (-24, -13),
             'gband_minus_iband': (0.0, 1.5),
-            'j_stellar': (0.5, 4.5),
-            'bhmass': (4.5, 10.5),
-            'bhmass_per_mstellar': (-5.5, -1),
+            'log_jstellar': (0.5, 4.5),
+            'log_mbh': (4.5, 10.5),
+            'log_mbh_per_mstellar': (-5.5, -1),
             'num_mergers': (0.5, 4.5),
             }
 
-sfr_zero = 1e-3
+#sfr_zero = 1e-3
 
 
 def get_label(label_name):
@@ -671,6 +672,9 @@ def load_features(feature_mode, tab_halos,
 
         fn_scalar_features = scp['fn_scalar_features']
         tab_scalars = load_table(fn_scalar_features)
+        # remove index column, not a feature!
+        tab_scalars.remove_column('idx_halo_dark')
+
         #print(np.array(tab_scalars))
         #print(tab_scalars)
         # as_array converts to structured array
@@ -695,6 +699,8 @@ def load_features(feature_mode, tab_halos,
 
         fn_geo_clean_features = gcp['fn_geo_clean_features']
         tab_geos = load_table(fn_geo_clean_features)
+        # remove index column, not a feature!
+        tab_geos.remove_column('idx_halo_dark')
 
         # need to flatten geo features into list of components,
         # bc many are vectors or tensors

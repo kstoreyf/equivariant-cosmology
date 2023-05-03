@@ -294,7 +294,9 @@ def plot_pred_vs_property(x_label_name, y_label_name, x_property, y_true, y_pred
 def plot_pred_vs_property_hist(ax, x_label_name, y_label_name, x_property, y_pred,
                                cmap, text_results='', x_lim=None, y_lim=None,
                                weight=1, weight_by_dex=False,
-                               label_append=', predicted'):
+                               label_append=', predicted',
+                               colorbar_fig=None,
+                               colorbar_label=''):
 
     y_label = utils.label_dict[y_label_name]
     
@@ -303,12 +305,13 @@ def plot_pred_vs_property_hist(ax, x_label_name, y_label_name, x_property, y_pre
     if y_lim is None:
         y_lim = utils.lim_dict[y_label_name]
     
-    bin_width = (y_lim[1]-y_lim[0])/100
-    bins_x = np.arange(x_lim[0], x_lim[1]+bin_width, bin_width)
-    bins_y = np.arange(y_lim[0], y_lim[1]+bin_width, bin_width)
+    bin_width_y = (y_lim[1]-y_lim[0])/100
+    bins_y = np.arange(y_lim[0], y_lim[1]+bin_width_y, bin_width_y)
+    bin_width_x = (x_lim[1]-x_lim[0])/100
+    bins_x = np.arange(x_lim[0], x_lim[1]+bin_width_x, bin_width_x)
 
     if weight_by_dex:
-        weight /= bin_width 
+        weight /= bin_width_x*bin_width_y
     weights = np.full(y_pred.shape, weight)
 
     ax.hist2d(x_property, y_pred, bins=[bins_x, bins_y], cmap=cmap, cmin=weight, weights=weights)
@@ -326,6 +329,9 @@ def plot_pred_vs_property_hist(ax, x_label_name, y_label_name, x_property, y_pre
 
     ax.text(0.1, 0.9, text_results, 
              transform=ax.transAxes, verticalalignment='top', fontsize=22)
+
+    if colorbar_fig is not None:
+        cbar = colorbar_fig.colorbar(h[3], ax=ax, label=colorbar_label)
 
 
 def plot_fits(x_label_name, y_label_name, fitter, log_m_halo, test_error_type='percentile', 
@@ -416,11 +422,8 @@ def plot_pred_vs_true_hist(ax, y_label_name, y_true, y_pred, cmap,
         y_lim = utils.lim_dict[y_label_name]
     bin_width_y = (y_lim[1]-y_lim[0])/100
     bins_y = np.arange(y_lim[0], y_lim[1]+bin_width_y, bin_width_y)
-    # bin_width_x = (x_lim[1]-x_lim[0])/100
-    # bins_x = np.arange(x_lim[0], x_lim[1]+bin_width_x, bin_width_x)
 
     if weight_by_dex:
-        #weight /= bin_width_x*bin_width_y
         weight /= bin_width_y*bin_width_y
     weights = np.full(y_true.shape, weight)
     h = ax.hist2d(y_true, y_pred, bins=(bins_y, bins_y), cmap=cmap, cmin=weight, weights=weights)
@@ -430,7 +433,7 @@ def plot_pred_vs_true_hist(ax, y_label_name, y_true, y_pred, cmap,
     ax.plot(true_line, true_line, color='grey', zorder=0)
 
     # labels & adjustments
-    ax.set_title(title)
+    ax.set_title(title, fontsize=22, pad=15)
     y_label = utils.label_dict[y_label_name] if y_label_name in utils.label_dict else y_label_name
     ax.set_xlabel(y_label + ', true')
     ax.set_ylabel(y_label + ', predicted')
@@ -517,15 +520,24 @@ def plot_halo_dark_geometric(base_path_dark, snap_num, m_dmpart, halo, bin_edges
 
 
 def plot_residual_vs_property_hist(ax, x_label_name, y_label_name, x_property, y_true, y_pred,
-                               cmap, text_results='', x_lim=None, y_lim=None):
+                               cmap, text_results='', x_lim=None, y_lim=None, weight=1, weight_by_dex=False, 
+                               colorbar_fig=None,
+                               colorbar_label=''):
 
     x_lim = utils.lim_dict[x_label_name]    
-    bins_x = np.linspace(x_lim[0], x_lim[1], 100)
-    bins_y = np.linspace(-1, 1, 100)
+
+    bin_width_y = (1 - (-1))/100
+    bins_y = np.arange(-1, 1, bin_width_y)
+    bin_width_x = (x_lim[1]-x_lim[0])/100
+    bins_x = np.arange(x_lim[0], x_lim[1]+bin_width_x, bin_width_x)
+
+    if weight_by_dex:
+        weight /= bin_width_x*bin_width_y
+    weights = np.full(y_pred.shape, weight)
 
     # plot data
     ax.hist2d(x_property, y_pred-y_true, bins=[bins_x, bins_y], 
-              cmap=cmap, cmin=1)
+              cmap=cmap, cmin=weight, weights=weights)
     
     # labels & adjustments
     x_label = utils.label_dict[x_label_name]
@@ -542,10 +554,14 @@ def plot_residual_vs_property_hist(ax, x_label_name, y_label_name, x_property, y
     ax.text(0.1, 0.9, text_results, 
              transform=ax.transAxes, verticalalignment='top', fontsize=22)
 
+    if colorbar_fig is not None:
+        cbar = colorbar_fig.colorbar(h[3], ax=ax, label=colorbar_label)
+
 
 def plot_multi_panel_pred(x_label_name, y_label_name, x_property, y_true, y_pred,
                       text_results='', title=None, save_fn=None,
                       colors_test=None,
+                      weight=1, weight_by_dex=False,
                       colorbar_label=''):
     fig, axarr = plt.subplots(nrows=2, ncols=2, figsize=(12,12),
                               gridspec_kw={'height_ratios': [1, 1], 'width_ratios': [10, 9]},
@@ -555,18 +571,22 @@ def plot_multi_panel_pred(x_label_name, y_label_name, x_property, y_true, y_pred
     inferno_r = matplotlib.cm.inferno_r
     cmap = utils.shiftedColorMap(inferno_r, start=0.1, stop=1.0)
     
-    plot_pred_vs_property_hist(axarr[0,0], x_label_name, y_label_name, x_property, y_pred, cmap)
+    plot_pred_vs_property_hist(axarr[0,0], x_label_name, y_label_name, x_property, y_pred, cmap,
+    weight=weight, weight_by_dex=weight_by_dex)
     
-    h = plot_pred_vs_true_hist(axarr[0,1], y_label_name, y_true, y_pred, cmap, text_results=text_results)
+    h = plot_pred_vs_true_hist(axarr[0,1], y_label_name, y_true, y_pred, cmap, text_results=text_results,
+    weight=weight, weight_by_dex=weight_by_dex)
     
-    plot_residual_vs_property_hist(axarr[1,0], x_label_name, y_label_name, x_property, y_true, y_pred, cmap)
+    plot_residual_vs_property_hist(axarr[1,0], x_label_name, y_label_name, x_property, y_true, y_pred, cmap,
+    weight=weight, weight_by_dex=weight_by_dex)
 
-    plot_residual_vs_property_hist(axarr[1,1], y_label_name, y_label_name, y_true, y_true, y_pred, cmap)
+    plot_residual_vs_property_hist(axarr[1,1], y_label_name, y_label_name, y_true, y_true, y_pred, cmap,
+    weight=weight, weight_by_dex=weight_by_dex)
     
-    ticks = np.arange(5, 25, 5)
+    #ticks = np.arange(5, 25, 5)
     cax = fig.add_axes([0.93, 0.33, 0.02, 0.33])
-    cbar = plt.colorbar(h[3], cax=cax, label='number of test objects per bin', ticks=ticks)
-    cbar.ax.set_yticklabels(ticks)
+    cbar = plt.colorbar(h[3], cax=cax, label=colorbar_label)#, ticks=ticks)
+    #cbar.ax.set_yticklabels(ticks)
 
 
 def plot_multi_panel_gal_props(x_label_name, y_label_name_arr, x_property, y_true_arr, y_pred_arr,
