@@ -508,6 +508,163 @@ class SimulationReader:
         return log_sfr_arr - np.log10(m_stellar_Msun_arr)
 
 
+    def write_MAH_table(self, fn_halos, fn_mahs,
+                        overwrite=False):
+
+        print("Building MAH table")
+
+        print("Loading halos")
+        tab_halos = utils.load_table(fn_halos)
+        idxs_halos_dark = tab_halos['idx_halo_dark']
+
+        self.base_path_sam = f'{self.base_dir}/{self.sim_name_dark}_SCSAM'
+        subvolume_list = self.gen_subvolumes_SAM()
+
+        # seem to only need this ID for this load step
+        fields = ['HalopropRootHaloID']
+        matches = True #??
+
+        print("Loading SAM halos")
+        halos_sam = ilsam.groupcat.load_snapshot_halos(self.base_path_sam, self.snap_num, subvolume_list, fields, matches)
+        halo_idx_to_root_idx_dict = dict(zip(halos_sam['HalopropFoFIndex_DM'], halos_sam['HalopropRootHaloID']))
+
+        # not clear if there's data at snapnum=0 (z=20), ignoring
+        snap_nums_str_all = [str(sn) for sn in np.arange(99, 0, -1)]
+        tab_mahs = Table(names=snap_nums_str_all) 
+
+        # write snap-to-a dict
+        print("Writing snap-to-a dict")
+        wrote_snap_to_z_dict = False
+        for root_idx in halos_sam['HalopropRootHaloID']:
+            mtree = ilsam.merger.load_tree_haloprop(self.base_path_sam, root_idx, 
+                                fields=['HalopropRedshift', 'HalopropMvir', 'HalopropSnapNum'], most_massive=True,
+                                matches=True)
+            n_snaps = len(mtree[root_idx]['HalopropSnapNum'])
+            if n_snaps==99:
+                snap_nums = mtree[root_idx]['HalopropSnapNum']
+                snap_nums_str = [str(int(sn)) for sn in snap_nums]
+                scale_factors = 1/(1+mtree[root_idx]['HalopropRedshift'])
+                snap_to_a_dict = dict(zip(snap_nums_str, 
+                                          scale_factors))
+                fn_snap_to_a = '../data/snap_num_to_a.npy'
+                np.save(fn_snap_to_a, snap_to_a_dict)
+                wrote_snap_to_a_dict = True
+                print("Wrote snap-to-a dict to", fn_snap_to_a)
+                break
+
+        assert wrote_snap_to_a_dict, "Didn't manage to write snap to a dict!"
+
+        print("Looping over halos for MAH writing")
+        count = 0
+        for idx_halo_dark in idxs_halos_dark:
+            if count%100==0:
+                print(f'MAH: {count}', flush=True)
+            if idx_halo_dark not in halo_idx_to_root_idx_dict: 
+                tab_mahs.add_row( np.full(len(tab_mahs.columns), np.nan)) 
+                continue
+
+            root_idx = halo_idx_to_root_idx_dict[idx_halo_dark]
+
+            # mvir in units 10^9 M; doesn't matter bc 
+            # we will take ratio
+            mtree = ilsam.merger.load_tree_haloprop(self.base_path_sam, root_idx, 
+                                fields=['HalopropMvir', 'HalopropSnapNum'], most_massive=True,
+                                matches=True)
+
+            snap_nums = mtree[root_idx]['HalopropSnapNum']
+            snap_nums_str = [str(int(sn)) for sn in snap_nums]
+            mvirs = mtree[root_idx]['HalopropMvir']
+
+            snap_nums_dict = dict(zip(snap_nums_str, mvirs))
+            for sn_str in snap_nums_str_all:
+                if sn_str not in snap_nums_dict:
+                    snap_nums_dict[sn_str] = np.nan
+
+            tab_mahs.add_row(snap_nums_dict)
+
+            count += 1
+
+        tab_mahs['idx_halo_dark'] = idxs_halos_dark
+
+        print(tab_mahs)
+        print(len(tab_mahs))
+        print(tab_mahs.columns)
+
+        tab_mahs.write(fn_mahs, overwrite=overwrite)
+        print(f"Wrote table to {fn_mahs} with N={len(tab_mahs)} halos")
+
+
+    def write_amfrac_table(self, fn_mahs, fn_amfrac,            
+                           overwrite=True, mfrac_width=0.025):
+
+        print("Making a of mfrac table")
+
+        print("Loading mahs")
+        tab_mahs = utils.load_table(fn_mahs)
+        idxs_halos_dark = tab_mahs['idx_halo_dark']
+        tab_mahs.remove_column('idx_halo_dark')
+        print(tab_mahs)
+
+        print("Loading snap-to-a dict")
+        fn_snap_to_a = '../data/snap_num_to_a.npy'
+        snap_to_a_dict = np.load(fn_snap_to_a, allow_pickle=True).item()
+        scale_factors_all = np.array([snap_to_a_dict[c] for c in tab_mahs.columns])
+
+        mfracs_target = np.arange(0.0, 1.0+mfrac_width, mfrac_width)
+        # exclude 0 and 1; 0 bc that will just be a at which they appear, and 1 bc just 1
+        mfracs_target = mfracs_target[1:-1]
+        col_names = [f'{mf:g}' for mf in mfracs_target]
+
+        print("Performing interpolation")
+        tab_mahs = tab_mahs.as_array()
+        tab_amfrac = Table(names=col_names)
+        count = 0
+        for i in range(len(tab_mahs)):
+            if count%1000==0:
+                print(f'amfrac: {count}', flush=True)
+
+            i_nan = np.array(list(tab_mahs[i].mask))
+
+            if np.all(i_nan):
+                tab_amfrac.add_row( np.full(len(mfracs_target), np.nan)) 
+                continue
+
+            a_vals = scale_factors_all[~i_nan]
+            m_vals = np.array(list(tab_mahs[i]))[~i_nan]
+
+            amfracs = self.get_a_mfrac(a_vals, m_vals, mfracs_target)
+            tab_amfrac.add_row( amfracs )
+            count += 1
+
+        tab_amfrac['idx_halo_dark'] = idxs_halos_dark
+        print(tab_amfrac)
+        print(len(tab_amfrac))
+        print(tab_amfrac.columns)
+
+        tab_amfrac.write(fn_amfrac, overwrite=overwrite)
+        print(f"Wrote table to {fn_amfrac} with N={len(tab_amfrac)} halos")
+
+
+    def get_a_mfrac(self, a_vals, m_vals, mfracs_target):
+    
+        if len(a_vals)==0:
+            return 1.0 #?? 
+        if 1.0 not in a_vals:
+            return 1.0 # something wrong but it seems to happen
+        i_a1 = np.where(a_vals==1.0)[0][0] #there should be exactly 1, but if not, eh take first
+        m_a1 = m_vals[i_a1]
+
+        a_at_mfracs = []
+        for mfrac in mfracs_target:
+            a_mfrac_interp = utils.y_interpolated(m_vals/m_a1, a_vals, mfrac)
+            if a_mfrac_interp < 0 or a_mfrac_interp > 1 or np.isnan(a_mfrac_interp): #something went horribly wrong! 
+                # pick the a closest to mfrac, even if its far away
+                _, i_nearest = utils.find_nearest(m_vals/m_a1, mfrac)
+                a_mfrac_interp = a_vals[i_nearest]
+            a_at_mfracs.append(a_mfrac_interp)
+        return a_at_mfracs
+
+
     def select_halos(self, fn_halos, fn_select, 
                      num_star_particles_min=0, num_gas_particles_min=0, halo_logmass_min=None, 
                      halo_logmass_max=None, halo_mass_difference_factor=None,
