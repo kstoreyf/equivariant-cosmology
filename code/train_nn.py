@@ -21,23 +21,21 @@ def seed_torch(seed=1029):
 
 
 def main():
-    y_label_names = ['log_mstellar']
-    #y_label_names = ['j_stellar']
-    #y_label_names = ['gband']
-    #y_label_names = ['num_mergers']
-    #y_label_names = ['m_stellar', 'ssfr1', 'r_stellar', 'gband_minus_iband', 'bhmass_per_mstellar', 'j_stellar']
-    #y_label_names = ['m_stellar', 'ssfr1', 'r_stellar', 'bhmass_per_mstellar']
+    #y_label_names = ['log_mstellar']
+    label_tag = 'galprops'
+    y_label_names = utils.get_gal_prop_names(label_tag)
+
     #y_label_names = ['a_mfrac_n19']
     #y_label_names = ['a_mfrac_0.75']
     #y_label_names = ['a_mfrac_n39']
     #y_label_names = ['Mofa']
-    run(y_label_names)
+    run(y_label_names, label_tag=label_tag)
     # ns_top_features = [1, 5, 10, 50, 100, 567]
     # for nn in range(len(ns_top_features)):
     #     run(y_label_names, n_top_features=ns_top_features[nn])
 
 
-def run(y_label_names, n_top_features=None):
+def run(y_label_names, n_top_features=None, label_tag=None):
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
@@ -70,7 +68,8 @@ def run(y_label_names, n_top_features=None):
     #feature_mode = 'catalogz0'
     feature_mode = 'mrv'
 
-    y_str = '_'.join(y_label_names)
+    if label_tag is None:
+        label_tag = '_'.join(y_label_names)
     frac_tag, info_tag = '', ''
     # if frac_subset != 1.0:
     #     frac_tag = f'_f{frac_subset}'
@@ -103,7 +102,7 @@ def run(y_label_names, n_top_features=None):
     if model_name=='xgboost':
         model_tag += f'_lr{lr}'
 
-    fit_tag += f'_{y_str}{model_tag}'
+    fit_tag += f'_{label_tag}{model_tag}'
 
     if frac_subset != 1.0:
         fit_tag += f'_f{frac_subset}'

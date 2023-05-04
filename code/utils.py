@@ -37,7 +37,7 @@ label_dict = {'log_m200m_fof': r'log($M_\mathrm{200m,FoF}) \: [h^{-1} \, M_\odot
 lim_dict = {'log_m200m_fof': (10, 14),
             'log_mstellar': (7, 12),
             'log_ssfr1': (-15,-8),
-            'log_stellar': (-1,2),
+            'log_rstellar': (-1,2),
             'gband': (-24, -13),
             'gband_minus_iband': (0.0, 1.5),
             'log_jstellar': (0.5, 4.5),
@@ -48,6 +48,12 @@ lim_dict = {'log_m200m_fof': (10, 14),
 
 #sfr_zero = 1e-3
 
+def get_gal_prop_names(tag='galprops'):
+    if tag=='galprops':
+        names = ['log_mstellar', 'log_ssfr1', 
+                'log_rstellar', 'log_jstellar', 
+                'gband_minus_iband', 'log_mbh_per_mstellar']
+    return names
 
 def get_label(label_name):
     if label_name in label_dict:
@@ -743,62 +749,92 @@ def load_labels(label_names, tab_halos,
                 fn_geo_clean_config=None, fn_scalar_config=None,
                 ):
     idxs_table = tab_select['idx_table']
+    if type(label_names)==str:
+        label_names = [label_names]
     labels = [tab_halos[ln] for ln in label_names]
     labels = np.array(labels).T
     return labels[idxs_table]
 
 
-def get_butterfly_error(x_label_name, y_label_name, halo_logmass_min=10.8, n_bins=10):
+def get_butterfly_error(x_bins, y_label_name, halo_logmass_min=None, x_label_name='log_m200m'):
     arr_shadow1 = np.loadtxt('../data/butterfly_TNG100-1_shadow1.csv', skiprows=1, 
                                     delimiter=',')
     arr_shadow2 = np.loadtxt('../data/butterfly_TNG100-1_shadow2.csv', skiprows=1, 
                                     delimiter=',')                            
 
-    property_divide_by = None
-    if y_label_name=='ssfr':
-        y_label_name = 'SFR'
-        property_divide_by = 'm_stellar'
-    elif y_label_name=='ssfr1':
-        y_label_name = 'SFR1'
-        property_divide_by = 'm_stellar'
-    elif y_label_name=='bhmass_per_mstellar':
-        y_label_name = 'bhmass'
-        property_divide_by = 'm_stellar'
+    assert arr_shadow1.shape==arr_shadow2.shape, "Shadow files should be same shape!"
 
-    # columns: index,log10(Subs_massTot/Msun),log10(Subs_mass(5)/Msun),log10(Subs_HalfmassRadType(5)/kpc),log10(SFR1Gyr/(Msun/yr)),g-i[mag],log10(Subs_BHMass/Msun),log10(Subs_SFR/(Msun/yr)),log10(Subs_mass(1)/Msun)),log10(j_stellar/(kpc*km/s)))
-    col_names = ['index','m_200m', 'm_stellar', 'r_stellar', 'SFR1', 'gband_minus_iband', 'bhmass', 'SFR', 'm_gas', 'j_stellar']
+    # TODO fix zero vals here!!! by eye rn
+    val_zero = None
+    property_divide_by = None
+    if y_label_name=='log_ssfr':
+        y_label_name = 'log_SFR'
+        property_divide_by = 'log_mstellar'
+        val_zero = -3 # for SFR, NOT sSFR!
+    elif y_label_name=='log_ssfr1':
+        y_label_name = 'log_SFR1'
+        property_divide_by = 'log_mstellar'
+        val_zero = -3
+    elif y_label_name=='log_mbh_per_mstellar':
+        y_label_name = 'log_mbh'
+        property_divide_by = 'log_mstellar'
+        val_zero = 5.6 # this is for log_mbh not per mstellar!
+
+    # columns: index,log10(Group_M_Mean200/Msun),log10(GroupMass/Msun),log10(SubhaloMass/Msun),log10(SubhaloMassType(5)/Msun),log10(SubhaloHalfmassRadType(5)/kpc),log10(SFR1Gyr/(Msun/yr)),g-i[mag],log10(SubhaloBHMass/Msun),log10(SubhaloSFR/(Msun/yr)),log10(SubhaloMassType(1)/Msun)),log10(j_stellar/(kpc*km/s)))
+    col_names = ['index','log_m200m', 'log_mtot', 'log_msubhalo', 
+                 'log_mstellar', 'log_rstellar', 'log_SFR1', 'gband_minus_iband', 'log_mbh', 'log_SFR', 'log_mgas', 'log_jstellar']
+    # these are given with no h but we want in h^-1 units!
+    # all other units should be same as mine
+    names_convert_to_perh = ['log_m200m', 'log_mtot', 'log_msubhalo', 
+                 'log_mstellar', 'log_rstellar', 'log_mbh', 'log_mgas']
+
+    def _log_to_perh(log_val):
+        h = 0.704 # from Genel+2019 paper
+        return log_val + np.log10(h)
+
+    # convert to perh! 
+    for i in range(arr_shadow1.shape[1]):
+        if col_names[i] in names_convert_to_perh:
+            arr_shadow1[:,i] = _log_to_perh(arr_shadow1[:,i])
+            arr_shadow2[:,i] = _log_to_perh(arr_shadow2[:,i])
 
     # Limit to shadow sources in our mass range
-    m200_1 = arr_shadow1[:,col_names.index('m_200m')]
-    m200_2 = arr_shadow2[:,col_names.index('m_200m')]
-    # let's say mean for now
-    m200_mean = np.log10(0.5*(10**m200_1 + 10**m200_2))
-    i_masscut = (m200_mean >= halo_logmass_min)
-    #i_masscut = (m200_1 >= halo_logmass_min) & (m200_2 >= halo_logmass_min)
-    arr_shadow1 = arr_shadow1[i_masscut]
-    arr_shadow2 = arr_shadow2[i_masscut]
+    if halo_logmass_min is not None:
+        m200_1 = arr_shadow1[:,col_names.index('log_m200m')]
+        m200_2 = arr_shadow2[:,col_names.index('log_m200m')]
+        # let's say mean for now
+        m200_mean = np.log10(0.5*(10**m200_1 + 10**m200_2))
+        i_masscut = (m200_mean >= halo_logmass_min)
+        arr_shadow1 = arr_shadow1[i_masscut]
+        arr_shadow2 = arr_shadow2[i_masscut]
 
     # compute pairwise diffs
     i_x = col_names.index(x_label_name)
     x1 = arr_shadow1[:,i_x]
     x2 = arr_shadow2[:,i_x]
     x_mean = np.log10(0.5*(10**x1 + 10**x2))
-    x_bins = np.linspace(np.min(x_mean), np.max(x_mean) + 0.01, n_bins)
+    # x_bins = np.linspace(np.min(x_mean), np.max(x_mean) + 0.01, n_bins)
 
     if y_label_name not in col_names:
+        print(f"Label {y_label_name} not in shadow data!")
         return x_bins, np.full(n_bins-1, np.nan)
 
     i_y = col_names.index(y_label_name)
     y1 = arr_shadow1[:,i_y]
     y2 = arr_shadow2[:,i_y]
-    # some values are -inf (in log, so zero.) assigning small val for now
+    # some values are -inf (in log, so zero.) 
     # TODO figure out better vals to choose (same as do for general y!)
-    y1[np.isinf(y1)] = 1e-3
-    y2[np.isinf(y2)] = 1e-3
+    if val_zero is not None:
+        y1[np.isinf(y1)] = val_zero
+        y2[np.isinf(y2)] = val_zero
+
     if property_divide_by is not None:
         # subtracting bc these are all log
         y1 -= arr_shadow1[:,col_names.index(property_divide_by)]
-        y2 -= arr_shadow1[:,col_names.index(property_divide_by)]
+        y2 -= arr_shadow2[:,col_names.index(property_divide_by)]
+    
+    if np.sum(np.isnan(y2))>0:
+        mstar = arr_shadow2[:,col_names.index('log_mstellar')]
 
     # bin the results
     stdevs_binned = []
@@ -810,6 +846,8 @@ def get_butterfly_error(x_label_name, y_label_name, halo_logmass_min=10.8, n_bin
         stdev_binned = np.std(y1_inbin - y2_inbin) / np.sqrt(2)
         stdevs_binned.append(stdev_binned)
 
+    print(x_bins)
+    print(stdevs_binned)
     return x_bins, stdevs_binned
 
 

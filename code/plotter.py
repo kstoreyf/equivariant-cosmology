@@ -800,10 +800,40 @@ def plot_errors_vs_a(ax, a_pred_arr, a_true, a_pred_labels, colors,
     ax.legend(fontsize=12, loc=legend_loc)
 
 
+# via https://gist.github.com/dfm/e9d36037e363f04acbc668ec7c408237
+def betterstep(bins, y, draw_edges=True, invisible=False, **kwargs):
+    """A 'better' version of matplotlib's step function
+    
+    Given a set of bin edges and bin heights, this plots the thing
+    that I wish matplotlib's ``step`` command plotted. All extra
+    arguments are passed directly to matplotlib's ``plot`` command.
+    
+    Args:
+        bins: The bin edges. This should be one element longer than
+            the bin heights array ``y``.
+        y: The bin heights.
+        ax (Optional): The axis where this should be plotted.
+    
+    """
+    new_x = [a for row in zip(bins[:-1], bins[1:]) for a in row]
+    new_y = [a for row in zip(y, y) for a in row]
+    ax = kwargs.pop("ax", plt.gca())
+    if draw_edges and not invisible:
+        kwargs_nolabel = kwargs.copy()
+        kwargs_nolabel.pop("label", None)
+        ax.vlines(bins[0], ymin=0, ymax=y[0], **kwargs_nolabel)
+        ax.vlines(bins[-1], ymin=0, ymax=y[-1], **kwargs_nolabel)
+    if not invisible:
+        ax.plot(new_x, new_y, **kwargs)
+    return new_x, new_y
+
+
+
 def plot_errors_vs_property(ax, x_label_name, y_label_name, x_property, y_true, y_pred_arr,
                                y_pred_labels, colors, lws=None, x_lim=None, show_legend=True,
                                test_error_type='percentile',
-                               x_bins=None, y_lowerlim=None):
+                               x_bins=None, y_lowerlim=None,
+                               step=True):
 
     if lws is None:
         lws = [2]*len(y_pred_arr)
@@ -823,11 +853,21 @@ def plot_errors_vs_property(ax, x_label_name, y_label_name, x_property, y_true, 
             i_inbin = (x_property >= x_bins[bb]) & (x_property < x_bins[bb+1])
             error_inbin, _ = utils.compute_error(y_true[i_inbin], y_pred[i_inbin], test_error_type=test_error_type)
             errors.append(error_inbin)
-        ax.plot(x_bins_avg, errors, label=y_pred_labels[i_y], color=colors[i_y], lw=lws[i_y])
+
+        if step:
+            betterstep(x_bins, errors, label=y_pred_labels[i_y], color=colors[i_y], lw=lws[i_y], ax=ax)
+        else:
+            ax.plot(x_bins_avg, errors, label=y_pred_labels[i_y], color=colors[i_y], lw=lws[i_y])
     
     if y_lowerlim is not None:
-        y_bottom = np.zeros(len(x_bins_avg))
-        ax.fill_between(x_bins_avg, y_bottom, y_lowerlim, alpha=0.2, color='k', label='Lower limit from chaos')
+        if step:
+            new_x, new_y_lowerlim = betterstep(x_bins, y_lowerlim,
+                                               invisible=True)
+            y_bottom = np.zeros(len(new_x))
+            ax.fill_between(new_x, y_bottom, new_y_lowerlim, alpha=0.2, color='k', label='Lower limit from chaos')
+        else:
+            y_bottom = np.zeros(len(x_bins_avg))
+            ax.fill_between(x_bins_avg, y_bottom, y_lowerlim, alpha=0.2, color='k', label='Lower limit from chaos')
 
     # labels & adjustments
     x_label = utils.get_label(x_label_name)
@@ -839,8 +879,10 @@ def plot_errors_vs_property(ax, x_label_name, y_label_name, x_property, y_true, 
     
     # if x_lim is not None:
     #     ax.set_xlim(x_lim)
-
-    ax.set_xlim(x_bins_avg[0], x_bins_avg[-1])
+    if step:
+        ax.set_xlim(x_lim)
+    else:
+        ax.set_xlim(x_bins_avg[0], x_bins_avg[-1])
     ax.set_ylim(0)
     ax.axhline(0, color='grey')
     

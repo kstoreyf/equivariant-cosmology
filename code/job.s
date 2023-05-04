@@ -3,12 +3,12 @@
 ##SBATCH --job-name=halo_table
 ##SBATCH --job-name=halo_selector_tng100_Mmin10.25
 ##SBATCH --job-name=geo_featurizer_tng100_table
-#SBATCH --job-name=scalar_featurizer_tng100_table
+##SBATCH --job-name=scalar_featurizer_tng100_table
 ##SBATCH --job-name=feature_importance_tng100_nstarmin10_mstellar
 ##SBATCH --job-name=train_nn_multi_scalars_Mmin10.25_yerr0.05
 ##SBATCH --job-name=train_nn_m_stellar_catalog_z0_list_nl9
 ##SBATCH --job-name=train_nn_num_mergers_geos
-##SBATCH --job-name=train_nn_j_stellar
+#SBATCH --job-name=train_nn_j_stellar
 ##SBATCH --job-name=compute_mrv
 ##SBATCH --job-name=train_nn_Mofa_epochs1000_lr1e-3_hs128_scalars
 ##SBATCH --job-name=train_nn_a_mfrac_39_epochs2000_lr5e-5_hs128_scalars_gx1_gv1_n5

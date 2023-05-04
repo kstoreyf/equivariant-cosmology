@@ -488,12 +488,14 @@ class SimulationReader:
         # Black hole masses and ratios
         # make zero min/2, bc that's where might just hit resolution issues (aka rounding)
         i_zerombh = tab_halos['mbh']==0
-        mbh_zero = np.min(tab_halos['mbh'])/2.0  
+        # this mbh_zero is in code units, w the 10^10 factor! careful
+        mbh_zero = np.min(tab_halos['mbh'][tab_halos['mbh']!=0])/2.0  
         mbh = tab_halos['mbh'].copy()
         mbh[i_zerombh] = mbh_zero
         tab_halos['log_mbh'] = self.log_m(mbh)
         # use the fixed-zero bh masses for mbh_per_mstellar
         tab_halos['log_mbh_per_mstellar'] = tab_halos['log_mbh'] - tab_halos['log_mstellar']
+        print('bhmin:', np.min(tab_halos['log_mbh']))
 
 
         tab_halos.write(fn_halos, overwrite=overwrite)
