@@ -1,7 +1,7 @@
 #!/bin/bash
 ##SBATCH --job-name=gen_configs
 ##SBATCH --job-name=halo_table
-#SBATCH --job-name=mah_table
+#SBATCH --job-name=mah_table_try2
 ##SBATCH --job-name=halo_selector_tng100_Mmin10.25
 ##SBATCH --job-name=geo_featurizer_tng100_table
 ##SBATCH --job-name=scalar_featurizer_tng100_table

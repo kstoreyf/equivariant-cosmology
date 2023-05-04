@@ -531,6 +531,7 @@ class SimulationReader:
         # not clear if there's data at snapnum=0 (z=20), ignoring
         snap_nums_str_all = [str(sn) for sn in np.arange(99, 0, -1)]
         tab_mahs = Table(names=snap_nums_str_all) 
+        print(tab_mahs.columns)
 
         # write snap-to-a dict
         print("Writing snap-to-a dict")
@@ -540,7 +541,7 @@ class SimulationReader:
                                 fields=['HalopropRedshift', 'HalopropMvir', 'HalopropSnapNum'], most_massive=True,
                                 matches=True)
             n_snaps = len(mtree[root_idx]['HalopropSnapNum'])
-            if n_snaps==99:
+            if n_snaps==len(snap_nums_str_all):
                 snap_nums = mtree[root_idx]['HalopropSnapNum']
                 snap_nums_str = [str(int(sn)) for sn in snap_nums]
                 scale_factors = 1/(1+mtree[root_idx]['HalopropRedshift'])
@@ -555,10 +556,12 @@ class SimulationReader:
         assert wrote_snap_to_a_dict, "Didn't manage to write snap to a dict!"
 
         print("Looping over halos for MAH writing")
-        count = 0
-        for idx_halo_dark in idxs_halos_dark:
-            if count%100==0:
-                print(f'MAH: {count}', flush=True)
+        #for idx_halo_dark in idxs_halos_dark:
+        #for i in range(30000, 31000):
+        #    idx_halo_dark = idxs_halos_dark[i]
+        for i, idx_halo_dark in enumerate(idxs_halos_dark):
+            if i%100==0:
+                print(f'MAH: {i}', flush=True)
             if idx_halo_dark not in halo_idx_to_root_idx_dict: 
                 tab_mahs.add_row( np.full(len(tab_mahs.columns), np.nan)) 
                 continue
@@ -567,9 +570,15 @@ class SimulationReader:
 
             # mvir in units 10^9 M; doesn't matter bc 
             # we will take ratio
-            mtree = ilsam.merger.load_tree_haloprop(self.base_path_sam, root_idx, 
-                                fields=['HalopropMvir', 'HalopropSnapNum'], most_massive=True,
-                                matches=True)
+            try:
+                mtree = ilsam.merger.load_tree_haloprop(self.base_path_sam, root_idx, 
+                                    fields=['HalopropMvir', 'HalopropSnapNum'], most_massive=True,
+                                    matches=True)
+            except ValueError as err:
+                print('msg:', err)
+                print("hit error! giving nans")
+                tab_mahs.add_row( np.full(len(tab_mahs.columns), np.nan)) 
+                continue
 
             snap_nums = mtree[root_idx]['HalopropSnapNum']
             snap_nums_str = [str(int(sn)) for sn in snap_nums]
@@ -580,9 +589,11 @@ class SimulationReader:
                 if sn_str not in snap_nums_dict:
                     snap_nums_dict[sn_str] = np.nan
 
+            # remove snapnum=0 if it exists bc we're not tabulating that, bc hard to find halo w it
+            snap_nums_dict.pop("0", None)
+
             tab_mahs.add_row(snap_nums_dict)
 
-            count += 1
 
         tab_mahs['idx_halo_dark'] = idxs_halos_dark
 
@@ -618,10 +629,9 @@ class SimulationReader:
         print("Performing interpolation")
         tab_mahs = tab_mahs.as_array()
         tab_amfrac = Table(names=col_names)
-        count = 0
         for i in range(len(tab_mahs)):
-            if count%1000==0:
-                print(f'amfrac: {count}', flush=True)
+            if i%1000==0:
+                print(f'amfrac: {i}', flush=True)
 
             i_nan = np.array(list(tab_mahs[i].mask))
 
@@ -634,7 +644,6 @@ class SimulationReader:
 
             amfracs = self.get_a_mfrac(a_vals, m_vals, mfracs_target)
             tab_amfrac.add_row( amfracs )
-            count += 1
 
         tab_amfrac['idx_halo_dark'] = idxs_halos_dark
         print(tab_amfrac)

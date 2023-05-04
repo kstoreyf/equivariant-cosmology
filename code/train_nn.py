@@ -22,10 +22,11 @@ def seed_torch(seed=1029):
 
 def main():
     #y_label_names = ['log_mstellar']
-    label_tag = 'galprops'
-    y_label_names = utils.get_gal_prop_names(label_tag)
+    #label_tag = 'galprops'
+    #y_label_names = utils.get_gal_prop_names(label_tag)
 
-    #y_label_names = ['a_mfrac_n19']
+    y_label_names = ['amfracs']
+    label_tag = y_label_names[0]
     #y_label_names = ['a_mfrac_0.75']
     #y_label_names = ['a_mfrac_n39']
     #y_label_names = ['Mofa']
@@ -39,8 +40,8 @@ def run(y_label_names, n_top_features=None, label_tag=None):
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
-    halo_tag = ''
-    #halo_tag = '_mini10'
+    #halo_tag = ''
+    halo_tag = '_mini10'
     geo_tag = ''
     geo_clean_tag = '_n3'
     scalar_tag = ''
@@ -124,6 +125,8 @@ def run(y_label_names, n_top_features=None, label_tag=None):
         halo_params = yaml.safe_load(file)
     tab_halos = utils.load_table(halo_params['halo']['fn_halos'])
 
+    fn_amfrac = f'../data/mahs/amfracs_{sim_name}{halo_tag}.fits'
+
     print("Loading features")
     fn_scalar_config, fn_geo_clean_config = None, None
     if feature_mode=='scalars':
@@ -171,7 +174,8 @@ def run(y_label_names, n_top_features=None, label_tag=None):
     print("N_train:", len(idx_train), "N_valid:", len(idx_valid))
 
     y = utils.load_labels(y_label_names,
-                            tab_halos, tab_select)
+                          tab_halos, tab_select,
+                          fn_amfrac=fn_amfrac)
 
     # For now!
     y_uncertainties = np.full(y.shape, 1)

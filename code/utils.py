@@ -745,15 +745,41 @@ def load_features(feature_mode, tab_halos,
 
 
 def load_labels(label_names, tab_halos,
-                tab_select,
-                fn_geo_clean_config=None, fn_scalar_config=None,
-                ):
+                tab_select, fn_amfrac=None):
     idxs_table = tab_select['idx_table']
     if type(label_names)==str:
         label_names = [label_names]
-    labels = [tab_halos[ln] for ln in label_names]
+    labels = []
+    for ln in label_names:
+        if ln=='amfracs':
+            assert fn_amfrac is not None, "Must pass fn_amfrac!"
+            labels.extend( load_amfracs(fn_amfrac) )
+        else:
+            labels.append( tab_halos[ln] )
+        #labels.append(label)
+
+    #labels = [tab_halos[ln] for ln in label_names]
     labels = np.array(labels).T
+    print(labels.shape)
     return labels[idxs_table]
+
+def load_amfracs(fn_amfrac):
+    tab_amfrac = load_table(fn_amfrac)
+    tab_amfrac.remove_column('idx_halo_dark')
+
+    amfracs = tab_amfrac.as_array()
+    amfracs = amfracs.view((float, len(amfracs.dtype.names)))
+    print(amfracs.shape)
+    return amfracs.T
+
+# def load_amfracs(fn_amfrac, tab_select):
+#     idxs_table = tab_select['idx_table']
+#     tab_amfrac = utils.load_table(fn_amfrac)
+#     tab_amfrac.remove_column('idx_halo_dark')
+
+#     amfracs = tab_amfrac[idxs_table].as_array()
+#     amfracs = amfracs.view((float, len(amfracs.dtype.names)))
+#     return amfracs
 
 
 def get_butterfly_error(x_bins, y_label_name, halo_logmass_min=None, x_label_name='log_m200m'):
