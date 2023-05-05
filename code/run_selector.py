@@ -10,8 +10,8 @@ def run():
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
-    halo_tag = '_mini10'
-    #halo_tag = ''
+    #halo_tag = '_mini10'
+    halo_tag = ''
     select_tag = ''
     fn_select_config = f'../configs/halo_selection_{sim_name}{halo_tag}.yaml'
 
@@ -34,13 +34,13 @@ def run():
     sim_reader = SimulationReader(sp['base_dir'], sp['sim_name'], 
                                   sp['sim_name_dark'], sp['snap_num_str'])
 
-    sim_reader.select_halos(fn_halos, fn_select,
+    sim_reader.select_halos(fn_halos, halo_tag, fn_select,
                             num_star_particles_min=selp['num_star_particles_min'], 
                             num_gas_particles_min=selp['num_gas_particles_min'], 
                             halo_logmass_min=selp['halo_logmass_min'], 
                             halo_logmass_max=selp['halo_logmass_max'],
                             halo_mass_difference_factor=selp['halo_mass_difference_factor'],
-                            must_have_SAM_match=selp['must_have_SAM_match'],
+                            must_have_mah_info=selp['must_have_mah_info'],
                             must_have_halo_structure_info=selp['must_have_halo_structure_info'], 
                             seed=selp['seed'])
 

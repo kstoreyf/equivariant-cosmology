@@ -445,7 +445,7 @@ def plot_pred_vs_true_hist(ax, y_label_name, y_true, y_pred, cmap,
         ax.set_ylim(y_lim)
         
     ax.text(0.1, 0.9, text_results, 
-             transform=ax.transAxes, verticalalignment='top', fontsize=22)
+             transform=ax.transAxes, verticalalignment='top', fontsize=18)
     
     if colorbar_fig is not None:
         cbar = colorbar_fig.colorbar(h[3], ax=ax, label=colorbar_label)#, ticks=ticks)
@@ -609,11 +609,15 @@ def plot_multi_panel_gal_props(x_label_name, y_label_name_arr, x_property, y_tru
                                    text_results=text_results_arr[i], colorbar_fig=fig)
 
 
-def plot_a_mfrac_accuracy(a_pred, a_true, mfracs, title='', n_show=8):
-    
-    locs_norm = matplotlib.colors.Normalize(vmin=0, vmax=n_show)
-    cmap = matplotlib.cm.get_cmap('turbo')
-    colors = [cmap(locs_norm(i)) for i in range(n_show)]
+def plot_a_mfrac_accuracy(a_pred, a_true, mfracs, title='', idxs_show=None, xs_show=None, label_show=''):
+
+    n_show = len(idxs_show)
+    locs_norm = matplotlib.colors.Normalize(vmin=np.min(xs_show),
+                                            vmax=np.max(xs_show))
+    cmap_orig = matplotlib.cm.get_cmap('gist_earth')
+    cmap = utils.shiftedColorMap(cmap_orig, start=0,
+                        midpoint=0.4, stop=0.8)
+    colors = [cmap(locs_norm(x)) for x in xs_show]
 
     fig, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [2, 1, 1]},
                                   figsize=(6,8))
@@ -623,9 +627,10 @@ def plot_a_mfrac_accuracy(a_pred, a_true, mfracs, title='', n_show=8):
     #errs = (a_pred - a_true)/a_true
     errs = a_pred - a_true
 
-    np.random.seed(14)
-    rand_idxs_show = np.random.randint(len(a_true), size=n_show)
-    for i, i_rand in enumerate(rand_idxs_show):
+    #np.random.seed(14)
+    #rand_idxs_show = np.random.randint(len(a_true), size=n_show)
+    #for i, i_rand in enumerate(rand_idxs_show):
+    for i, idx_show in enumerate(idxs_show):
         #halo = sim_reader.dark_halo_arr[i_rand]
         #a_mah, m_mah = halo.catalog_properties['MAH']
         #plt.plot(a_mah, m_mah/m_mah[0], marker='o', markersize=3, ls='None')
@@ -635,10 +640,17 @@ def plot_a_mfrac_accuracy(a_pred, a_true, mfracs, title='', n_show=8):
             label_true = 'true value'
             label_pred = 'predicted value'
 
-        ax0.plot(mfracs, a_true[i_rand], marker='o', markersize=4, ls='None', color=colors[i], label=label_true)
-        ax0.plot(mfracs, a_pred[i_rand], color=colors[i], label=label_pred)
+        ax0.plot(mfracs, a_true[idx_show], marker='o', markersize=4, ls='None', color=colors[i], label=label_true)
+        ax0.plot(mfracs, a_pred[idx_show], color=colors[i], label=label_pred)
 
-        ax1.plot(mfracs, errs[i_rand], color=colors[i])
+        ax1.plot(mfracs, errs[idx_show], color=colors[i])
+
+    #fig.colorbar(ax0, cmap=cmap, norm=locs_norm)
+    cax = fig.add_axes([0.93, 0.51, 0.03, 0.37])
+    sm = matplotlib.cm.ScalarMappable(cmap=cmap, norm=locs_norm)
+    #sm.set_clim(0.1, 0.6)
+    cbar = fig.colorbar(sm, cax=cax, shrink=0.7, pad=0.04)
+    cbar.set_label(label_show)
 
     p16 = np.percentile(errs, 16, axis=0)
     p84 = np.percentile(errs, 84, axis=0)
@@ -671,6 +683,7 @@ def plot_a_mfrac_accuracy(a_pred, a_true, mfracs, title='', n_show=8):
 
     ax2.set_xlabel(r'$M_\mathrm{vir}(a)$/$M_\mathrm{vir}(a=1)$ of most massive progenitor halo')
 
+    ax0.set_xlim(0,1)
     ax0.set_ylim(0,1)
     ax1.axhline(0.0, color='grey', lw=1)
     ax2.set_ylim(-0.2, 0.2)
@@ -833,7 +846,7 @@ def plot_errors_vs_property(ax, x_label_name, y_label_name, x_property, y_true, 
                                y_pred_labels, colors, lws=None, x_lim=None, show_legend=True,
                                test_error_type='percentile',
                                x_bins=None, y_lowerlim=None,
-                               step=True):
+                               step=True, legend_loc='side'):
 
     if lws is None:
         lws = [2]*len(y_pred_arr)
@@ -875,8 +888,11 @@ def plot_errors_vs_property(ax, x_label_name, y_label_name, x_property, y_true, 
     ax.set_xlabel(x_label)
     ax.set_ylabel(fr'$\sigma_{{68}}$, {y_label}')
     if show_legend:
-        ax.legend(loc='best', fontsize=12)
-    
+        if legend_loc=='side':
+            ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=18)
+        else:
+            ax.legend(loc=legend_loc, fontsize=16)
+
     # if x_lim is not None:
     #     ax.set_xlim(x_lim)
     if step:
@@ -932,9 +948,9 @@ def plot_multi_panel_gal_props_errors(x_label_name, y_label_name_arr, x_property
     lws = [1]*n_feature_sets
     lws[j_fiducial] = 2
 
-    fig, axarr = plt.subplots(nrows=n_labels, ncols=4, figsize=(24, n_labels*5),
+    fig, axarr = plt.subplots(nrows=n_labels, ncols=4, figsize=(20, n_labels*5),
                               gridspec_kw={'width_ratios': [1, 1, 1, 1]})
-    plt.subplots_adjust(hspace=0.3, wspace=0.7)
+    plt.subplots_adjust(hspace=0.4, wspace=0.4)
     
     inferno_r = matplotlib.cm.inferno_r
     cmap = utils.shiftedColorMap(inferno_r, start=0.1, stop=1.0)
@@ -948,11 +964,12 @@ def plot_multi_panel_gal_props_errors(x_label_name, y_label_name_arr, x_property
 
         h = plot_pred_vs_true_hist(axarr[i,2], y_label_name_arr[i], 
                                     y_true_arr[i,:], y_pred_arr[i,j_fiducial,:], cmap, 
-                                   text_results=text_results_arr[i], colorbar_fig=fig,
+                                   text_results=text_results_arr[i], colorbar_fig=None,
                                    weight=weight, weight_by_dex=weight_by_dex, colorbar_label=colorbar_label)
 
         show_legend = False
-        if i==n_labels-1:
+        #if i==n_labels-1:
+        if i==0:
             show_legend = True
         plot_errors_vs_property(axarr[i,3], x_label_name, 
                             y_label_name_arr[i], 
@@ -961,3 +978,12 @@ def plot_multi_panel_gal_props_errors(x_label_name, y_label_name_arr, x_property
                             feature_labels, feature_colors,
                             show_legend=show_legend, lws=lws,
                             x_bins=x_bins, y_lowerlim=y_lowerlim_arr[i])
+
+        #cax = fig.add_axes([0.93, 0.51, 0.03, 0.37])
+        axp = axarr[i,0].get_position()
+        cax = fig.add_axes([axp.x0-0.07, axp.y0, 0.01, 0.1])
+
+        cbar = fig.colorbar(h[3], cax=cax, shrink=0.7, pad=0.04)
+        cbar.set_label(colorbar_label)
+        cbar.ax.yaxis.set_ticks_position('left')
+        cbar.ax.yaxis.set_label_position('left')

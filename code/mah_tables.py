@@ -20,7 +20,7 @@ def run():
     sp = halo_params['sim']
     hp = halo_params['halo']
 
-    overwrite_mahs = True
+    overwrite_mahs = False
     fn_halos = hp['fn_halos']
 
     fn_mahs = f'../data/mahs/mah_table_{sim_name}{halo_tag}.fits'

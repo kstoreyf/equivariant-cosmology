@@ -783,9 +783,9 @@ def load_amfracs(fn_amfrac):
 
 
 def get_butterfly_error(x_bins, y_label_name, halo_logmass_min=None, x_label_name='log_m200m'):
-    arr_shadow1 = np.loadtxt('../data/butterfly_TNG100-1_shadow1.csv', skiprows=1, 
+    arr_shadow1 = np.loadtxt('../data/butterfly_L25n512TNGs35_shadow1.csv', skiprows=1, 
                                     delimiter=',')
-    arr_shadow2 = np.loadtxt('../data/butterfly_TNG100-1_shadow2.csv', skiprows=1, 
+    arr_shadow2 = np.loadtxt('../data/butterfly_L25n512TNGs35_shadow2.csv', skiprows=1, 
                                     delimiter=',')                            
 
     assert arr_shadow1.shape==arr_shadow2.shape, "Shadow files should be same shape!"

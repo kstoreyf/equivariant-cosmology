@@ -21,27 +21,38 @@ def seed_torch(seed=1029):
 
 
 def main():
-    #y_label_names = ['log_mstellar']
-    #label_tag = 'galprops'
-    #y_label_names = utils.get_gal_prop_names(label_tag)
 
-    y_label_names = ['amfracs']
-    label_tag = y_label_names[0]
+
+    #feature_mode = 'scalars'
+    #feature_mode = 'geos'
+    #feature_mode = 'catalogz0'
+    #feature_mode = 'mrv'
+    feature_modes = ['scalars', 'geos', 'catalogz0', 'mrv']
+    #feature_modes = ['geos', 'catalogz0', 'mrv']
+    #feature_modes = ['scalars']
+
+    #y_label_names = ['log_mstellar']
+    label_tag = 'galprops'
+    y_label_names = utils.get_gal_prop_names(label_tag)
+    #y_label_names = ['amfracs']
+    #label_tag = y_label_names[0]
     #y_label_names = ['a_mfrac_0.75']
     #y_label_names = ['a_mfrac_n39']
     #y_label_names = ['Mofa']
-    run(y_label_names, label_tag=label_tag)
+    for feature_mode in feature_modes:
+        run(y_label_names, feature_mode, label_tag=label_tag)
     # ns_top_features = [1, 5, 10, 50, 100, 567]
     # for nn in range(len(ns_top_features)):
     #     run(y_label_names, n_top_features=ns_top_features[nn])
 
 
-def run(y_label_names, n_top_features=None, label_tag=None):
+def run(y_label_names, feature_mode, 
+        n_top_features=None, label_tag=None):
 
     sim_name = 'TNG100-1'
     #sim_name = 'TNG50-4'
-    #halo_tag = ''
-    halo_tag = '_mini10'
+    halo_tag = ''
+    #halo_tag = '_mini10'
     geo_tag = ''
     geo_clean_tag = '_n3'
     scalar_tag = ''
@@ -63,11 +74,6 @@ def run(y_label_names, n_top_features=None, label_tag=None):
     # max_epochs = None
     # lr = 0.02
     # hidden_size = None
-
-    #feature_mode = 'scalars'
-    #feature_mode = 'geos'
-    #feature_mode = 'catalogz0'
-    feature_mode = 'mrv'
 
     if label_tag is None:
         label_tag = '_'.join(y_label_names)

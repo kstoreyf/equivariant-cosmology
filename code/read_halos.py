@@ -256,6 +256,20 @@ class SimulationReader:
         return i_with_SAM_match
 
 
+    def get_halos_with_mah_info(self, halo_tag):
+        print(halo_tag)
+        fn_amfrac = f'../data/mahs/amfracs_{self.sim_name}{halo_tag}.fits'
+        tab_amfrac = utils.load_table(fn_amfrac)
+        tab_amfrac.remove_column('idx_halo_dark')
+        amfracs_all = tab_amfrac.as_array()
+        amfracs_all = amfracs_all.view((float, len(amfracs_all.dtype.names)))
+        # this really should be np.any, but have weird bug
+        # and practically if any then all are nan
+        i_has_nan = np.all(np.isnan(amfracs_all), axis=1)
+        i_with_mah_info = ~i_has_nan
+        print(f'{np.sum(i_with_mah_info)}/{len(i_with_mah_info)} halos have with mah info')        
+        return i_with_mah_info
+
 
     def construct_halo_table(self, fn_halos, overwrite=False, N=None):
 
@@ -643,6 +657,8 @@ class SimulationReader:
             m_vals = np.array(list(tab_mahs[i]))[~i_nan]
 
             amfracs = self.get_a_mfrac(a_vals, m_vals, mfracs_target)
+            #amfracs_full = np.full(len(mfracs_target), np.nan)
+            #amfracs_full[~i_nan] = amfracs
             tab_amfrac.add_row( amfracs )
 
         tab_amfrac['idx_halo_dark'] = idxs_halos_dark
@@ -657,9 +673,14 @@ class SimulationReader:
     def get_a_mfrac(self, a_vals, m_vals, mfracs_target):
     
         if len(a_vals)==0:
-            return 1.0 #?? 
+            return np.full(len(mfracs_target), np.nan)
+            print("avals []")
+            #return [1.0] #?? 
         if 1.0 not in a_vals:
-            return 1.0 # something wrong but it seems to happen
+            print("no 1")
+            print(a_vals)
+            return np.full(len(mfracs_target), np.nan)
+            #return [1.0] # something wrong but it seems to happen
         i_a1 = np.where(a_vals==1.0)[0][0] #there should be exactly 1, but if not, eh take first
         m_a1 = m_vals[i_a1]
 
@@ -671,14 +692,15 @@ class SimulationReader:
                 _, i_nearest = utils.find_nearest(m_vals/m_a1, mfrac)
                 a_mfrac_interp = a_vals[i_nearest]
             a_at_mfracs.append(a_mfrac_interp)
-        return a_at_mfracs
+        return np.array(a_at_mfracs)
 
 
-    def select_halos(self, fn_halos, fn_select, 
+    def select_halos(self, fn_halos, halo_tag, fn_select, 
                      num_star_particles_min=0, num_gas_particles_min=0, halo_logmass_min=None, 
                      halo_logmass_max=None, halo_mass_difference_factor=None,
-                     must_have_SAM_match=True,
-                     must_have_halo_structure_info=True, seed=42):
+                     must_have_mah_info=True,
+                     must_have_halo_structure_info=True, 
+                     seed=42):
 
         if halo_logmass_min is None:
             halo_logmass_min = -np.inf
@@ -709,13 +731,15 @@ class SimulationReader:
                                (mhalo_hydro/mhalo_dark > 1/halo_mass_difference_factor)
             i_select = i_select & i_mdiff_abovemin
 
-        if must_have_SAM_match:
-            i_with_SAM_match = self.get_halos_with_SAM_match(tab_halos['idx_halo_dark'])
-            i_select = i_select & i_with_SAM_match
+        if must_have_mah_info:
+            i_with_mah_info = self.get_halos_with_mah_info(halo_tag)
+            i_select = i_select & i_with_mah_info
+            print(len(i_select))
 
         if must_have_halo_structure_info:
             i_with_halo_structure_info = self.get_halos_with_structure_info(tab_halos['idx_halo_dark'])
-            i_select = i_select & i_with_halo_structure_info      
+            i_select = i_select & i_with_halo_structure_info   
+            print(len(i_select))   
 
         N_halos = np.sum(i_select)
         print(f"Selecting N={N_halos}")
@@ -727,6 +751,16 @@ class SimulationReader:
 
         idxs_table = np.arange(len(tab_halos))
 
+        print(len(tab_halos))
+        print(len(i_select))
+        print(len(random_ints))
+        print(np.sum(i_select))
+        print(np.sum(~i_select))
+        print()
+
+        print(len(tab_halos['idx_halo_dark'][i_select]))
+        print(len(idxs_table[i_select]))
+        print(len(random_ints))
         tab_select = Table([tab_halos['idx_halo_dark'][i_select], 
                             idxs_table[i_select], 
                             random_ints], 
