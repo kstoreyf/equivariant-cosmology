@@ -609,54 +609,72 @@ def plot_multi_panel_gal_props(x_label_name, y_label_name_arr, x_property, y_tru
                                    text_results=text_results_arr[i], colorbar_fig=fig)
 
 
-def plot_a_mfrac_accuracy(a_pred, a_true, mfracs, title='', idxs_show=None, xs_show=None, label_show=''):
+def plot_a_mfrac_accuracy(a_pred_arr, a_true, a_train, mfracs, title='', idxs_show=None, xs_show=None, label_show='', j_fiducial=0,
+        feature_labels=None, feature_colors=None, lws=None,
+        show_legend=True, legend_loc='side', err_type='percentile'):
 
     n_show = len(idxs_show)
     locs_norm = matplotlib.colors.Normalize(vmin=np.min(xs_show),
                                             vmax=np.max(xs_show))
-    cmap_orig = matplotlib.cm.get_cmap('gist_earth')
-    cmap = utils.shiftedColorMap(cmap_orig, start=0,
-                        midpoint=0.4, stop=0.8)
+    #cmap_orig = matplotlib.cm.get_cmap('gist_earth')
+    # cmap = utils.shiftedColorMap(cmap_orig, start=0,
+    #                     midpoint=0.4, stop=0.8)    
+    cmap_orig = matplotlib.cm.get_cmap('hot')
+    cmap = utils.shiftedColorMap(cmap_orig, start=0.1,
+                        midpoint=0.425, stop=0.65)
     colors = [cmap(locs_norm(x)) for x in xs_show]
 
-    fig, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [2, 1, 1]},
-                                  figsize=(6,8))
+    fig, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [2, 1, 2]},
+                                  figsize=(6,10))
     plt.subplots_adjust(hspace=0.03)
     fig.suptitle(title, fontsize=16)
 
     #errs = (a_pred - a_true)/a_true
-    errs = a_pred - a_true
+    errs = a_pred_arr[j_fiducial] - a_true
 
-    #np.random.seed(14)
-    #rand_idxs_show = np.random.randint(len(a_true), size=n_show)
-    #for i, i_rand in enumerate(rand_idxs_show):
     for i, idx_show in enumerate(idxs_show):
-        #halo = sim_reader.dark_halo_arr[i_rand]
-        #a_mah, m_mah = halo.catalog_properties['MAH']
-        #plt.plot(a_mah, m_mah/m_mah[0], marker='o', markersize=3, ls='None')
 
         label_true, label_pred = None, None
         if i==0:
             label_true = 'true value'
             label_pred = 'predicted value'
 
-        ax0.plot(mfracs, a_true[idx_show], marker='o', markersize=4, ls='None', color=colors[i], label=label_true)
-        ax0.plot(mfracs, a_pred[idx_show], color=colors[i], label=label_pred)
+        ax0.plot(mfracs, a_true[idx_show], marker='o', markersize=2, ls='None', color=colors[i], label=label_true)
+        ax0.plot(mfracs, a_pred_arr[j_fiducial][idx_show], color=colors[i], label=label_pred)
 
         ax1.plot(mfracs, errs[idx_show], color=colors[i])
 
-    #fig.colorbar(ax0, cmap=cmap, norm=locs_norm)
-    cax = fig.add_axes([0.93, 0.51, 0.03, 0.37])
+    ax0_pos = ax0.get_position()
+    ax1_pos = ax1.get_position()
+    print(ax0_pos)
+    print(ax1_pos)
+    # [left, bottom, width, height] 
+    ax0_height = ax0_pos.y1 - ax1_pos.y0
+    cax = fig.add_axes([ax0_pos.x1+0.02, ax1_pos.y0, 0.03, ax0_height])
+    #cax = fig.add_axes([0.93, 0.51, 0.03, 0.37])
     sm = matplotlib.cm.ScalarMappable(cmap=cmap, norm=locs_norm)
-    #sm.set_clim(0.1, 0.6)
     cbar = fig.colorbar(sm, cax=cax, shrink=0.7, pad=0.04)
     cbar.set_label(label_show)
 
-    p16 = np.percentile(errs, 16, axis=0)
-    p84 = np.percentile(errs, 84, axis=0)
-    sig68_avg = 0.5*(p84-p16)
-    ax2.plot(mfracs, p16, color='k', lw=2, label='prediction error')
-    ax2.plot(mfracs, p84, color='k', lw=2)
+    n_feats = a_pred_arr.shape[0]
+    for j in range(n_feats):
+        errs = a_pred_arr[j] - a_true
+        if err_type=='percentile':
+            p16 = np.percentile(errs, 16, axis=0)
+            p84 = np.percentile(errs, 84, axis=0)
+            err_toprint = 0.5*(p84-p16)
+            err_lo, err_hi = p16, p84
+            err_text = '\sigma_{{68}}'
+        elif err_type=='stdev':
+            std = np.std(errs, axis=0)
+            err_toprint = std
+            err_lo, err_hi = -std, std 
+            err_text = '\sigma'
+          
+        ax2.plot(mfracs, err_lo, color=feature_colors[j], 
+                 lw=lws[j], label=feature_labels[j])
+        ax2.plot(mfracs, err_hi, color=feature_colors[j], 
+                 lw=lws[j])
     ax2.axhline(0.0, color='grey', lw=1)
 
     # print errors
@@ -664,24 +682,36 @@ def plot_a_mfrac_accuracy(a_pred, a_true, mfracs, title='', idxs_show=None, xs_s
     errs_to_print = []
     for mfrac in mfracs_to_print_err:
         _, idx_mfrac = utils.find_nearest(mfracs, mfrac)
-        errs_to_print.append(rf"$\sigma_{{68}}(M/M_{{a=1}}={mfrac:.2f}) = {sig68_avg[idx_mfrac]:.3f}$")
+        errs_to_print.append(rf"${err_text}(M/M_{{a=1}}={mfrac:.2f}) = {err_toprint[idx_mfrac]:.3f}$")
     
     ax0.text(0.4, 0.1, '\n'.join(errs_to_print), fontsize=14)
 
-    # TODO: this should be based on training set, not test, i think!
-    a_true_mean = np.mean(a_true, axis=0)
-    #sample_var = (y_test - y_test_mean)/y_test_mean
-    sample_var = (a_true - a_true_mean)
-    sample_p16 = np.percentile(sample_var, 16, axis=0)
-    sample_p84 = np.percentile(sample_var, 84, axis=0)
-    ax2.fill_between(mfracs, sample_p16, sample_p84, color='blue', lw=2, alpha=0.3, label='sample variance')
+    a_train_mean = np.mean(a_train, axis=0)
+    ### diffs from means
+    if err_type=='percentile':
+        sample_var = (a_train - a_train_mean)
+        sample_p16 = np.percentile(sample_var, 16, axis=0)
+        sample_p84 = np.percentile(sample_var, 84, axis=0)
+        #ax2.fill_between(mfracs, sample_p16, sample_p84, color='blue', lw=2, alpha=0.3, label='sample variance')
+        ax2.plot(mfracs, sample_p16, color='grey', ls='--',
+                label='Sample variance', lw=1.5)
+        ax2.plot(mfracs, sample_p84, color='grey', ls='--', lw=1.5)
+
+    ### stdev
+    elif err_type=='stdev':
+        sample_var = np.mean( (a_train- a_train_mean)**2, axis=0 )
+        sample_std = np.sqrt(sample_var)
+        # ax2.fill_between(mfracs, sample_std, -sample_std, color='blue', lw=2, alpha=0.3, label='sample variance')
+        ax2.plot(mfracs, sample_std, color='grey', ls='--', 
+                label='Sample variance', lw=1.5)
+        ax2.plot(mfracs, -sample_std, color='grey', ls='--', lw=1.5)
 
     ax0.set_ylabel(r'$a$, scale factor')
     #ax1.set_ylabel(r'$(a_\mathrm{pred}-a_\mathrm{true})/a_\mathrm{true}$')
     ax1.set_ylabel(r'$a_\mathrm{pred}-a_\mathrm{true}$')
     ax2.set_ylabel(r'$\sigma_{68}$')
 
-    ax2.set_xlabel(r'$M_\mathrm{vir}(a)$/$M_\mathrm{vir}(a=1)$ of most massive progenitor halo')
+    ax2.set_xlabel(r'$M/M_{a=1}$ of most massive progenitor halo')
 
     ax0.set_xlim(0,1)
     ax0.set_ylim(0,1)
@@ -689,7 +719,35 @@ def plot_a_mfrac_accuracy(a_pred, a_true, mfracs, title='', idxs_show=None, xs_s
     ax2.set_ylim(-0.2, 0.2)
     
     ax0.legend(fontsize=12, loc='upper left')
-    ax2.legend(fontsize=12, loc='lower left')
+    #ax2.legend(fontsize=12, loc='lower left')
+    if show_legend:
+        if legend_loc=='side':
+            ax2.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=14)
+        else:
+            ax2.legend(loc=legend_loc, fontsize=16)
+
+
+
+def plot_amfracs(x_label_name, y_label_arr, x_property, 
+                 y_true_arr, y_pred_arr, mfrac_vals,
+                 feature_labels, feature_colors, lws=None, j_fiducial=0, x_bins=None, title_arr=None):
+    
+    
+    n_cols = y_true_arr.shape[0]
+    fig, axarr = plt.subplots(figsize=(n_cols*7, 6), nrows=1, ncols=n_cols, sharey=True)
+    plt.subplots_adjust(wspace=0.2)
+
+    for i in range(n_cols):
+        if title_arr is not None:
+            axarr[i].set_title(title_arr[i], fontsize=22, pad=10)
+        show_legend = False
+        if i==0:
+            show_legend=True
+        plot_errors_vs_property(axarr[i], x_label_name, y_label_arr[i], x_property, 
+                                        y_true_arr[i], y_pred_arr[i], 
+                                        feature_labels, feature_colors, lws=lws, 
+                                        show_legend=show_legend, legend_loc='best')
+
 
 
 def plot_errors_vs_mfracs(ax, a_pred_arr, a_true, mfracs, a_pred_labels, colors, 
@@ -720,7 +778,7 @@ def plot_errors_vs_mfracs(ax, a_pred_arr, a_true, mfracs, a_pred_labels, colors,
     ax.fill_between(mfracs, sample_p16, sample_p84, color='blue', lw=0, alpha=0.15, label='sample variance')
 
     ax.set_ylabel(r'$\sigma_{68}$')
-    ax.set_xlabel(r'$M_\mathrm{vir}(a)$/$M_\mathrm{vir}(a=1)$ of most massive progenitor halo')
+    ax.set_xlabel(r'$M/M_{a=1}$ of most massive progenitor halo')
 
     ax.set_xlim(0, 1)
     ax.set_ylim(-0.17, 0.17)
