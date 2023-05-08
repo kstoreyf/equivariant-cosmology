@@ -468,7 +468,6 @@ class SimulationReader:
         print(f"Wrote structure properties to {fn_halos}")
 
 
-
     def transform_properties(self, fn_halos, overwrite=True):
 
         print(f"Loading halo table {fn_halos}")
@@ -491,7 +490,7 @@ class SimulationReader:
         # sfr is in msun/yr
         # to estimate "zero": avg mass gas cell: 10^6 Msun, divided by 1 Gyr (longest sfr timescale) = 10^9 yr
         # 10^6 / 10^9 yr = 10^-3 Msun/yr
-        sfr_zero = 1e-3 #msun/yr
+        sfr_zero = zero_dict['sfr']
         tol = 1e-10
         for name_sfr in names_sfr:
             i_zerosfr = np.abs(tab_halos[name_sfr])<tol
@@ -501,9 +500,8 @@ class SimulationReader:
 
         # Black hole masses and ratios
         # make zero min/2, bc that's where might just hit resolution issues (aka rounding)
-        i_zerombh = tab_halos['mbh']==0
-        # this mbh_zero is in code units, w the 10^10 factor! careful
-        mbh_zero = np.min(tab_halos['mbh'][tab_halos['mbh']!=0])/2.0  
+        # mbh is still in code units so we need the zero in that too for now! mbh_zero is in code units, w the 10^10 factor! careful
+        mbh_zero = zero_dict['mbh']/self.mass_multiplier
         mbh = tab_halos['mbh'].copy()
         mbh[i_zerombh] = mbh_zero
         tab_halos['log_mbh'] = self.log_m(mbh)

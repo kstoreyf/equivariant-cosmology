@@ -1,7 +1,8 @@
 #!/bin/bash
 ##SBATCH --job-name=gen_configs
 ##SBATCH --job-name=halo_table
-#SBATCH --job-name=mah_table_try2
+##SBATCH --job-name=mah_table_try2
+#SBATCH --job-name=unc_table
 ##SBATCH --job-name=halo_selector_tng100_Mmin10.25
 ##SBATCH --job-name=geo_featurizer_tng100_table
 ##SBATCH --job-name=scalar_featurizer_tng100_table
@@ -16,9 +17,9 @@
 ##SBATCH --job-name=feature_info_MI
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=48
-#SBATCH --mem=60GB
-#SBATCH --time=48:00:00
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=5GB
+#SBATCH --time=4:00:00
 
 # need somewhere >30 and <60 GB for train_nn.py
 # now only need 10GB for train_nn!
@@ -34,7 +35,8 @@ cd /home/ksf293/equivariant-cosmology/code; \
 conda activate eqenv;
 #python generate_configs.py;
 #python halo_table.py;
-python mah_tables.py;
+#python mah_tables.py;
+python uncertainty_table.py;
 #python run_halo_selector.py;
 #python run_geometric_featurizer.py;
 #python run_scalar_featurizer.py;

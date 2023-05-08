@@ -46,7 +46,12 @@ lim_dict = {'log_m200m_fof': (10, 14),
             'num_mergers': (0.5, 4.5),
             }
 
-#sfr_zero = 1e-3
+
+zero_dict = {'sfr': 1e-3, #msun/yr
+             'sfr1': 1e-3, #msun/yr
+             'mbh': 4e5 #msun/h, half of seed mass
+             }
+
 
 def get_gal_prop_names(tag='galprops'):
     if tag=='galprops':
@@ -116,9 +121,9 @@ def get_uncertainties_genel2019(gal_property, log_m_stellar, sim_name):
     return uncertainties_genel2019
 
 
-def get_uncertainties_poisson_sfr(sfr, sfr_zero):
+def get_uncertainties_poisson_sfr(sfr, sfr_label):
     # compute shot noise uncertainty
-    N_over_zero = sfr/sfr_zero
+    N_over_zero = sfr/zero_dict[sfr_label]
     uncertainties_poisson = 1/np.sqrt(N_over_zero)
     # this is in natural log space, so convert to log10 space
     # sig_ln = sig_x/x
@@ -419,6 +424,47 @@ def get_y_uncertainties(y_label_name, sim_reader=None, y_vals=None, log_mass_shi
         # this will just not do anything, bc using them as delta_y/sigma_2, or sample_weight
         #return np.ones(len(y_vals)) #TODO what should this be??                                 
         return y_vals*0.05 #TODO what should this be??                                 
+
+
+def write_uncertainties_table(fn_halos, fn_unc):
+
+    print("Loading halo table")
+    tab_halos = load_table(fn_halos)
+    print("Loaded")
+
+    tab_unc = Table()
+
+    x_label_name = 'log_m200m_fof'
+    x_property = tab_halos[x_label_name]
+    x_bins = np.arange(10.25, 13.7501, 0.5)
+    n_bins = len(x_bins)-1
+    i_bins = np.digitize(x_property, x_bins)
+    i_bins -= 1
+    # if outside of bounds, just take closest
+    # subtracting 1 will auto do this for largest bin i think
+    i_bins[i_bins==-1] = 0
+    i_bins[i_bins==n_bins] = n_bins-1
+
+    label_tag = 'galprops'
+    y_label_names = get_gal_prop_names(label_tag)
+    for y_label_name in y_label_names:
+        _, stdevs_binned = get_butterfly_error(x_bins, y_label_name)
+        tab_unc[y_label_name] = stdevs_binned[i_bins]
+    
+    # add poisson noise for ssfr
+    # if 'log_ssfr1' in y_label_names:
+    #     unc_poisson_ssfr = get_uncertainties_poisson_sfr(10**tab_halos['log_sfr1'], 'ssfr1')
+    #     unc_sfr = np.sqrt(unc_poisson_sfr**2 + tab_unc['sfr1']**2)
+    #     unc_ssfr = uncertainty_log_sfr_to_uncertainty_log_ssfr(unc_sfr) 
+
+    tab_unc['idx_halo_dark'] = tab_halos['idx_halo_dark']
+    print(tab_unc.columns)
+
+    print(f"Wrote uncertainty table to {fn_unc}")
+    tab_unc.write(fn_unc, overwrite=True)
+
+
+
 
 
 def save_mah(halos, fn_mah):
@@ -763,7 +809,9 @@ def load_labels(label_names, tab_halos,
     print(labels.shape)
     return labels[idxs_table]
 
+
 def load_amfracs(fn_amfrac):
+    # the selecting is done in load_labels
     tab_amfrac = load_table(fn_amfrac)
     tab_amfrac.remove_column('idx_halo_dark')
 
@@ -772,14 +820,20 @@ def load_amfracs(fn_amfrac):
     print(amfracs.shape)
     return amfracs.T
 
-# def load_amfracs(fn_amfrac, tab_select):
-#     idxs_table = tab_select['idx_table']
-#     tab_amfrac = utils.load_table(fn_amfrac)
-#     tab_amfrac.remove_column('idx_halo_dark')
+def load_uncertainties(label_names, fn_unc, 
+                       tab_select):
+    idxs_table = tab_select['idx_table']
+    tab_unc = load_table(fn_unc)
+    uncs = []
+    for label_name in label_names:
+        uncs.append(tab_unc[label_name])
+    uncs = np.array(uncs).T
+    return uncs[idxs_table]
 
-#     amfracs = tab_amfrac[idxs_table].as_array()
-#     amfracs = amfracs.view((float, len(amfracs.dtype.names)))
-#     return amfracs
+
+
+
+
 
 
 def get_butterfly_error(x_bins, y_label_name, halo_logmass_min=None, x_label_name='log_m200m'):
@@ -796,15 +850,15 @@ def get_butterfly_error(x_bins, y_label_name, halo_logmass_min=None, x_label_nam
     if y_label_name=='log_ssfr':
         y_label_name = 'log_SFR'
         property_divide_by = 'log_mstellar'
-        val_zero = -3 # for SFR, NOT sSFR!
+        val_zero = np.log10(zero_dict['sfr']) # for SFR, NOT sSFR!
     elif y_label_name=='log_ssfr1':
         y_label_name = 'log_SFR1'
         property_divide_by = 'log_mstellar'
-        val_zero = -3
+        val_zero = np.log10(zero_dict['sfr1'])
     elif y_label_name=='log_mbh_per_mstellar':
         y_label_name = 'log_mbh'
         property_divide_by = 'log_mstellar'
-        val_zero = 5.6 # this is for log_mbh not per mstellar!
+        val_zero = np.log10(zero_dict['mbh']) # this is for log_mbh not per mstellar! and in real not code units
 
     # columns: index,log10(Group_M_Mean200/Msun),log10(GroupMass/Msun),log10(SubhaloMass/Msun),log10(SubhaloMassType(5)/Msun),log10(SubhaloHalfmassRadType(5)/kpc),log10(SFR1Gyr/(Msun/yr)),g-i[mag],log10(SubhaloBHMass/Msun),log10(SubhaloSFR/(Msun/yr)),log10(SubhaloMassType(1)/Msun)),log10(j_stellar/(kpc*km/s)))
     col_names = ['index','log_m200m', 'log_mtot', 'log_msubhalo', 
@@ -872,8 +926,7 @@ def get_butterfly_error(x_bins, y_label_name, halo_logmass_min=None, x_label_nam
         stdev_binned = np.std(y1_inbin - y2_inbin) / np.sqrt(2)
         stdevs_binned.append(stdev_binned)
 
-    print(x_bins)
-    print(stdevs_binned)
+    stdevs_binned = np.array(stdevs_binned)
     return x_bins, stdevs_binned
 
 

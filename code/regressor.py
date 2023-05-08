@@ -30,8 +30,8 @@ class BoosterFitter(Fitter):
                                         include_ones_feature=False
                                         )
         #self.scaler = MinMaxScaler() # TODO revisit !! 
-        #self.scaler = StandardScaler() # TODO revisit !! 
-        self.scaler = QuantileTransformer(n_quantiles=100, output_distribution='normal', random_state=0)
+        self.scaler = StandardScaler() # TODO revisit !! 
+        #self.scaler = QuantileTransformer(n_quantiles=100, output_distribution='normal', random_state=0)
         self.scaler.fit(self.A_train)
         self.A_train_scaled = self.scaler.transform(self.A_train)
 
@@ -49,15 +49,19 @@ class BoosterFitter(Fitter):
         print("lr:", learning_rate)
         # self.model = GradientBoostingRegressor(learning_rate=learning_rate,
         #                                       n_estimators=500)
-        self.model = HistGradientBoostingRegressor(max_iter=max_epochs,
-                                                   learning_rate=learning_rate)
+        # self.model = HistGradientBoostingRegressor(max_iter=max_epochs,
+        #                                            learning_rate=learning_rate)
         #self.model.fit(self.A_train_scaled, self.y_train.ravel())
         # need ravel bc targets are shape (N,1), and need (N,)
+        y_variance_train = self.y_uncertainties_train**2
+
         self.models = []
         for i in range(self.y_train.shape[1]):
             model = HistGradientBoostingRegressor(max_iter=max_epochs,
                                                    learning_rate=learning_rate)
-            model.fit(self.A_train_scaled, self.y_train[:,i], sample_weight=1.0/self.y_uncertainties_train[:,i])
+                                                   
+            #y_variance_train = self.y_uncertainties_train[:,i]
+            model.fit(self.A_train_scaled, self.y_train[:,i], sample_weight=1.0/y_variance_train[:,i])
             #model.fit(self.A_train_scaled, self.y_train[:,i])
             self.models.append(model)
         # booster = HistGradientBoostingRegressor(max_iter=max_epochs,

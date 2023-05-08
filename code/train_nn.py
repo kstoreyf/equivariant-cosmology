@@ -22,11 +22,6 @@ def seed_torch(seed=1029):
 
 def main():
 
-
-    #feature_mode = 'scalars'
-    #feature_mode = 'geos'
-    #feature_mode = 'catalogz0'
-    #feature_mode = 'mrv'
     feature_modes = ['scalars', 'geos', 'catalogz0', 'mrv']
     #feature_modes = ['geos', 'catalogz0', 'mrv']
     #feature_modes = ['scalars']
@@ -89,7 +84,7 @@ def run(y_label_names, feature_mode,
     #model_name = 'rf'
     #model_name = 'xgboost'
     #model_name = 'tabnet'
-    model_tag = f'_{model_name}_yerrnan'
+    model_tag = f'_{model_name}_yerrbfly_scalestandard'
     #fit_tag = '_nest300'
     #fit_tag = '_scaleqt100normal'
     #fit_tag = '_yerrnan'
@@ -132,6 +127,7 @@ def run(y_label_names, feature_mode,
     tab_halos = utils.load_table(halo_params['halo']['fn_halos'])
 
     fn_amfrac = f'../data/mahs/amfracs_{sim_name}{halo_tag}.fits'
+    fn_unc = f'../data/halo_tables/uncertainty_table_{sim_name}{halo_tag}.fits'
 
     print("Loading features")
     fn_scalar_config, fn_geo_clean_config = None, None
@@ -184,7 +180,11 @@ def run(y_label_names, feature_mode,
                           fn_amfrac=fn_amfrac)
 
     # For now!
-    y_uncertainties = np.full(y.shape, 1)
+    y_uncertainties = utils.load_uncertainties(
+                          y_label_names, fn_unc,
+                          tab_select)
+    #y_uncertainties = np.full(y.shape, 1)
+
     #y = [] 
     # y_uncertainties = []
     # for i, y_label_name in enumerate(y_label_names):
