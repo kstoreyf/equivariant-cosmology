@@ -18,7 +18,7 @@ from fit import Fitter
 
 
 
-class BoosterFitter(Fitter):
+class HGBoosterFitter(Fitter):
 
     # def __init__(self, *args, **kwargs):
     #     super().__init__(*args, **kwargs)
@@ -30,8 +30,8 @@ class BoosterFitter(Fitter):
                                         include_ones_feature=False
                                         )
         #self.scaler = MinMaxScaler() # TODO revisit !! 
-        self.scaler = StandardScaler() # TODO revisit !! 
-        #self.scaler = QuantileTransformer(n_quantiles=100, output_distribution='normal', random_state=0)
+        #self.scaler = StandardScaler() # TODO revisit !! 
+        self.scaler = QuantileTransformer(n_quantiles=100, output_distribution='normal', random_state=0)
         self.scaler.fit(self.A_train)
         self.A_train_scaled = self.scaler.transform(self.A_train)
 
@@ -57,8 +57,11 @@ class BoosterFitter(Fitter):
 
         self.models = []
         for i in range(self.y_train.shape[1]):
-            model = HistGradientBoostingRegressor(max_iter=max_epochs,
-                                                   learning_rate=learning_rate)
+            model = HistGradientBoostingRegressor(
+                            max_iter=max_epochs,
+                            learning_rate=learning_rate,
+                            #max_leaf_nodes=None
+                            )
                                                    
             #y_variance_train = self.y_uncertainties_train[:,i]
             model.fit(self.A_train_scaled, self.y_train[:,i], sample_weight=1.0/y_variance_train[:,i])
@@ -73,6 +76,62 @@ class BoosterFitter(Fitter):
         #self.model.fit(np.array(self.A_train_scaled), y_train)
         #if fn_model is not None:
         #    self.save_model(fn_model)
+
+
+    def predict(self, x, y_current=None, x_extra=None):
+        A = self.construct_feature_matrix(x, y_current=y_current, x_extra=x_extra,
+                                          include_ones_feature=False)
+        A_scaled = self.scaler.transform(A)
+        y_pred = np.empty((len(x), self.y_train.shape[1]))
+        for i, model in enumerate(self.models):
+            y_pred[:,i] = model.predict(A_scaled)
+        return y_pred
+
+
+    def save_model(self, fn_model, epoch=None):
+        pass
+
+    def load_model(self, fn_model):
+        pass
+
+
+
+class GBoosterFitter(Fitter):
+
+    def set_up_training_data(self):
+        self.A_train = self.construct_feature_matrix(self.x_train, 
+                                        y_current=self.y_current_train,
+                                        x_extra=self.x_extra_train,
+                                        include_ones_feature=False
+                                        )
+        #self.scaler = MinMaxScaler() # TODO revisit !! 
+        #self.scaler = StandardScaler() # TODO revisit !! 
+        self.scaler = QuantileTransformer(n_quantiles=100, output_distribution='normal', random_state=0)
+        self.scaler.fit(self.A_train)
+        self.A_train_scaled = self.scaler.transform(self.A_train)
+
+
+    def set_up_validation_data(self):
+        self.A_valid = self.construct_feature_matrix(self.x_valid, 
+                                        y_current=self.y_current_valid,
+                                        x_extra=self.x_extra_valid,
+                                        include_ones_feature=False
+                                        )
+        self.A_valid_scaled = self.scaler.transform(self.A_valid)
+
+
+    def train(self, max_epochs=100, learning_rate=0.1, fn_model=None, save_at_min_loss=True):
+        print("lr:", learning_rate)
+        y_variance_train = self.y_uncertainties_train**2
+
+        self.models = []
+        for i in range(self.y_train.shape[1]):
+            model = GradientBoostingRegressor(n_estimators=300,
+                                              learning_rate=learning_rate)
+                                                   
+            model.fit(self.A_train_scaled, self.y_train[:,i], sample_weight=1.0/y_variance_train[:,i])
+            self.models.append(model)
+
 
 
     def predict(self, x, y_current=None, x_extra=None):
@@ -120,13 +179,28 @@ class XGBoosterFitter(Fitter):
         self.A_valid_scaled = self.scaler.transform(self.A_valid)
 
 
-    def train(self, max_epochs=100, learning_rate=0.1, fn_model=None, save_at_min_loss=True):
+    def train(self, max_epochs=100, learning_rate=0.1, fn_model=None, save_at_min_loss=True, joint_training=False):
         print("lr:", learning_rate)
-
-        #self.model = XGBRegressor(n_estimators=300, learning_rate=learning_rate, max_depth=10)
-        self.model = XGBRegressor(n_estimators=100, learning_rate=learning_rate)
+        
         y_train = np.array(list(self.y_train))
-        self.model.fit(np.array(self.A_train_scaled), y_train)
+        y_variance_train = np.array(list(self.y_uncertainties_train**2))
+
+        self.joint_training = joint_training
+        if self.joint_training:
+            print("joint training, not using variance")
+            self.model = XGBRegressor(n_estimators=100, learning_rate=learning_rate)
+            self.model.fit(np.array(self.A_train_scaled), y_train)
+        else:
+            print("training models separately, with variance")
+            self.models = []
+            for i in range(self.y_train.shape[1]):
+
+                model = XGBRegressor(n_estimators=100, learning_rate=learning_rate)
+                
+                model.fit(np.array(self.A_train_scaled), y_train[:,i],
+                            sample_weight=1/y_variance_train[:,i])
+                self.models.append(model)
+
         #if fn_model is not None:
         #    self.save_model(fn_model)
 
@@ -135,7 +209,12 @@ class XGBoosterFitter(Fitter):
         A = self.construct_feature_matrix(x, y_current=y_current, x_extra=x_extra,
                                           include_ones_feature=False)
         A_scaled = self.scaler.transform(A)
-        y_pred = self.model.predict(A_scaled)
+        if self.joint_training:
+            y_pred = self.model.predict(A_scaled)
+        else:
+            y_pred = np.empty((len(x), self.y_train.shape[1]))
+            for i, model in enumerate(self.models):
+                y_pred[:,i] = model.predict(A_scaled)
         return y_pred
 
 

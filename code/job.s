@@ -2,12 +2,12 @@
 ##SBATCH --job-name=gen_configs
 ##SBATCH --job-name=halo_table
 ##SBATCH --job-name=mah_table_try2
-#SBATCH --job-name=unc_table
+##SBATCH --job-name=unc_table
 ##SBATCH --job-name=halo_selector_tng100_Mmin10.25
 ##SBATCH --job-name=geo_featurizer_tng100_table
-##SBATCH --job-name=scalar_featurizer_tng100_table
+#SBATCH --job-name=scalar_featurizer_tng100_table
 ##SBATCH --job-name=feature_importance_tng100_nstarmin10_mstellar
-##SBATCH --job-name=train_nn_multi_scalars_Mmin10.25_yerr0.05
+##SBATCH --job-name=train_nn_galprops_catalogz0_xgboost_cpu24
 ##SBATCH --job-name=train_nn_m_stellar_catalog_z0_list_nl9
 ##SBATCH --job-name=train_nn_num_mergers_geos
 ##SBATCH --job-name=train_nn_j_stellar
@@ -17,8 +17,8 @@
 ##SBATCH --job-name=feature_info_MI
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=1
-#SBATCH --mem=5GB
+#SBATCH --cpus-per-task=48
+#SBATCH --mem=60GB
 #SBATCH --time=4:00:00
 
 # need somewhere >30 and <60 GB for train_nn.py
@@ -36,10 +36,10 @@ conda activate eqenv;
 #python generate_configs.py;
 #python halo_table.py;
 #python mah_tables.py;
-python uncertainty_table.py;
+#python uncertainty_table.py;
 #python run_halo_selector.py;
 #python run_geometric_featurizer.py;
-#python run_scalar_featurizer.py;
+python run_scalar_featurizer.py;
 #python feature_importance.py;
 #python train_nn.py
 #python feature_info.py

@@ -13,7 +13,7 @@ sys.path.insert(1, '../code')
 
 
 
-label_dict = {'log_m200m_fof': r'log($M_\mathrm{200m,FoF}) \: [h^{-1} \, M_\odot]$)',
+label_dict = {'log_m200m_fof': r'log($M_\mathrm{200m,FoF} \: [h^{-1} \, M_\odot]$)',
               'log_mstellar': r'log($m_\mathrm{*} \: [h^{-1} \, M_\odot]$)',
               'log_r200m': r'log($R_\mathrm{200m} \: [h^{-1} \, \mathrm{kpc}]$)',
               'v200m_fof': r'$V_\mathrm{200m,FoF}) \: [km s^{-1}]$',

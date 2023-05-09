@@ -29,18 +29,18 @@ def run():
     print("Reading sims")
     sim_reader = SimulationReader(sp['base_dir'], sp['sim_name'], 
                                   sp['sim_name_dark'], sp['snap_num_str'])
-    #sim_reader.read_simulations()
+    sim_reader.read_simulations()
     #sim_reader.match_twins()
 
-    if not os.path.exists(fn_halos) or overwrite_table:
-        print("Initializing halo table")
-        sim_reader.construct_halo_table(fn_halos, overwrite=overwrite_table,
-                                        N=hp['N'],
-                                        )
+    # if not os.path.exists(fn_halos) or overwrite_table:
+    #     print("Initializing halo table")
+    #     sim_reader.construct_halo_table(fn_halos, overwrite=overwrite_table,
+    #                                     N=hp['N'],
+    #                                     )
 
     print("Adding properties")
     #sim_reader.add_properties_dark(fn_halos)
-    #sim_reader.add_properties_hydro(fn_halos)
+    sim_reader.add_properties_hydro(fn_halos)
     #sim_reader.add_mv200m_fof_dark(fn_halos)
     #sim_reader.add_properties_structure(fn_halos)
     #sim_reader.transform_properties(fn_halos)

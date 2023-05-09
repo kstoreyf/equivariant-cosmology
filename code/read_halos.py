@@ -384,6 +384,7 @@ class SimulationReader:
         tab_halos['mbh_per_mstellar'] = self.subhalos_hydro['SubhaloBHMass'][idxs_subhalos_hydro]/self.subhalos_hydro['SubhaloMassType'][:,self.ipart_star][idxs_subhalos_hydro]
         tab_halos['npartstellar'] = self.subhalos_hydro['SubhaloLenType'][:,self.ipart_star][idxs_subhalos_hydro]
         tab_halos['npartgas'] = self.subhalos_hydro['SubhaloLenType'][:,self.ipart_gas][idxs_subhalos_hydro]
+        tab_halos['x_minPE_hydro'] = self.subhalos_hydro['SubhaloPos'][idxs_subhalos_hydro]
 
         ### Star formation
         tab_halos['sfr'] = self.subhalos_hydro['SubhaloSFR'][idxs_subhalos_hydro]

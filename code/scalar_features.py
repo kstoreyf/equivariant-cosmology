@@ -279,7 +279,8 @@ def scalar_name(scalar_feature, mode='readable'):
         raise KeyError("Mode not recgonized!")
 
     for i, g_name in enumerate(g_names):
-        if scalar_feature.operations[i]=='':
+        if scalar_feature.operations[i]=='' or \
+           scalar_feature.operations[i] is None:
             name_parts.append(f'{g_name}')
         elif scalar_feature.operations[i]=='j':
             name_parts.append(f'[{g_name}]_{{j}}')
@@ -342,6 +343,8 @@ def scalar_objects_to_table(scalar_feature_arr, idxs_halos_dark):
     for j in range(scalar_vals.shape[1]):
         tab_scalars[scalar_keys[j]] = np.stack(scalar_vals[:,j])
 
+    print(tab_scalars.columns)
+
     return tab_scalars
 
 
@@ -366,7 +369,10 @@ def scalars_to_info_table(scalars):
     ns_nonragged = np.full((len(ns), num_ns_max), np.nan)
     operations_nonragged = np.full((len(ns), num_ns_max), '')
     for i in range(len(ns)):
+        geo_keys_nonragged[i,:num_ns[i]] = geo_keys[i]
         ns_nonragged[i,:num_ns[i]] = ns[i]
+        geo_names_nonragged[i,:num_ns[i]] = geo_names[i]
+        operations_nonragged[i,:num_ns[i]] = operations[i]
     tab_scalar_info = Table([scalar_keys, scalar_names, 
                           geo_keys_nonragged, geo_names_nonragged, 
                           m_orders, x_orders, v_orders,

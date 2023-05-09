@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 import utils
 from neural_net import NNFitter, NeuralNet, NeuralNetList, seed_worker
-from regressor import BoosterFitter, XGBoosterFitter, RFFitter, TabNetFitter
+from regressor import GBoosterFitter, HGBoosterFitter, XGBoosterFitter, RFFitter, TabNetFitter
 from read_halos import SimulationReader
 
 
@@ -23,17 +23,15 @@ def seed_torch(seed=1029):
 def main():
 
     feature_modes = ['scalars', 'geos', 'catalogz0', 'mrv']
-    #feature_modes = ['geos', 'catalogz0', 'mrv']
+    #feature_modes = ['geos']
     #feature_modes = ['scalars']
+    #feature_modes = ['catalogz0']
 
     #y_label_names = ['log_mstellar']
     label_tag = 'galprops'
     y_label_names = utils.get_gal_prop_names(label_tag)
     #y_label_names = ['amfracs']
     #label_tag = y_label_names[0]
-    #y_label_names = ['a_mfrac_0.75']
-    #y_label_names = ['a_mfrac_n39']
-    #y_label_names = ['Mofa']
     for feature_mode in feature_modes:
         run(y_label_names, feature_mode, label_tag=label_tag)
     # ns_top_features = [1, 5, 10, 50, 100, 567]
@@ -79,12 +77,16 @@ def run(y_label_names, feature_mode,
     #     info_tag = f'_{info_metric}_n{n_top_features}'
     #fit_tag = '_list_nl9_bn'
     #model_name = 'nn'
-    model_name = 'hgboost'
     #model_name = 'gboost'
+    #model_name = 'hgboost'
     #model_name = 'rf'
-    #model_name = 'xgboost'
+    model_name = 'xgboost'
     #model_name = 'tabnet'
-    model_tag = f'_{model_name}_yerrbfly_scalestandard'
+    #model_tag = f'_{model_name}_yerrbfly_scalestandard'
+    #model_tag = f'_{model_name}_yerrbfly_nest300'
+    model_tag = f'_{model_name}'
+    if label_tag!='amfracs':
+        model_tag += '_yerrbfly'
     #fit_tag = '_nest300'
     #fit_tag = '_scaleqt100normal'
     #fit_tag = '_yerrnan'
@@ -101,10 +103,11 @@ def run(y_label_names, feature_mode,
         model_tag += f'_epochs{max_epochs}_lr{lr}'
     if model_name=='nn':
         model_tag += f'_hs{hidden_size}'
-    if model_name=='xgboost':
+    if model_name=='xgboost' or model_name=='gboost':
         model_tag += f'_lr{lr}'
 
     fit_tag += f'_{label_tag}{model_tag}'
+    print("fit_tag:", fit_tag)
 
     if frac_subset != 1.0:
         fit_tag += f'_f{frac_subset}'
@@ -179,26 +182,14 @@ def run(y_label_names, feature_mode,
                           tab_halos, tab_select,
                           fn_amfrac=fn_amfrac)
 
-    # For now!
-    y_uncertainties = utils.load_uncertainties(
+    if label_tag=='amfracs':
+        # now using uncs as sample_weight so 1 is 
+        # even samples
+        y_uncertainties = np.full(y.shape, 1)
+    else:
+        y_uncertainties = utils.load_uncertainties(
                           y_label_names, fn_unc,
                           tab_select)
-    #y_uncertainties = np.full(y.shape, 1)
-
-    #y = [] 
-    # y_uncertainties = []
-    # for i, y_label_name in enumerate(y_label_names):
-    #     #y_single = np.array(tab_halos[y_label_name])
-    #     # TODO add uncertainties to table!
-    #     y_uncertainties_single = np.full(y.shape, np.nan)
-    #     if y_single.ndim>1:
-    #         #y.extend(y_single.T)
-    #         y_uncertainties.extend(y_uncertainties_single.T)
-    #     else:
-    #         #y.append(y_single)
-    #         y_uncertainties.append(y_uncertainties_single)
-   # y_uncertainties = np.array(y_uncertainties).T
-
 
     #y = np.array(y).T
     print('Label (y) shape:', y.shape)
@@ -228,10 +219,17 @@ def run(y_label_names, feature_mode,
         x_extra_valid = x_extra[idx_valid]
         x_extra_test = x_extra[idx_test]
 
+    kwargs = {}
+    if model_name=='xgboost' and label_tag=='amfracs':
+        kwargs['joint_training'] = True
+        print("Turning on joint training")
+
     if model_name=='nn':
         nnfitter = NNFitter()
-    elif model_name=='hgboost' or model_name=='gboost':
-        nnfitter = BoosterFitter()
+    elif model_name=='gboost':
+        nnfitter = GBoosterFitter()
+    elif model_name=='hgboost':
+        nnfitter = HGBoosterFitter()
     elif model_name=='xgboost':
         nnfitter = XGBoosterFitter()
     elif model_name=='rf':
@@ -253,7 +251,7 @@ def run(y_label_names, feature_mode,
     print(f"Starting training with learning rate {lr:.3f}")
     seed_torch(42)
     train(nnfitter, hidden_size=hidden_size, max_epochs=max_epochs, learning_rate=lr,
-            fn_model=fn_model)
+            fn_model=fn_model, **kwargs)
     end = time.time()
 
     print(f"Applying to test set")
@@ -273,7 +271,7 @@ def train_booster():
 
 
 def train(nnfitter, hidden_size=128, max_epochs=250, learning_rate=0.00005,
-          fn_model=None):
+          fn_model=None, **kwargs):
     print("training:")
     print(hidden_size, max_epochs, learning_rate)
 
@@ -285,7 +283,7 @@ def train(nnfitter, hidden_size=128, max_epochs=250, learning_rate=0.00005,
     print("Output size:", nnfitter.output_size)
     nnfitter.hidden_size = hidden_size
     nnfitter.train(max_epochs=max_epochs, learning_rate=learning_rate,
-                   fn_model=fn_model)
+                   fn_model=fn_model, **kwargs)
 
     #nnfitter.predict_test()
     #error_nn, _ = utils.compute_error(nnfitter, test_error_type='percentile')

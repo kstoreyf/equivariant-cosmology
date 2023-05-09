@@ -174,7 +174,7 @@ def vector_outer_product(v1, v2):
 def geo_name(geometric_feature, mode='readable'):
     assert mode in ['readable', 'multipole'], 'Name mode not recognized!'
 
-    n_str = geometric_feature.n
+    n_str = str(geometric_feature.n)
     if geometric_feature.n > 9:
         n_str = f'({geometric_feature.n})'
     if mode=='multipole':
@@ -182,8 +182,11 @@ def geo_name(geometric_feature, mode='readable'):
         name = f"g_{{{geometric_feature.x_order}{geometric_feature.v_order}{n_str}}}"
         if not geometric_feature.hermitian:
             name += '_A'
-        if geometric_feature.modification is not None:
+        # i dont know how this none string thing happened,
+        # can't figure out rn so hacky fix
+        if geometric_feature.modification is not None and geometric_feature.modification!='None':
             name += '_'+geometric_feature.modification
+
     elif mode=='readable':
         geo_name_dict = {(0,0): 'm',
                          (0,1): 'v',
@@ -194,9 +197,11 @@ def geo_name(geometric_feature, mode='readable'):
         # currently these are the only symm/antisymm features,
         # so hardcoded; careful here if change!
         if geometric_feature.modification=='symmetrized':
-            name = f'\\frac{{1}}{{2}} (C^{{xv}}_{n_str} + C^{{vx}}_{n_str})'  
+            #name = f'\\frac{{1}}{{2}} (C^{{xv}}_{n_str} + C^{{vx}}_{n_str})'  
+            name = 'C^{{xv},S}_'+n_str
         elif geometric_feature.modification=='antisymmetrized':          
-            name = f'\\frac{{1}}{{2}} (C^{{xv}}_{n_str} - C^{{vx}}_{n_str})'
+            #name = f'\\frac{{1}}{{2}} (C^{{xv}}_{n_str} - C^{{vx}}_{n_str})'
+            name = 'C^{{xv},A}_'+n_str
         else:
             name = geo_name_dict[(geometric_feature.x_order, geometric_feature.v_order)] + f'_{n_str}'
     return name

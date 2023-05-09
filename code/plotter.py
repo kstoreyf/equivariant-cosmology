@@ -8,7 +8,11 @@
 import matplotlib
 import numpy as np
 from matplotlib import pyplot as plt
+from matplotlib import patches
 import matplotlib.gridspec as gridspec
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+from matplotlib.transforms import Bbox
+
 import socket
 import sys
 
@@ -17,6 +21,73 @@ if 'jupyter' not in socket.gethostname():
 import illustris_python as il
 import utils
 
+
+
+from matplotlib.offsetbox import AnchoredOffsetbox
+class AnchoredScaleBar(AnchoredOffsetbox):
+    def __init__(self, transform, sizex=0, sizey=0, labelx=None, labely=None, loc=4,
+                 pad=0.1, borderpad=0.1, sep=2, prop=None, barcolor="black", barwidth=None, 
+                 **kwargs):
+        """
+        Draw a horizontal and/or vertical  bar with the size in data coordinate
+        of the give axes. A label will be drawn underneath (center-aligned).
+        - transform : the coordinate frame (typically axes.transData)
+        - sizex,sizey : width of x,y bar, in data units. 0 to omit
+        - labelx,labely : labels for x,y bars; None to omit
+        - loc : position in containing axes
+        - pad, borderpad : padding, in fraction of the legend font size (or prop)
+        - sep : separation between labels and bars in points.
+        - **kwargs : additional arguments passed to base class constructor
+        """
+        from matplotlib.patches import Rectangle
+        from matplotlib.offsetbox import AuxTransformBox, VPacker, HPacker, TextArea, DrawingArea
+        bars = AuxTransformBox(transform)
+        if sizex:
+            bars.add_artist(Rectangle((0,0), sizex, 0, ec=barcolor, lw=barwidth, fc="none"))
+        if sizey:
+            bars.add_artist(Rectangle((0,0), 0, sizey, ec=barcolor, lw=barwidth, fc="none"))
+
+        if sizex and labelx:
+            self.xlabel = TextArea(labelx)
+            bars = VPacker(children=[bars, self.xlabel], align="center", pad=0, sep=sep)
+        if sizey and labely:
+            self.ylabel = TextArea(labely)
+            bars = HPacker(children=[self.ylabel, bars], align="center", pad=0, sep=sep)
+
+        AnchoredOffsetbox.__init__(self, loc, pad=pad, borderpad=borderpad,
+                                   child=bars, prop=prop, frameon=False, **kwargs)
+
+        
+def add_scalebar(ax, matchx=True, matchy=True, hidex=True, hidey=True, **kwargs):
+    """ Add scalebars to axes
+    Adds a set of scale bars to *ax*, matching the size to the ticks of the plot
+    and optionally hiding the x and y axes
+    - ax : the axis to attach ticks to
+    - matchx,matchy : if True, set size of scale bars to spacing between ticks
+                    if False, size should be set using sizex and sizey params
+    - hidex,hidey : if True, hide x-axis and y-axis of parent
+    - **kwargs : additional arguments passed to AnchoredScaleBars
+    Returns created scalebar object
+    """
+    def f(axis):
+        l = axis.get_majorticklocs()
+        return len(l)>1 and (l[1] - l[0])
+    
+    if matchx:
+        kwargs['sizex'] = f(ax.xaxis)
+        kwargs['labelx'] = str(kwargs['sizex'])
+    if matchy:
+        kwargs['sizey'] = f(ax.yaxis)
+        kwargs['labely'] = str(kwargs['sizey'])
+        
+    sb = AnchoredScaleBar(ax.transData, **kwargs)
+    ax.add_artist(sb)
+
+    if hidex : ax.xaxis.set_visible(False)
+    if hidey : ax.yaxis.set_visible(False)
+    if hidex and hidey: ax.set_frame_on(False)
+
+    return sb
 
 
 def plot_halos_dark_and_hydro(halo_arr, base_path_dark, base_path_hydro, snap_num,
@@ -985,6 +1056,33 @@ def plot_multi_panel_gal_props(x_label_name, y_label_name_arr, x_property, y_tru
                                 ['scalars'], ['black'])
 
 
+def plot_multi_panel_pred_vs_true(n_rows, n_cols, y_label_name, y_true, y_pred_arr, cmap,
+                                  text_results_arr=None, title_arr=None, save_fn=None,
+                                  colors_test=None,
+                                  weight=1, weight_by_dex=False,
+                                  colorbar_label=''):
+    fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(12,12),
+                              #gridspec_kw={'height_ratios': [1, 1], 'width_ratios': [10, 9]},
+                              )
+    plt.subplots_adjust(hspace=0.4, wspace=0.33)
+    
+    inferno_r = matplotlib.cm.inferno_r
+    cmap = utils.shiftedColorMap(inferno_r, start=0.1, stop=1.0)
+    
+    count = 0
+    for i in range(n_rows):
+        for j in range(n_cols):            
+            h = plot_pred_vs_true_hist(axarr[i,j], y_label_name, y_true, y_pred_arr[count], cmap, 
+                                       text_results=text_results_arr[count],
+                                       weight=weight, weight_by_dex=weight_by_dex,
+                                              title=title_arr[count])
+            count += 1
+    
+    cax = fig.add_axes([0.93, 0.33, 0.02, 0.33])
+    cbar = plt.colorbar(h[3], cax=cax, label=colorbar_label)#, ticks=ticks)
+
+
+
 def plot_multi_panel_gal_props_errors(x_label_name, y_label_name_arr, x_property, 
                       y_true_arr, y_pred_arr, feature_labels, feature_colors,
                       j_fiducial=0,
@@ -1045,3 +1143,116 @@ def plot_multi_panel_gal_props_errors(x_label_name, y_label_name_arr, x_property
         cbar.set_label(colorbar_label)
         cbar.ax.yaxis.set_ticks_position('left')
         cbar.ax.yaxis.set_label_position('left')
+
+
+#### VIZ
+
+def plot_halo_dark(ax, base_path_dark, snap_num, halo,
+                position, width=None, color='darkblue'):
+    
+    s_dm = 0.1
+    alpha = 0.3
+    
+    x_halo_dark_dm, _ = halo.load_positions_and_velocities(shift=False)
+    ax.scatter(x_halo_dark_dm[:,0], x_halo_dark_dm[:,1], 
+               s=s_dm, alpha=alpha, marker='o', color=color)  
+    ax.set_aspect('equal')
+    ax.axis('off')
+
+    if width is not None:
+        ax.set_xlim(position[0]-width/2, position[0]+width/2)
+        ax.set_ylim(position[1]-width/2, position[1]+width/2)
+
+    add_scalebar(ax, sizex=0, sizey=30, labely=r'30 $h^{-1}\,$kpc',
+                 matchx=False, matchy=False,
+                 bbox_to_anchor=Bbox.from_bounds(-0.2, 0.65, 0.5, 0.5),
+                 bbox_transform=ax.figure.transFigure)
+
+
+def plot_galaxy(ax, base_path_hydro, snap_num, halo, position,
+                idx_subhalo_hydro, width=None, color='orange'):
+    
+    s_hydro = 0.5
+    alpha = 0.3
+        
+    subhalo_hydro_stars = il.snapshot.loadSubhalo(base_path_hydro,snap_num,idx_subhalo_hydro,'stars')
+    if subhalo_hydro_stars['count'] > 0:
+        x_subhalo_hydro_stars = subhalo_hydro_stars['Coordinates']
+        ax.scatter(x_subhalo_hydro_stars[:,0], x_subhalo_hydro_stars[:,1],
+                   s=s_hydro, alpha=alpha, marker='o', color=color)
+
+    ax.set_aspect('equal')
+    ax.axis('off')
+    
+    if width is not None:
+        ax.set_xlim(position[0]-width/2, position[0]+width/2)
+        ax.set_ylim(position[1]-width/2, position[1]+width/2)
+
+    add_scalebar(ax, sizex=0, sizey=30, labely=r'30 $h^{-1}\,$kpc',
+                 matchx=False, matchy=False,
+                 bbox_to_anchor=Bbox.from_bounds(-0.2, 0.265, 0.5, 0.5),
+                 bbox_transform=ax.figure.transFigure)
+
+
+
+def plot_halos_tight(halos, properties_halo, properties_gal,
+               positions_halo, positions_gal,
+               idxs_subhalo_hydro,
+               base_path_dark, base_path_hydro, snap_num,
+               property_halo_name='', property_gal_name='',
+               title=''):
+    
+    n_halos = len(halos)
+    fig, axarr = plt.subplots(2, n_halos, figsize=(10,6))
+    plt.subplots_adjust(hspace=-0.2, wspace=-0.7)
+    
+    plt.text(0.5, 0.85, title, 
+             transform=axarr[0,1].transAxes, 
+             fontsize=12, ha='center', va='center')#, horizontalalignment='right')
+    plt.text(0.5, 0.2, 'Central galaxies (Matched hydro sim)', transform=axarr[1,1].transAxes, 
+             fontsize=12, ha='center', va='center')#, horizontalalignment='right')    
+    width_dark = 500
+    width_hydro = 100
+
+    # halo color things    
+    cmap_blues = utils.shiftedColorMap(matplotlib.cm.get_cmap('Blues'), 
+                                   start=0.4, midpoint=0.65, stop=0.9, name='shiftedcmap')
+    locs_norm1 = matplotlib.colors.Normalize(vmin=np.min(properties_halo), vmax=np.max(properties_halo))
+    colors_halo = [cmap_blues(locs_norm1(p)) for p in properties_halo]
+    sm1 = plt.cm.ScalarMappable(cmap=cmap_blues, norm=locs_norm1)
+    cb_ax1 = fig.add_axes([0.77, 0.53, 0.008, 0.26])
+    cbar1 = plt.colorbar(sm1, cax=cb_ax1)
+    cbar1.set_label('invariant scalar\n'+rf'{property_halo_name}', rotation=270, labelpad=34, fontsize=12)
+    cbar1.ax.tick_params(labelsize=12)
+    #cbar1.set_ticks([0.05, 0.10])
+    
+    # galaxy color things
+    cmap_oranges = utils.shiftedColorMap(matplotlib.cm.get_cmap('YlOrBr'), 
+                                   start=0.4, midpoint=0.6, stop=0.8, name='shiftedcmap')
+    locs_norm2 = matplotlib.colors.Normalize(vmin=np.min(properties_gal), vmax=np.max(properties_gal))
+    colors_gal = [cmap_oranges(locs_norm2(p)) for p in properties_gal]
+    sm2 = plt.cm.ScalarMappable(cmap=cmap_oranges, norm=locs_norm2)
+    cb_ax2 = fig.add_axes([0.77, 0.2, 0.008, 0.26])
+    cbar2 = plt.colorbar(sm2, cax=cb_ax2)
+    #cbar2.set_label(rf'{property_gal_name}', rotation=270, labelpad=100)
+    cbar2.set_label(property_gal_name, rotation=270, labelpad=22, fontsize=12)
+    cbar2.ax.tick_params(labelsize=12)
+    
+
+    for i in range(n_halos):
+
+        plot_halo_dark(axarr[0,i], base_path_dark, snap_num, halos[i], positions_halo[i], width=width_dark, color=colors_halo[i])
+        plot_galaxy(axarr[1,i], base_path_hydro, snap_num, halos[i], positions_gal[i], idxs_subhalo_hydro[i], width=width_hydro, color=colors_gal[i])
+
+        # https://stackoverflow.com/questions/60807792/arrows-between-matplotlib-subplots
+        arrow = patches.ConnectionPatch(
+            [0.5, 0],
+            [0.5, 1],
+            coordsA=axarr[0,i].transAxes,
+            coordsB=axarr[1,i].transAxes,
+            color="black",
+            arrowstyle="<|-",  # "normal" arrow
+            mutation_scale=10,  # controls arrow head size
+            linewidth=1,
+            )
+        fig.patches.append(arrow)

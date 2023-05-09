@@ -37,6 +37,10 @@ def run():
     with open(fn_halo_config, 'r') as file:
         halo_params = yaml.safe_load(file)
     hp = halo_params['halo']
+    sp = halo_params['sim']
+
+    sim_reader = SimulationReader(sp['base_dir'], sp['sim_name'], 
+                                  sp['sim_name_dark'], sp['snap_num_str'])
 
     fn_geo_clean_features = gcp['fn_geo_clean_features']
     fn_geo_clean_info = gcp['fn_geo_clean_info']
@@ -65,6 +69,9 @@ def run():
         geo_feature_arr = gf.rescale_geometric_features(geo_feature_arr, *mrv)
 
     tab_geos_clean = gf.geo_objects_to_table(geo_feature_arr, tab_geos['idx_halo_dark'])
+    print(tab_geos_clean.columns)
+    for c in tab_geos_clean.columns:
+        print(np.min(tab_geos_clean[c]), np.max(tab_geos_clean[c]))
     tab_geos_clean.write(fn_geo_clean_features, overwrite=overwrite, format='fits')
     print(f"Wrote table to {fn_geo_clean_features}")
 
