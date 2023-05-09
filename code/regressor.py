@@ -188,18 +188,35 @@ class XGBoosterFitter(Fitter):
         self.joint_training = joint_training
         if self.joint_training:
             print("joint training, not using variance")
-            self.model = XGBRegressor(n_estimators=100, learning_rate=learning_rate)
-            self.model.fit(np.array(self.A_train_scaled), y_train)
+            self.model = XGBRegressor(n_estimators=300, 
+                                      learning_rate=learning_rate,
+                                      early_stopping_rounds=30)
+            self.model.fit(np.array(self.A_train_scaled), y_train,
+                            eval_set=[(self.A_valid_scaled, self.y_valid)],
+                            verbose=False)
+            results = self.model.evals_result()
+            print('Num iters:', len(results["validation_0"]["rmse"]))
         else:
             print("training models separately, with variance")
             self.models = []
             for i in range(self.y_train.shape[1]):
 
-                model = XGBRegressor(n_estimators=100, learning_rate=learning_rate)
+                model = XGBRegressor(n_estimators=300,      
+                            learning_rate=learning_rate, 
+                            early_stopping_rounds=30,
+                            
+                )
                 
                 model.fit(np.array(self.A_train_scaled), y_train[:,i],
-                            sample_weight=1/y_variance_train[:,i])
+                            sample_weight=1/y_variance_train[:,i],
+                            eval_set=[(self.A_valid_scaled, self.y_valid[:,i])],
+                            verbose=False
+                            )
                 self.models.append(model)
+                
+                results = model.evals_result()
+                print('Num iters:', len(results["validation_0"]["rmse"]))
+
 
         #if fn_model is not None:
         #    self.save_model(fn_model)

@@ -23,15 +23,16 @@ def seed_torch(seed=1029):
 def main():
 
     feature_modes = ['scalars', 'geos', 'catalogz0', 'mrv']
-    #feature_modes = ['geos']
+    #feature_modes = ['geos', 'catalogz0']
     #feature_modes = ['scalars']
     #feature_modes = ['catalogz0']
+    #feature_modes = ['mrv']
 
     #y_label_names = ['log_mstellar']
-    label_tag = 'galprops'
-    y_label_names = utils.get_gal_prop_names(label_tag)
-    #y_label_names = ['amfracs']
-    #label_tag = y_label_names[0]
+    #label_tag = 'galprops'
+    #y_label_names = utils.get_gal_prop_names(label_tag)
+    y_label_names = ['amfracs']
+    label_tag = y_label_names[0]
     for feature_mode in feature_modes:
         run(y_label_names, feature_mode, label_tag=label_tag)
     # ns_top_features = [1, 5, 10, 50, 100, 567]
@@ -84,7 +85,7 @@ def run(y_label_names, feature_mode,
     #model_name = 'tabnet'
     #model_tag = f'_{model_name}_yerrbfly_scalestandard'
     #model_tag = f'_{model_name}_yerrbfly_nest300'
-    model_tag = f'_{model_name}'
+    model_tag = f'_{model_name}_estop30'
     if label_tag!='amfracs':
         model_tag += '_yerrbfly'
     #fit_tag = '_nest300'
