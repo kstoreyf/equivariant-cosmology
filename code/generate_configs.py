@@ -177,8 +177,8 @@ def scalar_config(sim_name):
     # save info
     scalar_dir = f'../data/scalar_features'
     scalar_tag = ''
-    fn_scalar_features = f'{scalar_dir}/scalar_features{sim_name}{halo_tag}{geo_tag}{geo_clean_tag}{scalar_tag}.npy'
-    fn_scalar_info = f'{scalar_dir}/scalar_info{sim_name}{halo_tag}{geo_tag}{geo_clean_tag}{scalar_tag}.npy'
+    fn_scalar_features = f'{scalar_dir}/scalar_features_{sim_name}{halo_tag}{geo_tag}{geo_clean_tag}{scalar_tag}.npy'
+    fn_scalar_info = f'{scalar_dir}/scalar_info_{sim_name}{halo_tag}{geo_tag}{geo_clean_tag}{scalar_tag}.npy'
     fn_scalar_config = f'{config_dir}/scalar_{sim_name}{halo_tag}{geo_tag}{geo_clean_tag}{scalar_tag}.yaml'
 
 
