@@ -1,0 +1,8 @@
+sim:
+  base_dir: /scratch/ksf293/equivariant-cosmology/data
+  snap_num_str: 099
+  sim_name: TNG100-1
+  sim_name_dark: TNG100-1-Dark
+halo:
+  fn_halos: ../data/halo_tables/halos_TNG100-1.fits
+  N: null

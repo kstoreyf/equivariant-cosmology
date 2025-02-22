@@ -1,0 +1,22 @@
+halo:
+  halo_tag: _mini10
+  fn_halo_config: ../configs/halos_TNG100-1_mini10.yaml
+geo:
+  geo_tag: ''
+  fn_geo_features: ../data/geometric_features/geometric_features_TNG100-1_mini10.fits
+  fn_geo_info: ../data/geometric_features/geometric_info_TNG100-1_mini10.fits
+  r_edges:
+  - 0.0
+  - 0.1
+  - 0.2
+  - 0.3
+  - 0.4
+  - 0.5
+  - 0.6
+  - 0.7
+  - 0.8
+  - 0.9
+  - 1.0
+  r_units: r200m
+  x_order_max: 2
+  v_order_max: 2

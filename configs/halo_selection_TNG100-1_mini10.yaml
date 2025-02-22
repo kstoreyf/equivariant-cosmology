@@ -1,0 +1,14 @@
+halo:
+  halo_tag: _mini10
+  fn_halo_config: ../configs/halos_TNG100-1_mini10.yaml
+select:
+  select_tag: ''
+  fn_select: ../data/halo_selections/halo_selection_TNG100-1_mini10.fits
+  num_star_particles_min: 50
+  num_gas_particles_min: 0
+  halo_logmass_min: 10.25
+  halo_logmass_max: null
+  halo_mass_difference_factor: 3
+  must_have_mah_info: true
+  must_have_halo_structure_info: true
+  seed: 42

@@ -1,0 +1,18 @@
+halo:
+  halo_tag: _mini10
+  fn_halo_config: ../configs/halos_TNG100-1_mini10.yaml
+geo:
+  geo_tag: ''
+  fn_geo_config: ../configs/geo_TNG100-1_mini10.yaml
+geo_clean:
+  geo_clean_tag: _n3
+  fn_geo_clean_config: ../configs/geo_clean_TNG100-1_mini10_n3.yaml
+scalar:
+  scalar_tag: ''
+  fn_scalar_features: ../data/scalar_features/scalar_featuresTNG100-1_mini10_n3.npy
+  fn_scalar_info: ../data/scalar_features/scalar_infoTNG100-1_mini10_n3.npy
+  m_order_max: 2
+  x_order_max: 4
+  v_order_max: 4
+  eigenvalues_not_trace: true
+  elementary_scalars_only: true
